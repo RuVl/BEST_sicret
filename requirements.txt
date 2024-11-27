@@ -1,0 +1,37 @@
+aiogram~=3.15.0  # general aiogram
+# uvloop  # fast, drop-in replacement of the built-in asyncio event loop. Windows not supported (uncomment if you are on Linux)
+ujson~=5.10.0  # ultra fast JSON encoder and decoder written in pure C
+aiohttp[speedups]~=3.11.7
+# aiohttp[speedups]==3.9.5 # for windows use this instead (bcs conflicts with aiodns)
+# cchardet # (aiohttp speedup) high speed universal character encoding detector
+aiodns~=3.2.0 # (aiohttp speedup) provides a simple way for doing asynchronous DNS resolutions
+
+# Other packages
+structlog~=24.4.0
+colorama~=0.4.6
+
+pydantic~=2.9.2
+
+fluent.runtime~=0.4.0
+fluent.syntax~=0.19.0
+
+docxtpl~=0.19.0
+
+jsonschema~=4.23.0
+
+###############################################################
+###     Some useful async libraries to use with aiogram     ###
+### for more: https://github.com/timofurrer/awesome-asyncio ###
+##############################################################
+
+# aiosqlite  # Async work with SQLite
+# asyncpg  # Async work with PostgreSQL
+# motor  # Async work with MongoDB
+# pyzmq  # Async work with ZeroMQ
+# piccolo  # Async ORM
+# aql  # Async query builder (beta)
+# httpx  # Async http client
+# aiofiles  # Async work with files
+# aioamqp  # Async work with AMQP
+# aiocache  # Async work with cache system
+# aiopath  # Async pathlib
