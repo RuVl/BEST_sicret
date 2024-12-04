@@ -17,7 +17,7 @@ def cancel_ikb(l10n: FluentLocalization) -> InlineKeyboardMarkup:
 def paginate[T](data: list[T],
                 page: int,
                 element2button: Callable[[T], InlineKeyboardButton],
-                prefix: str, /,
+                prefix: str,
                 cols=2, rows=5) -> InlineKeyboardBuilder:
     """
         Create pages by inline buttons from data.
@@ -61,8 +61,7 @@ def paginate[T](data: list[T],
         )
 
     page_switch_buttons.append(
-        # nothing - auto ignores by middleware
-        InlineKeyboardButton(text=f'·{page + 1}/{max_pages}·', callback_data='nothing')
+        InlineKeyboardButton(text=f'·{page + 1}/{max_pages}·', callback_data=' ')
     )
 
     # If it's not last page

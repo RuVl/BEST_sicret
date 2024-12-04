@@ -42,7 +42,6 @@ async def main():
     try:
         await dp.start_polling(
             bot,
-            skip_updates=False,
             allowed_updates=dp.resolve_used_update_types()  # Get only registered updates
         )
     finally:

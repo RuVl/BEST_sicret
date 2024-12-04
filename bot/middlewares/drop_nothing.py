@@ -4,15 +4,15 @@ from aiogram import BaseMiddleware, types
 from aiogram.dispatcher.event.bases import CancelHandler
 
 
-class DropNothingButtonMiddleware(BaseMiddleware):
-    """ Auto answer and drop events with callback data == 'nothing' """
+class DropEmptyCallbackMiddleware(BaseMiddleware):
+    """ Auto answer and drop events with callback data is space """
 
     async def __call__(self,
                        handler: Callable[[types.CallbackQuery, dict[str, Any]], Awaitable[Any]],
                        event: types.CallbackQuery,
                        data: dict[str, Any],
                        ) -> Any:
-        if event.data == 'nothing':
+        if event.data == ' ':
             await event.answer()
             return CancelHandler()
 
