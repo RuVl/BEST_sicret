@@ -1,14 +1,13 @@
 import tempfile
 
 from aiogram import Router, F
-from aiogram.filters import Command
+from aiogram.filters import Command, or_f
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, CallbackQuery, FSInputFile
+from aiogram.types import Message, CallbackQuery, BufferedInputFile
 from fluent.runtime import FluentLocalization
 
 from bot.includes.jsonschema import load_schema, validate_data, generate_document
-from bot.keyboards.callback_factories import PaginatorFactory, TemplateFactory, AskActionFactory
-from bot.keyboards.common.inline import cancel_ikb
+from bot.keyboards.callback_factories import PaginatorFactory, TemplateFactory, AskDataFactory, ActionDataFactory
 from bot.keyboards.templates import choose_template_ikb
 from bot.state_machines.templates import CreateByTemplate, TemplateContext
 
@@ -23,11 +22,11 @@ async def choose_template(msg: Message, state: FSMContext, l10n: FluentLocalizat
 
     kb = choose_template_ikb()
     await msg.answer(l10n.format_value('choose-template'), reply_markup=kb)
-    await state.set_state(CreateByTemplate.CHOOSE)
+    await state.set_state(CreateByTemplate.CHOOSE_TEMPLATE)
 
 
 @router.callback_query(
-    CreateByTemplate.CHOOSE,
+    CreateByTemplate.CHOOSE_TEMPLATE,
     PaginatorFactory.page_changed()
 )
 async def change_page_when_choose_template(clb: CallbackQuery, callback_data: PaginatorFactory):
@@ -39,7 +38,7 @@ async def change_page_when_choose_template(clb: CallbackQuery, callback_data: Pa
 
 
 @router.callback_query(
-    CreateByTemplate.CHOOSE,
+    CreateByTemplate.CHOOSE_TEMPLATE,
     TemplateFactory.filter()
 )
 async def choose_template(clb: CallbackQuery, callback_data: TemplateFactory, l10n: FluentLocalization, state: FSMContext):
@@ -56,10 +55,7 @@ async def choose_template(clb: CallbackQuery, callback_data: TemplateFactory, l1
     tc = TemplateContext(schema)
     await state.update_data(template_name=callback_data.name, template_context=tc.to_json())
 
-    text = tc.render_view(l10n)
-    kb = tc.render_keyboard(l10n)
-
-    await clb.message.edit_text(text=text, reply_markup=kb)
+    await clb.message.edit_text(text=tc.render_view(l10n), reply_markup=tc.render_keyboard(l10n))
     await state.set_state(CreateByTemplate.VIEW)
 
 
@@ -73,13 +69,13 @@ async def change_page_when_choose_property(clb: CallbackQuery, callback_data: Pa
     await clb.answer()
     state_data = await state.get_data()
     tc = TemplateContext.from_json(state_data.get('template_context'))
-    kb = tc.render_keyboard(l10n, page=callback_data.page)
-    await clb.message.edit_reply_markup(reply_markup=kb)
+    ctx = tc.get_active()
+    await clb.message.edit_reply_markup(reply_markup=ctx.render_keyboard(l10n, page=callback_data.page))
 
 
 @router.callback_query(
     CreateByTemplate.VIEW,
-    F.data == 'generate_document'
+    ActionDataFactory.filter(F.action == 'generate-document')
 )
 async def send_document(clb: CallbackQuery, state: FSMContext):
     """ Validate jsonschema and generate document """
@@ -88,52 +84,54 @@ async def send_document(clb: CallbackQuery, state: FSMContext):
     template_name = state_data.get('template_name')
     tc = TemplateContext.from_json(state_data.get('template_context'))
 
-    data = tc.render_context()
+    context = tc.render_context()
     schema = load_schema(template_name)
-    success, error_msg = validate_data(schema, data)
+    success, error_msg = validate_data(schema, context)
     if not success:
         await clb.answer(error_msg, show_alert=True)
         return
 
-    doc = generate_document(template_name, data)
+    doc = generate_document(template_name, context)
     await clb.answer()  # Answer after successful doc generation
 
     # Save doc to the temporary file and send it
-    with tempfile.NamedTemporaryFile('wb', prefix='result', suffix='.docx') as fp:
+    with tempfile.NamedTemporaryFile('wb+', prefix='result', suffix='.docx') as fp:
         doc.save(fp)
-        file = FSInputFile(fp.name, filename=f'{tc.title}.docx')
+        fp.seek(0)
+        file = BufferedInputFile(fp.read(), filename=f'{template_name}.docx')
         await clb.message.answer_document(file)
 
 
 @router.callback_query(
     CreateByTemplate.VIEW,
-    AskActionFactory.filter()
+    AskDataFactory.filter()
 )
-async def select_property(clb: CallbackQuery, callback_data: AskActionFactory, state: FSMContext, l10n: FluentLocalization):
-    """ Ask for data for template by clicking on the button """
+async def select_property(clb: CallbackQuery, callback_data: AskDataFactory, state: FSMContext, l10n: FluentLocalization):
+    """
+    Ask for data for template by clicking on the button.
+    If parent_type=ctx (=current TemplateContext) type is array - move to child or create a new one.
+    Otherwise, move to object property child.
+    """
 
     # Get schema with properties from state data
     state_data = await state.get_data()
     tc = TemplateContext.from_json(state_data.get('template_context'))
 
-    if not tc.has_property(callback_data.data):  # Impossible
-        await clb.answer(l10n.format_value('something-went-wrong'), show_alert=True)
-        return
-
-    await clb.answer()
-    ctx = tc.forward(callback_data.data)
-
+    # Create or get child
+    ctx = tc.forward(callback_data.key)
     state_data.update(template_context=tc.to_json())  # bcs tc.forward mutate tc object
+
     await state.set_data(state_data)  # Remember to update state data
+    await clb.answer()
 
-    if ctx.is_primitive():
-        await clb.message.edit_text(text=ctx.ask_question(), reply_markup=cancel_ikb(l10n))
-        await state.set_state(CreateByTemplate.ADD_PRIMITIVE)
-    elif ctx.is_submenu():
-        pass  # TODO submenu logic
+    if ctx.is_primitive():  # Если примитивный тип - задаем вопрос пользователю и ждем ответа
+        await clb.message.edit_text(text=ctx.ask_question(), reply_markup=ctx.render_keyboard(l10n))
+        await state.set_state(CreateByTemplate.ADD)
+    elif ctx.is_submenu():  # Если подменю - перемещаемся в него
+        await clb.message.edit_text(text=ctx.render_view(l10n), reply_markup=ctx.render_keyboard(l10n))
 
 
-@router.message(CreateByTemplate.ADD_PRIMITIVE)
+@router.message(CreateByTemplate.ADD)
 async def add_primitive_property(msg: Message, state: FSMContext, l10n: FluentLocalization):
     """ Add user data to template """
 
@@ -145,7 +143,7 @@ async def add_primitive_property(msg: Message, state: FSMContext, l10n: FluentLo
     try:
         ctx.set_value(msg.text, l10n)
     except ValueError as e:
-        await msg.reply(str(e), reply_markup=cancel_ikb(l10n))
+        await msg.reply(str(e), reply_markup=ctx.render_keyboard(l10n))
         return
 
     ctx = tc.backward()  # Return to previous view
@@ -157,17 +155,20 @@ async def add_primitive_property(msg: Message, state: FSMContext, l10n: FluentLo
 
 
 @router.callback_query(
-    CreateByTemplate.ADD_PRIMITIVE,
-    F.data == 'cancel'
+    or_f(CreateByTemplate.ADD, CreateByTemplate.VIEW),
+    ActionDataFactory.filter(F.action.in_({'back', 'delete'}))
 )
-async def cancel_adding_property(clb: CallbackQuery, state: FSMContext, l10n: FluentLocalization):
-    """ Cancel adding property """
+async def cancel_adding_property(clb: CallbackQuery, callback_data: ActionDataFactory, state: FSMContext, l10n: FluentLocalization):
+    """ Cancel adding property or exit from submenu """
 
-    await clb.answer()
     state_data = await state.get_data()
-
     tc = TemplateContext.from_json(state_data.get('template_context'))
-    text, kb = tc.render_view(l10n), tc.render_keyboard(l10n)
 
-    await clb.message.edit_text(text=text, reply_markup=kb)
+    ctx = tc.backward() or tc if callback_data.action == 'back' else tc.delete_child()
+    state_data.update(template_context=tc.to_json())
+
+    await state.set_data(state_data)
+    await clb.answer()
+
+    await clb.message.edit_text(text=ctx.render_view(l10n), reply_markup=ctx.render_keyboard(l10n))
     await state.set_state(CreateByTemplate.VIEW)

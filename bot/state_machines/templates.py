@@ -7,15 +7,15 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from fluent.runtime import FluentLocalization
 
-from bot.keyboards.callback_factories import AskActionFactory
+from bot.keyboards.callback_factories import AskDataFactory, ActionDataFactory
 from bot.keyboards.common import paginate
 from bot.utils import escape_mdv2
 
 
 class CreateByTemplate(StatesGroup):
-    CHOOSE = State()  # User selects template
+    CHOOSE_TEMPLATE = State()  # User selects template
     VIEW = State()  # User is viewing template
-    ADD_PRIMITIVE = State()  # User adds or changes template's data
+    ADD = State()  # User adds or changes template's data
 
 
 class TemplateContext:
@@ -36,12 +36,19 @@ class TemplateContext:
         self._initialize_context(schema)
 
         self.required: bool = required  # Элемент обязателен
-        self.title: str = escape_mdv2(schema.get('title', schema.get('description', 'No title')))
-        self.description: str = escape_mdv2(schema.get('description', 'No description'))
-        self.short_description: str = schema.get('short_description', schema.get('description', 'No description'))  # No need escape
-        self.question: str = escape_mdv2(schema.get('question')) or f'Введите {self.description}:'
+        self.title: str = schema.get('title', schema.get('description', 'No title'))
+        self.description: str = schema.get('description', 'No description')
+        self.short_description: str = schema.get(
+            'short_description', self.title if self.is_submenu() else self.description
+        )  # No need escape (button name)
+        self.question: str = schema.get('question', f'Введите {self.description}:')
 
         self._active_property_path = [] if parent is None else None  # Путь к активному элементу (есть только у корня)
+
+        # Escape text
+        self.title = escape_mdv2(self.title)
+        self.description = escape_mdv2(self.description)
+        self.question = escape_mdv2(self.question)
 
     def _initialize_context(self, schema):
         """ Инициализирует дочерние контексты или примитивные значения """
@@ -116,36 +123,74 @@ class TemplateContext:
         else:
             return self._value
 
-    def has_property(self, property_name: str) -> bool:
-        return property_name in self._children if self._type == 'object' else None
+    def get_property(self, property_name: str | int) -> 'TemplateContext':
+        """
+        Возвращает внутренний TemplateContext.
+        Для array - по индексу (int), для object - по названию property
+        """
 
-    def get_property(self, property_name: str) -> 'TemplateContext':
-        return self._children.get(property_name) if self._type == 'object' else None
+        if self._type == 'array':
+            i = int(property_name)
+            return self._children[i] if 0 <= i < len(self._children) else None
+        elif self._type == 'object':
+            return self._children.get(property_name)
+        else:
+            return None
 
     def get_active(self) -> 'TemplateContext':
         """ Возвращает текущий активный элемент """
+
+        if self._active_property_path is None:
+            raise ValueError("Call get_active only for root (self) of TemplateContext")
 
         active = self
         for property_name in self._active_property_path:
             active = active.get_property(property_name)
         return active
 
-    def forward(self, property_name: str) -> 'TemplateContext':
+    def forward(self, property_name: str | int) -> 'TemplateContext':
         """ Входит вглубь дерева, если элемента нет - ничего не делает """
 
-        tc = self.get_active().get_property(property_name)
-        if tc is not None:
+        if self._active_property_path is None:
+            raise ValueError("Call forward only for root (self) of TemplateContext")
+
+        tc = self.get_active()
+        ctx = tc.get_property(property_name)
+
+        if ctx is not None:
             self._active_property_path.append(property_name)
-        return tc
+        elif int(property_name) == -1 and tc._type == 'array':  # Добавляем новый элемент
+            ctx = TemplateContext(tc._item_scheme, parent=tc, required=tc.required)
+            tc._children.append(ctx)
+            self._active_property_path.append(len(tc._children) - 1)
+
+        return ctx
 
     def backward(self) -> 'TemplateContext':
         """ Возвращается к предыдущему свойству, если мы в корне - вернется None """
+
+        if self._active_property_path is None:
+            raise ValueError("Call backward only for root (self) of TemplateContext")
 
         if len(self._active_property_path) == 0:
             return None
 
         self._active_property_path.pop()
         return self.get_active()
+
+    def delete_child(self) -> 'TemplateContext':
+        """ Удаляет текущий активный элемент, если это элемент массива """
+
+        if self._active_property_path is None:
+            raise ValueError("Call delete_child only for root (self) of TemplateContext")
+
+        ctx = self.get_active()
+        if ctx._parent._type != 'array':
+            raise ValueError("Can't delete non-array child")
+
+        tc = self.backward()
+        tc._children.remove(ctx)
+        return tc
 
     def can_render(self) -> bool:
         """ Проверяет, заполнены ли все обязательные поля """
@@ -170,38 +215,97 @@ class TemplateContext:
             raise ValueError("Не все обязательные поля заполнены.")
         return self.get_value()
 
-    def render_view(self, l10n: FluentLocalization) -> str:
+    def render_view(self, l10n: FluentLocalization, show_hint=True) -> str:
         """ Генерирует текст для отображения в чате Telegram """
 
         match self._type:
             case 'object':
                 parts = [f'*{self.title}*\n_{self.description}_\n']
                 for key, child in self._children.items():
-                    parts.append(fr'\- {child.render_view(l10n)}')
+                    parts.append(fr'\- {child.render_view(l10n, show_hint=False)}')
 
                 result = '\n'.join(parts)
-                if self._parent is None and (self.required or filter(lambda child: child.required, self._children)):
-                    result += '\n' + fr'_\* \- {l10n.format_value('required-hint')}_'
-
-                return result
             case 'array':
-                parts = [f'*{self.title}*\n_{self.description}_\n']
+                parts = [f'*{self.title}*\n_{self.description}_']
                 for i, child in enumerate(self._children, 1):
-                    parts.append(f'{i}. {child.render_view(l10n)}')
+                    parts.append(fr'{i}\. {child.render_view(l10n, show_hint=False)}')
 
-                return '\n'.join(parts)
+                result = '\n\n'.join(parts)
             case _:
-                return f'{'* ' if self.required else ''}{self.description}: `{self._value or ''}`'
+                text = f'{self.description}: '
+                if self.required:
+                    text = r'\* ' + text
+                if self._value is not None:
+                    text += f'`{self._value}`'
+                return text
 
-    def add_child(self) -> 'TemplateContext':
-        """ Добавляет новый элемент в массив, если это array """
+        if show_hint and self.is_submenu() and filter(lambda child: child.required, self._children):
+            result += '\n' + fr'_\* \- {l10n.format_value('required-hint')}_'
 
-        if self._type != 'array':
-            raise ValueError('add_child можно вызывать только для массивов.')
+        return result
 
-        tc = TemplateContext(self._item_scheme, parent=self, required=self.required)
-        self._children.append(tc)
-        return tc
+    def render_keyboard(self, l10n: FluentLocalization, page: int = 0, cols: int = 2, rows: int = 5) -> InlineKeyboardMarkup:
+        """ Генерирует клавиатуру для Telegram на основе текущего контекста """
+
+        # Валидация
+        if not (1 < rows < 9):
+            raise ValueError('Строк не может быть меньше 1 или больше 9')
+
+        if not (1 < cols < 5):
+            raise ValueError('Столбцов не может быть меньше 1 или больше 5')
+
+        if self.is_primitive():  # Для примитивных типов ничего особенного
+            keyboard = InlineKeyboardBuilder()
+        elif self._type == 'object':
+            def property2button(prop: tuple[str, 'TemplateContext']) -> InlineKeyboardButton:
+                """ Адаптер для кнопок для TemplateContext с type: object """
+
+                key, child = prop
+                text = child.short_description
+                if child.can_render():
+                    text += ' ✅'
+                callback_data = AskDataFactory(key=key, parent_type='object').pack()
+                return InlineKeyboardButton(text=text, callback_data=callback_data)
+
+            keyboard = paginate(self._children.items(), page, property2button, prefix='props', cols=cols, rows=rows)
+        elif self._type == 'array':  # Клавиатура для массива
+            def property2button(prop: tuple[int, 'TemplateContext']) -> InlineKeyboardButton:
+                """ Адаптер для кнопок для TemplateContext с type: array """
+
+                i, child = prop
+                text = f'{i} - {child.short_description}'
+                if child.can_render():
+                    text += ' ✅'
+                callback_data = AskDataFactory(key=i, parent_type='array').pack()
+                return InlineKeyboardButton(text=text, callback_data=callback_data)
+
+            keyboard = paginate(enumerate(self._children), page, property2button, prefix='props', cols=cols, rows=rows)
+
+            # Кнопка для добавления нового элемента
+            keyboard.row(
+                InlineKeyboardButton(
+                    text=l10n.format_value('add-item'),
+                    callback_data=AskDataFactory(key=-1, parent_type='array').pack()  # -1 - добавление элемента
+                )
+            )
+
+        if self._parent is None and self.can_render():  # Если мы в главном контексте и можем сгенерировать документ
+            keyboard.row(InlineKeyboardButton(
+                text=l10n.format_value('generate-document'),
+                callback_data=ActionDataFactory(action='generate-document').pack()
+            ))
+        elif self._parent is not None:  # Если мы в подменю
+            keyboard.row(InlineKeyboardButton(
+                text=l10n.format_value('back'),
+                callback_data=ActionDataFactory(action='back').pack()
+            ))
+            if self._parent._type == 'array':  # Если мы элемент массива
+                keyboard.row(InlineKeyboardButton(
+                    text=l10n.format_value('delete'),
+                    callback_data=ActionDataFactory(action='delete').pack()
+                ))
+
+        return keyboard.as_markup()
 
     def is_submenu(self) -> bool:
         """ Является ли контекст подменю (вложенные объекты) """
@@ -217,69 +321,6 @@ class TemplateContext:
         if not self.is_primitive():
             raise ValueError("Этот контекст не ожидает пользовательского ввода (не примитивный тип)")
         return self.question
-
-    def render_keyboard(self, l10n: FluentLocalization, page: int = 0, cols: int = 2, rows: int = 5) -> InlineKeyboardMarkup:
-        """ Генерирует клавиатуру для Telegram на основе текущего контекста """
-
-        # Валидация
-        if not (1 < rows < 9):
-            raise ValueError('Строк не может быть меньше 1 или больше 9')
-
-        if not (1 < cols < 5):
-            raise ValueError('Столбцов не может быть меньше 1 или больше 5')
-
-        # Для примитивных типов ничего не нужно рендерить
-        if not self.is_submenu():
-            return None
-
-        if self._type == 'object':
-            properties = [
-                {
-                    'name': key,
-                    'type': child._type,
-                    'text': f"{child.short_description} ✅" if child.can_render() else child.short_description
-                }
-                for key, child in self._children.items()
-            ]
-
-            # Адаптер для кнопок
-            def property2button(prop: dict) -> InlineKeyboardButton:
-                callback_data = AskActionFactory(data=prop['name'], type=prop['type']).pack()
-                return InlineKeyboardButton(text=prop['text'], callback_data=callback_data)
-
-            # Используем функцию пагинации
-            keyboard = paginate(properties, page, property2button, prefix='props', cols=cols, rows=rows)
-
-            # Проверяем обязательные поля
-            if self.can_render():
-                keyboard.row(
-                    InlineKeyboardButton(
-                        text=l10n.format_value('generate-document'),
-                        callback_data='generate_document'
-                    )
-                )
-            return keyboard.as_markup()
-
-        elif self._type == "array":  # Клавиатура для массива
-            keyboard = InlineKeyboardBuilder()
-
-            # Кнопки для уже добавленных элементов массива
-            for i, child in enumerate(self._children, 1):
-                keyboard.add(
-                    InlineKeyboardButton(
-                        text=f'{l10n.format_value('array-item')} {i}',
-                        callback_data=f'array_item:{i}'
-                    )
-                )
-
-            # Кнопка для добавления нового элемента
-            keyboard.row(
-                InlineKeyboardButton(
-                    text=l10n.format_value('add-item'),
-                    callback_data='add_array_item'
-                )
-            )
-            return keyboard.as_markup()
 
     def to_json(self) -> str:
         """ Сериализует контекст в строку JSON """
@@ -316,7 +357,7 @@ class TemplateContext:
                     key: cls.from_json(child_data, context)
                     for key, child_data in (raw.get('_children', {})).items()
                 }
-            else:
+            elif context._type == 'array':
                 context._children = list(map(
                     lambda child_data: cls.from_json(child_data, context),
                     raw.get('_children', [])

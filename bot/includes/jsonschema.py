@@ -44,8 +44,8 @@ def validate_data(schema: dict, data: dict) -> tuple[bool, str | None]:
         return False, e.message
 
 
-def generate_document(template_name: str, data: dict) -> DocxTemplate:
-    """ Render document from template with data """
+def generate_document(template_name: str, context: dict) -> DocxTemplate:
+    """ Render the document from template with context """
 
     config: TemplatesConfig = get_config(TemplatesConfig)
 
@@ -54,5 +54,5 @@ def generate_document(template_name: str, data: dict) -> DocxTemplate:
         raise FileNotFoundError(f'Template file {template_path} not found')
 
     doc = DocxTemplate(template_path)
-    doc.render(data)
+    doc.render(context)
     return doc

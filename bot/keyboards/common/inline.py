@@ -1,17 +1,10 @@
 import math
 from typing import Callable
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from fluent.runtime import FluentLocalization
 
 from bot.keyboards.callback_factories import PaginatorFactory
-
-
-def cancel_ikb(l10n: FluentLocalization) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    builder.add(InlineKeyboardButton(text=l10n.format_value('cancel-button'), callback_data='cancel'))
-    return builder.as_markup()
 
 
 def paginate[T](data: list[T],
@@ -29,6 +22,9 @@ def paginate[T](data: list[T],
         :param rows: Max number of rows.
         :return: InlineKeyboardBuilder.
     """
+
+    if not isinstance(data, list):
+        data = list(data)  # Try to convert to list
 
     if len(data) == 0:
         return InlineKeyboardBuilder()

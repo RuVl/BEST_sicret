@@ -18,6 +18,10 @@ class TemplateFactory(CallbackData, prefix='template'):
     name: str
 
 
-class AskActionFactory(CallbackData, prefix='ask_action'):
-    data: str
-    type: str
+class AskDataFactory(CallbackData, prefix='ask_data'):
+    parent_type: Literal['object', 'array']
+    key: str | int
+
+
+class ActionDataFactory(CallbackData, prefix='action'):
+    action: str
