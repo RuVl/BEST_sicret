@@ -1,30 +1,34 @@
-from pathlib import Path
-
 from fluent.runtime import FluentLocalization, FluentResourceLoader
+
+from env import ProjectKeys
 
 
 def get_fluent_localization() -> FluentLocalization:
-    """
-    Load locales file 'locale.ftl; from 'l10n' directory
-    :return: FluentLocalization object
-    """
+	"""
+	Load locales
+	:return: FluentLocalization object
+	"""
 
-    # Checks to make sure there's the correct file in the correct directory
-    locale_dir = Path(__file__).parent.parent.joinpath("l10n")
-    if not locale_dir.exists():
-        raise FileNotFoundError("'l10n' directory not found")
+	# Checks to make sure there's the correct file in the correct directory
+	locale_dir = ProjectKeys.LOCALE_DIR
 
-    if not locale_dir.is_dir():
-        raise NotADirectoryError("'l10n' is not a directory")
+	# Validate path
+	for locale in ProjectKeys.AVAILABLE_LOCALES:
+		lang_dir = locale_dir / locale
+		if not lang_dir.exists():
+			raise FileNotFoundError(f"{lang_dir} directory not found")
+		if not lang_dir.is_dir():
+			raise NotADirectoryError(f"{lang_dir} is not a directory")
 
-    locale_file = Path(locale_dir, "locale.ftl")
-    if not locale_file.exists():
-        raise FileNotFoundError("locale.txt file not found")
+	# Add prefix {locale} for language directory mapping
+	locale_files_name = set(map(lambda f: '{locale}/' + f.name, locale_dir.rglob('*.ftl')))
+	if not len(locale_files_name):
+		raise FileNotFoundError('locale files are not found')
 
-    # Create the necessary objects and return a FluentLocalization object
-    l10n_loader = FluentResourceLoader(str(locale_file.absolute()))
-    return FluentLocalization(
-        locales=["ru"],
-        resource_ids=[str(locale_file.absolute())],
-        resource_loader=l10n_loader
-    )
+	# Create the necessary objects and return a FluentLocalization object
+	l10n_loader = FluentResourceLoader(str(locale_dir.absolute()))
+	return FluentLocalization(
+		locales=ProjectKeys.AVAILABLE_LOCALES,
+		resource_ids=locale_files_name,
+		resource_loader=l10n_loader
+	)

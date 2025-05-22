@@ -7,6 +7,8 @@ delete = Удалить
 
 # template messages
 choose-template = Выберите приказ, который требуется создать
+templates-link-text = Шаблоны на заполнение с/з
+templates-link-url = https://drive.google.com/drive/u/1/folders/1XPR8fKQAHT0X_4CB7i8uWCQCTT4gnWuo
 required-hint = Обязательное поле
 schema-not-found = Схема не найдена, попробуйте выбрать шаблон еще раз
 invalid-input = Введите валидные данные

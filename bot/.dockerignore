@@ -1,0 +1,6 @@
+.env
+.env.dist
+
+venv/
+
+aiogram_dialog.png
