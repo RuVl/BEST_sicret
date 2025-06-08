@@ -1,0 +1,27 @@
+services:
+  telegram_bot:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    volumes:
+      - media_volume:/usr/src/app/resources
+    env_file:
+      - bot/.env
+      - redis/.env
+
+  redis:
+    image: redis:latest
+    restart: unless-stopped
+    env_file: redis/.env
+    expose:
+      - 6379
+    volumes:
+      - redis_volume:/data
+
+volumes:
+  media_volume:
+    driver: local
+
+  redis_volume:
+    driver: local

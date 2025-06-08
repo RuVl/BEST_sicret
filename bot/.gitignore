@@ -1,0 +1,6 @@
+# Project specific
+config.toml
+credentials.json
+
+# resources
+resources/templates
