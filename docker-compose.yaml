@@ -6,23 +6,12 @@ services:
     restart: unless-stopped
     volumes:
       - media_volume:/usr/src/app/resources
-      - ./bot/logs:/usr/src/app/logs
-    #      - ./bot/database/migrations/versions:/usr/src/app/database/migrations/versions
     env_file:
       - bot/.env
       - redis/.env
-  
-  #  postgres:
-  #    image: postgres:17.4
-  #    restart: unless-stopped
-  #    env_file: postgres/.env
-  #    expose:
-  #      - 5432
-  #    volumes:
-  #      - postgres_volume:/var/lib/postgresql/data
 
   redis:
-    image: redis:7.4.2
+    image: redis:latest
     restart: unless-stopped
     env_file: redis/.env
     expose:
@@ -33,9 +22,6 @@ services:
 volumes:
   media_volume:
     driver: local
-  
-  #  postgres_volume:
-  #    driver: local
 
   redis_volume:
     driver: local

@@ -18,7 +18,7 @@ class IntegerFormatter(Formatter):
 		try:
 			return int(value)
 		except ValueError:
-			raise ValueError('input-type-incorrect')
+			raise ValueError('invalid-integer-input')
 
 
 class NumberFormatter(Formatter):
@@ -26,7 +26,7 @@ class NumberFormatter(Formatter):
 		try:
 			return float(value)
 		except ValueError:
-			raise ValueError('input-type-incorrect')
+			raise ValueError('invalid-number-input')
 
 
 class BooleanFormatter(Formatter):

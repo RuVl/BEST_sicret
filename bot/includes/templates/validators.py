@@ -10,12 +10,12 @@ class Validator(ABC):
 
 
 class DateValidator(Validator):
-	def validate(self, value: Any) -> bool:
+	def validate(self, value: str) -> bool:
 		try:
 			datetime.strptime(value, '%d.%m.%Y')
 			return True
 		except ValueError:
-			raise ValueError('format-type-incorrect')
+			raise ValueError('invalid-type')
 
 
 class DummyValidator(Validator):

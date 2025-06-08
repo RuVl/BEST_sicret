@@ -36,6 +36,7 @@ def create_context(schema: dict, parent: 'BaseContext' = None, required: bool = 
 		'array': ArrayContext,
 		'string': PrimitiveContext,
 		'integer': PrimitiveContext,
+		'number': PrimitiveContext,
 		'boolean': PrimitiveContext,
 		# Add other types as needed
 	}

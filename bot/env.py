@@ -13,6 +13,7 @@ env = environ.Env(
 
 class TelegramKeys:
 	API_TOKEN: Final[str] = env('TG_API_TOKEN')
+	PRESIDENT_ID: Final[int] = env.int('PRESIDENT_ID', 0)
 
 
 class RedisKeys:

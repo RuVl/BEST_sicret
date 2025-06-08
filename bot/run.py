@@ -5,13 +5,12 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.types import BotCommand
-from aiogram_dialog.tools import render_transitions
 from structlog.typing import FilteringBoundLogger
 
-from handlers import register_handlers
-from middlewares import register_middlewares
 from env import TelegramKeys, ProjectKeys
+from handlers import register_handlers
 from includes import setup_logging, get_storage, PickleRedisStorage
+from middlewares import register_middlewares
 
 
 async def main():
@@ -37,10 +36,6 @@ async def main():
 	# Register handlers and middlewares
 	register_handlers(dp)
 	register_middlewares(dp)
-
-	# Render dialogs preview
-	if ProjectKeys.DEBUG:
-		render_transitions(dp)
 
 	# Start bot
 	logger: FilteringBoundLogger = structlog.get_logger()
