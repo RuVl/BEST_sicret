@@ -1,30 +1,9 @@
-DEBUG=False
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-# telegram
-TG_API_TOKEN='api-key'
-PRESIDENT_ID=telegram-id
+from env import PostgresKeys
 
-# redis
-
-
-# project
-TEMPLATES_DIR=resources/templates/
-
-# locale
-LOCALE_DIR=l10n/
-AVAILABLE_LOCALES=ru
-
-# logs
-SHOW_DEBUG_LOGS=True
-
-SHOW_DATETIME=True
-DATETIME_FORMAT='%Y-%m-%d %H:%M:%S'
-TIME_IN_UTC=True
-
-USE_COLORS_IN_CONSOLE=True
-
-LOG_TO_FILE=True
-LOG_FILE_PATH=logs/bot.log
-LOG_FILE_MAX_SIZE=26214400
-LOG_FILE_BACKUP_COUNT=5
-
+engine = create_async_engine(PostgresKeys.URL)
+async_session: async_sessionmaker[AsyncSession] = async_sessionmaker(
+	bind=engine,
+	expire_on_commit=False
+)

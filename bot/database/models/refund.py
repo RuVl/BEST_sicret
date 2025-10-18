@@ -1,8 +1,8 @@
-from sqlalchemy import Boolean, ForeignKey, Integer, String
-from sqlalchemy.dialects import postgresql
+from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from database.models import base, person, payment
+from database.models import base, Person, Payment
+
 
 class Refund(base):
     __tablename__ = "items"
@@ -13,9 +13,11 @@ class Refund(base):
     description: Mapped[str] = mapped_column(String, nullable=True, comment="Описание")
 
     # Связь с Person
-    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("person.id"), nullable=False, comment="ID инициировавшего возврат")
-    customer: Mapped["person"] = relationship("Person", back_populates="refunds")
+    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("person.id"), nullable=False,
+                                             comment="ID инициировавшего возврат")
+    customer: Mapped['Person'] = relationship("Person", back_populates="refunds")
 
     # Связь с Payment
-    payment_id: Mapped[int] = mapped_column(Integer, ForeignKey("payment.id"), nullable=False, comment="ID платежа, по которому осуществляется возврат")
-    payment: Mapped["payment"] = relationship("Payment", back_populates="refunds")
+    payment_id: Mapped[int] = mapped_column(Integer, ForeignKey("payment.id"), nullable=False,
+                                            comment="ID платежа, по которому осуществляется возврат")
+    payment: Mapped['Payment'] = relationship("payment", back_populates="refunds")
