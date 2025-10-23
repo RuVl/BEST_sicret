@@ -19,7 +19,7 @@ class Payment(Base):
                                                    comment="Дата создания записи о платеже")
 
     # Был запрос на чек в виде фото, но пока оставила как ссылку
-    bill: Mapped[str] = mapped_column(String, nullable=True, comment="Ссылка на чек")
+    bill: Mapped[str] = mapped_column(String(255), nullable=True, comment="Ссылка на чек")
     payed_date: Mapped[datetime] = mapped_column(DateTime, nullable=True, comment="Дата фактической оплаты")
 
     # Отношение к Refund
