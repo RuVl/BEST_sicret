@@ -58,7 +58,3 @@ class LoggerKeys:
     LOG_FILE_PATH: Final[str] = env.str('LOG_FILE_PATH', default='logs/bot.log')
     LOG_FILE_MAX_SIZE: Final[int] = env.int('LOG_FILE_MAX_SIZE')
     LOG_FILE_BACKUP_COUNT: Final[int] = env.int('LOG_FILE_BACKUP_COUNT')
-
-
-class PostgresKeys:
-    URL = None
