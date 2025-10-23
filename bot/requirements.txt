@@ -14,9 +14,6 @@ aiodns~=3.4.0 # (aiohttp speedup) provides a simple way for doing asynchronous D
 # Cache
 redis[hiredis]~=5.2.1
 
-#Database
-SQLAlchemy[asynicio]~=2.0.40
-
 # Logging
 structlog~=25.3.0
 colorama~=0.4.6
