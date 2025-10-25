@@ -26,6 +26,11 @@ fluent.syntax~=0.19.0
 docxtpl~=0.20.0
 jsonschema~=4.23.0
 
+# Database
+alembic~=1.17.0  # migrations
+alembic-postgresql-enum~=1.8.0  # psql enum migrations
+SQLAlchemy[asyncio]~=2.0.40  # ORM
+asyncpg~=0.30.0  # driver
 ###############################################################
 ###     Some useful async libraries to use with aiogram     ###
 ### for more: https://github.com/timofurrer/awesome-asyncio ###
