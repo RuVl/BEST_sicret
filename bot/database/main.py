@@ -4,6 +4,6 @@ from env import PostgresKeys
 
 engine = create_async_engine(PostgresKeys.URL)
 async_session: async_sessionmaker[AsyncSession] = async_sessionmaker(
-	bind=engine,
-	expire_on_commit=False
+    bind=engine,
+    expire_on_commit=False
 )

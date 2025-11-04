@@ -1,7 +1,12 @@
+import typing
+
 from sqlalchemy import Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from database.models import Base, Person
+from database.models import Base
+
+if typing.TYPE_CHECKING:
+    from database.models import Person
 
 
 class Requisites(Base):
@@ -9,7 +14,7 @@ class Requisites(Base):
     __table_args__ = {"comment": "Платежные реквизиты"}
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, comment="Уникальный идентификатор реквизитов")
-    details: Mapped[str] = mapped_column(String, nullable=False, comment="Подробная информация о реквизитах")
+    details: Mapped[str] = mapped_column(String(255), nullable=False, comment="Подробная информация о реквизитах")
 
     # Отношение к Person
     person: Mapped['Person'] = relationship("Person", back_populates="requisites")

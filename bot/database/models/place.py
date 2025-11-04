@@ -1,10 +1,13 @@
-from database.models import base, person, item, Person, Item
 from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from database.models import Base
+from database.models.item import Item
+from database.models.person import Person
 
-class Place(base):
-    __tablename__ = "placees"
+
+class Place(Base):
+    __tablename__ = "places"
     __table_args__ = {"comment": "Место хранения"}
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)

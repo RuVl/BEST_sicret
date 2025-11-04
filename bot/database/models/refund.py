@@ -1,11 +1,16 @@
+import typing
+
 from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from database.models import base, Person, Payment
+from database.models import Base
+
+if typing.TYPE_CHECKING:
+    from database.models import Person, Payment
 
 
-class Refund(base):
-    __tablename__ = "items"
+class Refund(Base):
+    __tablename__ = "refunds"
     __table_args__ = {"comment": "Товарная единица"}
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, comment="Уникальный ID возврата")
@@ -13,11 +18,9 @@ class Refund(base):
     description: Mapped[str] = mapped_column(String, nullable=True, comment="Описание")
 
     # Связь с Person
-    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("person.id"), nullable=False,
-                                             comment="ID инициировавшего возврат")
+    customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("persons.id"), nullable=False, comment="ID инициировавшего возврат")
     customer: Mapped['Person'] = relationship("Person", back_populates="refunds")
 
     # Связь с Payment
-    payment_id: Mapped[int] = mapped_column(Integer, ForeignKey("payment.id"), nullable=False,
-                                            comment="ID платежа, по которому осуществляется возврат")
-    payment: Mapped['Payment'] = relationship("payment", back_populates="refunds")
+    payment_id: Mapped[int] = mapped_column(Integer, ForeignKey("payments.id"), nullable=False, comment="ID платежа, по которому осуществляется возврат")
+    payment: Mapped['Payment'] = relationship("Payment", back_populates="refunds")

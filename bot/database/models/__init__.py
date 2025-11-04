@@ -4,6 +4,5 @@ from .item import Item
 from .payment import Payment
 from .person import Person
 from .place import Place
-from .payment import Payment
 from .refund import Refund
 from .requisites import Requisites

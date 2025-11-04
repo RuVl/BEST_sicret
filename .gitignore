@@ -69,7 +69,7 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
+*.env
 .venv
 env/
 venv/
@@ -129,3 +129,4 @@ atlassian-ide-plugin.xml
 
 # Test compose files
 test-*.yaml
+dev-*.yaml

@@ -1,6 +1,12 @@
-from database.models import Base, Category, Place
+import typing
+
 from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from database.models import Base
+
+if typing.TYPE_CHECKING:
+    from database.models import Place, Category
 
 
 class Item(Base):
@@ -9,7 +15,7 @@ class Item(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, comment="название товара")
-    count: Mapped[int] = mapped_column(Integer, default=0, nullable=False, comment="количетво товара")
+    count: Mapped[int] = mapped_column(Integer, default=0, nullable=False, comment="количество товара")
     unit: Mapped[str] = mapped_column(String(255), nullable=False, comment="единица измерения")
 
     category_id: Mapped[int] = mapped_column(Integer, ForeignKey("categories.id"), nullable=False,
