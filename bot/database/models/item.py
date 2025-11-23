@@ -6,7 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database.models import Base
 
 if typing.TYPE_CHECKING:
-    from database.models import Place, Category
+    from database.models import Place, Category, Application
 
 
 class Item(Base):
@@ -24,3 +24,6 @@ class Item(Base):
 
     place_id: Mapped[int] = mapped_column(Integer, ForeignKey("places.id"), nullable=False, comment="где хранится")
     place: Mapped['Place'] = relationship('Place', back_populates='items', foreign_keys=[place_id])
+
+    # Связь многие-ко-многим с Application
+    applications: Mapped[list['Application']] = relationship("Application", secondary="application_items", back_populates="items")

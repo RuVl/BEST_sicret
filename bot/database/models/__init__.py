@@ -1,4 +1,5 @@
 from .base import Base
+from .application import Application
 from .category import Category
 from .item import Item
 from .payment import Payment

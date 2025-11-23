@@ -2,12 +2,18 @@ from aiogram import Dispatcher
 
 from includes.fluent import get_fluent_localization
 from middlewares import L10N_FORMAT_KEY, LOGGING_KEY
+from middlewares.database import DatabaseMiddleware
 from middlewares.drop_nothing import DropEmptyCallbackMiddleware
 from middlewares.localization import L10nMw
 from middlewares.logging import LoggingMw
 
 
 def register_middlewares(dp: Dispatcher):
+    # Database session management
+    db_mw = DatabaseMiddleware()
+    dp.message.middleware(db_mw)
+    dp.callback_query.middleware(db_mw)
+
     # Drop callback data with only space symbol
     dp.callback_query.outer_middleware(DropEmptyCallbackMiddleware())
 

@@ -36,7 +36,7 @@ class BaseContext(ABC):
         pass
 
     def delete_child(self, child: 'BaseContext'):
-        """ Очистить значение ребенка """
+        """ Очистить значение """
         child.clear()
 
     @abstractmethod

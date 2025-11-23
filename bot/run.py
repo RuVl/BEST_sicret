@@ -24,7 +24,9 @@ async def main():
     )
     await bot.set_my_commands([
         BotCommand(command='start', description='Запуск бота'),
-        BotCommand(command='create_document', description='Создать приказ')
+        BotCommand(command='create_document', description='Создать приказ'),
+        BotCommand(command='property_database', description='База имущества'),
+        BotCommand(command='request_refund', description='Запросить рефанд')
     ])
 
     # Get storage with proper configuration for dialogs

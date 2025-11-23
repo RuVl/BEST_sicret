@@ -6,7 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database.models import Base
 
 if typing.TYPE_CHECKING:
-    from database.models import Place, Refund, Requisites
+    from database.models import Place, Refund, Requisites, Application
 
 
 class Person(Base):
@@ -26,3 +26,6 @@ class Person(Base):
 
     # Отношение к Refund
     refunds: Mapped[list['Refund']] = relationship("Refund", back_populates="customer")
+
+    # Отношение к Application
+    applications: Mapped[list['Application']] = relationship("Application", back_populates="person")
