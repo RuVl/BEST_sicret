@@ -1,10 +1,10 @@
-from typing import Any, Dict, List
+from typing import Any
 
 from aiogram import F
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, Window, DialogManager
 from aiogram_dialog.widgets.input import TextInput
-from aiogram_dialog.widgets.kbd import ScrollingGroup, Select, Row, Button, Back, SwitchTo
+from aiogram_dialog.widgets.kbd import ScrollingGroup, Select, Row, Button, Back
 from aiogram_dialog.widgets.text import Format, Multi, Const
 from fluent.runtime import FluentLocalization
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +14,6 @@ from database.methods.category import get_all_categories, get_category_by_id
 from database.methods.item import get_items_by_category_id, get_item_by_id
 from database.methods.person import get_person_by_telegram_id
 from env import TelegramKeys
-from filters import get_session_from_dialog_manager
 from middlewares import L10N_FORMAT_KEY, SESSION_KEY
 from state_machines.property_database import PropertyDatabase
 from utils import L10nFormat, escape_mdv2
@@ -59,24 +58,30 @@ async def on_category_selected_for_list(clb: CallbackQuery, _select: Select, dia
 async def get_items_list(dialog_manager: DialogManager, **_kwargs) -> dict[str, Any]:
     """ Получает список предметов выбранной категории """
     session: AsyncSession = dialog_manager.middleware_data[SESSION_KEY]
+    l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
     category_id = dialog_manager.dialog_data.get('selected_category_id')
     
     if not category_id:
-        return {'items_text': 'Категория не выбрана', 'category_name': ''}
+        return {'items_text': l10n.format_value('category-not-selected'), 'category_name': ''}
     
     category = await get_category_by_id(session, category_id)
     items = await get_items_by_category_id(session, category_id)
     
-    # Форматируем список для отображения
+    # Форматируем список для отображения (экранируем названия из БД)
     items_list = []
     for item in items:
-        items_list.append(f"{item.name} - {item.count} {item.unit}")
+        item_name_escaped = escape_mdv2(item.name) if item.name else ''
+        items_list.append(f"{item_name_escaped} - {item.count} {item.unit}")
     
-    items_text = "\n".join(items_list) if items_list else "Нет доступных предметов"
+    items_text = "\n".join(items_list) if items_list else l10n.format_value('no-items-available')
+    
+    category_name = category.name if category else ''
+    category_name_escaped = escape_mdv2(category_name) if category_name else ''
+    header = l10n.format_value('items-category-header', args={'category_name': category_name_escaped})
     
     return {
-        'items_text': items_text,
-        'category_name': category.name if category else ''
+        'items_text': f"{header}\n\n{items_text}",
+        'category_name': category_name_escaped
     }
 
 
@@ -90,10 +95,11 @@ async def get_application_form_data(dialog_manager: DialogManager, **_kwargs) ->
     items_count = len(selected_items)
     items_text = f"{items_count} предмет(ов)" if items_count > 0 else "Не выбрано"
     
+    # Экранируем пользовательский ввод для MarkdownV2
     return {
-        'applicant_name': applicant_name,
-        'purpose': purpose,
-        'items_text': items_text
+        'applicant_name': escape_mdv2(applicant_name) if isinstance(applicant_name, str) else applicant_name,
+        'purpose': escape_mdv2(purpose) if isinstance(purpose, str) else purpose,
+        'items_text': escape_mdv2(items_text) if isinstance(items_text, str) else items_text
     }
 
 
@@ -121,7 +127,7 @@ async def on_review_clicked(_clb: CallbackQuery, _button: Button, dialog_manager
     
     if not applicant_name or not purpose or not selected_items:
         l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
-        await _clb.answer("Пожалуйста, заполните все поля", show_alert=True)
+        await _clb.answer(l10n.format_value('fill-all-fields'), show_alert=True)
         return
     
     await dialog_manager.switch_to(PropertyDatabase.REVIEW_APPLICATION)
@@ -166,17 +172,24 @@ async def on_category_selected_for_items(clb: CallbackQuery, _select: Select, di
 async def get_items_for_selection(dialog_manager: DialogManager, **_kwargs) -> dict[str, Any]:
     """ Получает список предметов выбранной категории для выбора """
     session: AsyncSession = dialog_manager.middleware_data[SESSION_KEY]
+    l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
     category_id = dialog_manager.dialog_data.get('selected_category_id_for_items')
     
     if not category_id:
-        return {'items': [], 'category_name': ''}
+        return {'items': [], 'category_name': '', 'select_items_text': ''}
     
     category = await get_category_by_id(session, category_id)
     items = await get_items_by_category_id(session, category_id)
     
+    category_name = category.name if category else ''
+    category_name_escaped = escape_mdv2(category_name) if category_name else ''
+    header = l10n.format_value('select-items-from-category', args={'category_name': category_name_escaped})
+    hint = l10n.format_value('select-items-hint')
+    
     return {
         'items': items,
-        'category_name': category.name if category else ''
+        'category_name': category_name_escaped,
+        'select_items_text': f"{header}\n\n{hint}"
     }
 
 
@@ -196,19 +209,21 @@ async def get_review_data(dialog_manager: DialogManager, **_kwargs) -> dict[str,
     purpose = dialog_manager.dialog_data.get('purpose', '')
     selected_items = dialog_manager.dialog_data.get('selected_items', {})
     
-    # Формируем список выбранных предметов
+    # Формируем список выбранных предметов (экранируем названия из БД)
     items_list = []
     for item_id, quantity in selected_items.items():
         item = await get_item_by_id(session, item_id)
         if item:
-            items_list.append(f"{item.name} - {quantity} {item.unit}")
+            item_name_escaped = escape_mdv2(item.name) if item.name else ''
+            items_list.append(f"{item_name_escaped} - {quantity} {item.unit}")
     
     items_text = "\n".join(items_list) if items_list else "Нет предметов"
     
+    # Экранируем пользовательский ввод и текст из БД для MarkdownV2
     return {
-        'applicant_name': applicant_name,
-        'purpose': purpose,
-        'items_text': items_text
+        'applicant_name': escape_mdv2(applicant_name) if applicant_name else '',
+        'purpose': escape_mdv2(purpose) if purpose else '',
+        'items_text': escape_mdv2(items_text) if items_text else ''
     }
 
 
@@ -224,7 +239,7 @@ async def on_confirm_application(clb: CallbackQuery, _button: Button, dialog_man
     # Получаем person_id
     person = await get_person_by_telegram_id(session, clb.from_user.id)
     if not person:
-        await clb.answer("Ошибка: пользователь не найден", show_alert=True)
+        await clb.answer(l10n.format_value('user-not-found'), show_alert=True)
         return
     
     # Создаем заявку
@@ -273,7 +288,7 @@ property_database_dialog = Dialog(
         state=PropertyDatabase.MAIN_MENU,
     ),
     Window(  # Выбор категории для просмотра списка
-        Const("Выберите категорию:"),
+        L10nFormat('select-category'),
         ScrollingGroup(
             Select(
                 Format('{item.name}'),
@@ -293,7 +308,6 @@ property_database_dialog = Dialog(
     ),
     Window(  # Список предметов категории
         Multi(
-            Format("Доступное имущество категории: {category_name}\n\n"),
             Format("{items_text}"),
             sep="\n"
         ),
@@ -303,34 +317,35 @@ property_database_dialog = Dialog(
     ),
     Window(  # Форма создания заявки
         Multi(
-            Const("Для оформления заявки Вам необходимо заполнить следующие данные:\n"),
-            Const("1. Ваше имя\n"),
-            Const("2. Цель взятия\n"),
-            Const("3. Выберите предметы и их количество\n\n"),
+            L10nFormat('application-form-instruction'),
+            L10nFormat('application-form-instruction-name'),
+            L10nFormat('application-form-instruction-purpose'),
+            L10nFormat('application-form-instruction-items'),
             Format("Имя: {applicant_name}\n"),
             Format("Цель: {purpose}\n"),
-            Format("Предметы: {items_text}")
+            Format("Предметы: {items_text}"),
+            sep="\n"
         ),
         Row(
             Button(
-                Const("Имя"),
+                L10nFormat('field-applicant-name'),
                 id='input_name',
                 on_click=on_name_clicked
             ),
             Button(
-                Const("Цель"),
+                L10nFormat('field-purpose'),
                 id='input_purpose',
                 on_click=on_purpose_clicked
             ),
             Button(
-                Const("Предметы"),
+                L10nFormat('field-items'),
                 id='select_items',
                 on_click=on_items_clicked
             )
         ),
         Row(
             Button(
-                Const("Просмотр заявки"),
+                L10nFormat('button-review-application'),
                 id='review_application',
                 on_click=on_review_clicked,
                 when=F['applicant_name'] & F['purpose'] & F['selected_items']
@@ -341,21 +356,21 @@ property_database_dialog = Dialog(
         state=PropertyDatabase.CREATE_APPLICATION,
     ),
     Window(  # Ввод имени
-        Const("Введите ваше имя:"),
+        L10nFormat('input-applicant-name'),
         TextInput('input_name', on_success=on_name_input),
         Back(L10nFormat('back')),
         getter=get_name_input_data,
         state=PropertyDatabase.INPUT_NAME,
     ),
     Window(  # Ввод цели
-        Const("Введите цель взятия имущества:"),
+        L10nFormat('input-purpose'),
         TextInput('input_purpose', on_success=on_purpose_input),
         Back(L10nFormat('back')),
         getter=get_purpose_input_data,
         state=PropertyDatabase.INPUT_PURPOSE,
     ),
     Window(  # Выбор категории для предметов
-        Const("Выберите категорию для выбора предметов:"),
+        L10nFormat('select-category-for-items'),
         ScrollingGroup(
             Select(
                 Format('{item.name}'),
@@ -375,8 +390,7 @@ property_database_dialog = Dialog(
     ),
     Window(  # Выбор предметов из категории
         Multi(
-            Format("Выберите предметы из категории: {category_name}\n\n"),
-            Const("Нажмите на предмет, чтобы добавить его в заявку (количество увеличивается при каждом нажатии)"),
+            Format("{select_items_text}"),
             sep="\n"
         ),
         ScrollingGroup(
@@ -394,7 +408,7 @@ property_database_dialog = Dialog(
         ),
         Row(
             Button(
-                Const("Вернуться к выбору категории"),
+                L10nFormat('button-back-to-categories'),
                 id='back_to_categories',
                 on_click=lambda c, b, d: d.switch_to(PropertyDatabase.SELECT_ITEMS)
             )
@@ -405,15 +419,16 @@ property_database_dialog = Dialog(
     ),
     Window(  # Просмотр заявки
         Multi(
-            Const("Подтвердите отправку заявки:\n\n"),
+            L10nFormat('confirm-submit-header'),
             Format("Имя: {applicant_name}\n"),
             Format("Цель: {purpose}\n\n"),
-            Const("Выбранные предметы:\n"),
-            Format("{items_text}")
+            L10nFormat('selected-items-header'),
+            Format("{items_text}"),
+            sep=""
         ),
         Row(
             Button(
-                Const("Подтвердить отправку заявки"),
+                L10nFormat('button-confirm-application'),
                 id='confirm_application',
                 on_click=on_confirm_application
             )
@@ -423,9 +438,9 @@ property_database_dialog = Dialog(
         state=PropertyDatabase.REVIEW_APPLICATION,
     ),
     Window(  # Подтверждение отправки
-        Const("Ваша заявка принята, Казначей свяжется с Вами в ближайшее время"),
+        L10nFormat('application-accepted'),
         Button(
-            Const("В главное меню"),
+            L10nFormat('button-to-main-menu'),
             id='to_main_menu',
             on_click=lambda c, b, d: d.switch_to(PropertyDatabase.MAIN_MENU)
         ),

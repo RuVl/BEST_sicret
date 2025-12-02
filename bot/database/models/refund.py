@@ -11,7 +11,7 @@ if typing.TYPE_CHECKING:
 
 class Refund(Base):
     __tablename__ = "refunds"
-    __table_args__ = {"comment": "Товарная единица"}
+    __table_args__ = {"comment": "Возврат средств"}
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, comment="Уникальный ID возврата")
     name: Mapped[str] = mapped_column(String(255), nullable=False, comment="Название товара")

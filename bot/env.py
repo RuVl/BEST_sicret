@@ -6,11 +6,13 @@ import environ
 # set casting, default value (if needed)
 env = environ.Env()
 
+# Read .env file if it exists
+env.read_env(env_file=str(Path(__file__).parent / '.env'))
+
 
 class TelegramKeys:
     API_TOKEN: Final[str] = env('TG_API_TOKEN')
     PRESIDENT_ID: Final[int] = env.int('PRESIDENT_ID', 0)
-    TREASURER_ID: Final[int] = env.int('TREASURER_ID', 0)
     TREASURER_ID: Final[int] = env.int('TREASURER_ID', 0)
 
 
@@ -34,7 +36,7 @@ class RedisKeys:
 
 
 class ProjectKeys:
-    DEBUG: Final[bool] = env.bool('DEBUG')
+    DEBUG: Final[bool] = env.bool('DEBUG', default=False)
 
     TEMPLATES_DIR: Final[Path] = env('TEMPLATES_DIR', default=Path('resources/templates/'))
 

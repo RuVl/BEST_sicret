@@ -16,6 +16,7 @@ invalid-boolean-input = Неверный формат логических зн�
 invalid-type = Неверный формат данных\!
 
 generate-document = Сгенерировать документ
+submit-application = Отправить заявку
 telegram-network-error = Произошла ошибка при отправке документа
 
 template-chosen = Шаблон { $template_name } выбран @{ $by_username }

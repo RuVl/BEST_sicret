@@ -14,24 +14,26 @@ from database.methods.refund import create_refund
 from env import TelegramKeys
 from middlewares import L10N_FORMAT_KEY, SESSION_KEY
 from state_machines.request_refund import RequestRefund
-from utils import escape_mdv2
+from utils import escape_mdv2, L10nFormat
 
 
 # ========== Главная форма ==========
 async def get_main_form_data(dialog_manager: DialogManager, **_kwargs) -> dict[str, Any]:
     """ Получает данные главной формы """
-    name = dialog_manager.dialog_data.get('name', 'Не заполнено')
-    event = dialog_manager.dialog_data.get('event', 'Не заполнено')
-    reason = dialog_manager.dialog_data.get('reason', 'Не заполнено')
-    amount = dialog_manager.dialog_data.get('amount', 'Не заполнено')
-    card_number = dialog_manager.dialog_data.get('card_number', 'Не заполнено')
+    l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
+    name = dialog_manager.dialog_data.get('name', l10n.format_value('field-name'))
+    event = dialog_manager.dialog_data.get('event', l10n.format_value('field-event'))
+    reason = dialog_manager.dialog_data.get('reason', l10n.format_value('field-reason'))
+    amount = dialog_manager.dialog_data.get('amount', l10n.format_value('field-amount'))
+    card_number = dialog_manager.dialog_data.get('card_number', l10n.format_value('field-card-number'))
     
+    # Экранируем пользовательский ввод для MarkdownV2
     return {
-        'name': name,
-        'event': event,
-        'reason': reason,
-        'amount': amount,
-        'card_number': card_number
+        'name': escape_mdv2(name) if isinstance(name, str) else name,
+        'event': escape_mdv2(event) if isinstance(event, str) else event,
+        'reason': escape_mdv2(reason) if isinstance(reason, str) else reason,
+        'amount': escape_mdv2(amount) if isinstance(amount, str) else amount,
+        'card_number': escape_mdv2(card_number) if isinstance(card_number, str) else card_number
     }
 
 
@@ -73,7 +75,7 @@ async def get_name_input_data(**_kwargs) -> dict[str, Any]:
 async def on_name_input(msg: Message, _widget: TextInput, dialog_manager: DialogManager, value: str):
     """ Сохранение введенного имени """
     dialog_manager.dialog_data['name'] = value
-    await dialog_manager.switch_to(RequestRefund.MAIN_FORM)
+    await dialog_manager.done()  # Возврат к предыдущему состоянию (MAIN_FORM)
 
 
 # ========== Ввод мероприятия ==========
@@ -84,7 +86,7 @@ async def get_event_input_data(**_kwargs) -> dict[str, Any]:
 async def on_event_input(msg: Message, _widget: TextInput, dialog_manager: DialogManager, value: str):
     """ Сохранение введенного мероприятия """
     dialog_manager.dialog_data['event'] = value
-    await dialog_manager.switch_to(RequestRefund.MAIN_FORM)
+    await dialog_manager.done()  # Возврат к предыдущему состоянию (MAIN_FORM)
 
 
 # ========== Ввод причины ==========
@@ -95,7 +97,7 @@ async def get_reason_input_data(**_kwargs) -> dict[str, Any]:
 async def on_reason_input(msg: Message, _widget: TextInput, dialog_manager: DialogManager, value: str):
     """ Сохранение введенной причины """
     dialog_manager.dialog_data['reason'] = value
-    await dialog_manager.switch_to(RequestRefund.MAIN_FORM)
+    await dialog_manager.done()  # Возврат к предыдущему состоянию (MAIN_FORM)
 
 
 # ========== Ввод суммы ==========
@@ -111,9 +113,9 @@ async def on_amount_input(msg: Message, _widget: TextInput, dialog_manager: Dial
         dialog_manager.dialog_data['amount'] = str(amount)
     except ValueError:
         l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
-        await msg.answer("Пожалуйста, введите число")
+        await msg.answer(l10n.format_value('enter-number'))
         return
-    await dialog_manager.switch_to(RequestRefund.MAIN_FORM)
+    await dialog_manager.done()  # Возврат к предыдущему состоянию (MAIN_FORM)
 
 
 # ========== Ввод номера карты ==========
@@ -124,24 +126,32 @@ async def get_card_number_input_data(**_kwargs) -> dict[str, Any]:
 async def on_card_number_input(msg: Message, _widget: TextInput, dialog_manager: DialogManager, value: str):
     """ Сохранение введенного номера карты """
     dialog_manager.dialog_data['card_number'] = value
-    await dialog_manager.switch_to(RequestRefund.MAIN_FORM)
+    await dialog_manager.done()  # Возврат к предыдущему состоянию (MAIN_FORM)
 
 
 # ========== Просмотр формы для редактирования ==========
 async def get_review_form_data(dialog_manager: DialogManager, **_kwargs) -> dict[str, Any]:
     """ Получает данные для просмотра формы """
-    name = dialog_manager.dialog_data.get('name', 'Не заполнено')
-    event = dialog_manager.dialog_data.get('event', 'Не заполнено')
-    reason = dialog_manager.dialog_data.get('reason', 'Не заполнено')
-    amount = dialog_manager.dialog_data.get('amount', 'Не заполнено')
-    card_number = dialog_manager.dialog_data.get('card_number', 'Не заполнено')
+    l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
+    name = dialog_manager.dialog_data.get('name', '')
+    event = dialog_manager.dialog_data.get('event', '')
+    reason = dialog_manager.dialog_data.get('reason', '')
+    amount = dialog_manager.dialog_data.get('amount', '')
+    card_number = dialog_manager.dialog_data.get('card_number', '')
+    
+    # Экранируем пользовательский ввод для MarkdownV2
+    name_escaped = escape_mdv2(name) if name else ''
+    event_escaped = escape_mdv2(event) if event else ''
+    reason_escaped = escape_mdv2(reason) if reason else ''
+    amount_escaped = escape_mdv2(amount) if amount else ''
+    card_number_escaped = escape_mdv2(card_number) if card_number else ''
     
     return {
-        'name': name,
-        'event': event,
-        'reason': reason,
-        'amount': amount,
-        'card_number': card_number
+        'name': name_escaped,
+        'event': event_escaped,
+        'reason': reason_escaped,
+        'amount': amount_escaped,
+        'card_number': card_number_escaped
     }
 
 
@@ -156,7 +166,7 @@ async def on_confirm_review_clicked(_clb: CallbackQuery, _button: Button, dialog
     
     if not name or not event or not reason or not amount or not card_number:
         l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
-        await _clb.answer("Пожалуйста, заполните все поля", show_alert=True)
+        await _clb.answer(l10n.format_value('fill-all-fields'), show_alert=True)
         return
     
     await dialog_manager.switch_to(RequestRefund.REVIEW_APPLICATION)
@@ -165,18 +175,20 @@ async def on_confirm_review_clicked(_clb: CallbackQuery, _button: Button, dialog
 # ========== Просмотр итоговой заявки ==========
 async def get_review_application_data(dialog_manager: DialogManager, **_kwargs) -> dict[str, Any]:
     """ Получает данные для итогового просмотра заявки """
+    l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
     name = dialog_manager.dialog_data.get('name', '')
     event = dialog_manager.dialog_data.get('event', '')
     reason = dialog_manager.dialog_data.get('reason', '')
     amount = dialog_manager.dialog_data.get('amount', '')
     card_number = dialog_manager.dialog_data.get('card_number', '')
     
+    # Экранируем пользовательский ввод для MarkdownV2
     return {
-        'name': name,
-        'event': event,
-        'reason': reason,
-        'amount': amount,
-        'card_number': card_number
+        'name': escape_mdv2(name) if name else '',
+        'event': escape_mdv2(event) if event else '',
+        'reason': escape_mdv2(reason) if reason else '',
+        'amount': escape_mdv2(amount) if amount else '',
+        'card_number': escape_mdv2(card_number) if card_number else ''
     }
 
 
@@ -194,14 +206,14 @@ async def on_confirm_application(clb: CallbackQuery, _button: Button, dialog_man
     # Получаем person_id
     person = await get_person_by_telegram_id(session, clb.from_user.id)
     if not person:
-        await clb.answer("Ошибка: пользователь не найден", show_alert=True)
+        await clb.answer(l10n.format_value('user-not-found'), show_alert=True)
         return
     
     # Преобразуем сумму в число
     try:
         amount = int(amount_str)
     except (ValueError, TypeError):
-        await clb.answer("Ошибка: неверная сумма", show_alert=True)
+        await clb.answer(l10n.format_value('invalid-amount'), show_alert=True)
         return
     
     # Создаем Payment
@@ -247,47 +259,47 @@ async def get_confirm_data(**_kwargs) -> dict[str, Any]:
 request_refund_dialog = Dialog(
     Window(  # Главная форма
         Multi(
-            Const("Рефанд - это возможность вернуть потраченные на нужды Best'a личные средства.\n\n"),
-            Const("Чтобы запросить рефанд Вам необходимо указать следующие данные:\n\n"),
+            L10nFormat('request-refund-description'),
+            L10nFormat('request-refund-instruction'),
             Format("Имя: {name}\n"),
             Format("Мероприятие: {event}\n"),
             Format("Причина: {reason}\n"),
             Format("Сумма: {amount}\n"),
             Format("Номер карты: {card_number}"),
-            sep=""
+            sep="\n\n"
         ),
         Row(
             Button(
-                Const("Имя"),
+                L10nFormat('field-name'),
                 id='input_name',
                 on_click=on_name_clicked
             ),
             Button(
-                Const("Мероприятие"),
+                L10nFormat('field-event'),
                 id='input_event',
                 on_click=on_event_clicked
             ),
             Button(
-                Const("Причина"),
+                L10nFormat('field-reason'),
                 id='input_reason',
                 on_click=on_reason_clicked
             )
         ),
         Row(
             Button(
-                Const("Сумма"),
+                L10nFormat('field-amount'),
                 id='input_amount',
                 on_click=on_amount_clicked
             ),
             Button(
-                Const("Номер карты"),
+                L10nFormat('field-card-number'),
                 id='input_card_number',
                 on_click=on_card_number_clicked
             )
         ),
         Row(
             Button(
-                Const("Просмотр заявки"),
+                L10nFormat('button-review-application'),
                 id='review_form',
                 on_click=on_review_form_clicked
             )
@@ -296,86 +308,86 @@ request_refund_dialog = Dialog(
         state=RequestRefund.MAIN_FORM,
     ),
     Window(  # Ввод имени
-        Const("Введите ваше имя:"),
+        L10nFormat('input-name'),
         TextInput('input_name', on_success=on_name_input),
-        Back(Const("Назад")),
+        Back(L10nFormat('back')),
         getter=get_name_input_data,
         state=RequestRefund.INPUT_NAME,
     ),
     Window(  # Ввод мероприятия
-        Const("Введите название мероприятия:"),
+        L10nFormat('input-event'),
         TextInput('input_event', on_success=on_event_input),
-        Back(Const("Назад")),
+        Back(L10nFormat('back')),
         getter=get_event_input_data,
         state=RequestRefund.INPUT_EVENT,
     ),
     Window(  # Ввод причины
-        Const("Введите причину запроса рефанда:"),
+        L10nFormat('input-reason'),
         TextInput('input_reason', on_success=on_reason_input),
-        Back(Const("Назад")),
+        Back(L10nFormat('back')),
         getter=get_reason_input_data,
         state=RequestRefund.INPUT_REASON,
     ),
     Window(  # Ввод суммы
-        Const("Введите сумму в рублях (только число):"),
+        L10nFormat('input-amount'),
         TextInput('input_amount', on_success=on_amount_input),
-        Back(Const("Назад")),
+        Back(L10nFormat('back')),
         getter=get_amount_input_data,
         state=RequestRefund.INPUT_AMOUNT,
     ),
     Window(  # Ввод номера карты
-        Const("Введите номер карты:"),
+        L10nFormat('input-card-number'),
         TextInput('input_card_number', on_success=on_card_number_input),
-        Back(Const("Назад")),
+        Back(L10nFormat('back')),
         getter=get_card_number_input_data,
         state=RequestRefund.INPUT_CARD_NUMBER,
     ),
     Window(  # Просмотр формы для редактирования
         Multi(
-            Const("Повторный показ итогового варианта заявки\n\n"),
+            L10nFormat('review-form-title'),
             Format("Имя: {name}\n"),
             Format("Мероприятие: {event}\n"),
             Format("Причина: {reason}\n"),
             Format("Сумма: {amount} руб.\n"),
             Format("Номер карты: {card_number}"),
-            sep=""
+            sep="\n\n"
         ),
         Row(
             Button(
-                Const("Подтвердите отправку заявки"),
+                L10nFormat('button-confirm-submit-review'),
                 id='confirm_review',
                 on_click=on_confirm_review_clicked
             )
         ),
-        Back(Const("Назад")),
+        Back(L10nFormat('back')),
         getter=get_review_form_data,
         state=RequestRefund.REVIEW_FORM,
     ),
     Window(  # Просмотр итоговой заявки
         Multi(
-            Const("Подтвердите отправку заявки:\n\n"),
+            L10nFormat('confirm-submit-header'),
             Format("Имя: {name}\n"),
             Format("Мероприятие: {event}\n"),
             Format("Причина: {reason}\n"),
             Format("Сумма: {amount} руб.\n"),
             Format("Номер карты: {card_number}"),
-            sep=""
+            sep="\n"
         ),
         Row(
             Button(
-                Const("Подтвердить отправку заявки"),
+                L10nFormat('button-confirm-submit'),
                 id='confirm_application',
                 on_click=on_confirm_application
             )
         ),
-        Back(Const("Назад")),
+        Back(L10nFormat('back')),
         getter=get_review_application_data,
         state=RequestRefund.REVIEW_APPLICATION,
     ),
     Window(  # Подтверждение отправки
-        Const("Ваша заявка принята, Казначей свяжется с Вами в ближайшее время"),
+        L10nFormat('application-accepted'),
         Button(
-            Const("В главное меню"),
+            L10nFormat('button-to-main-menu'),
             id='to_main_menu',
             on_click=lambda c, b, d: d.switch_to(RequestRefund.MAIN_FORM)
         ),

@@ -1,13 +1,11 @@
-from typing import Dict, Any
-
 from aiogram import Router
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message
 from aiogram_dialog import DialogManager, StartMode, ShowMode
 from fluent.runtime import FluentLocalization
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.methods.person import get_person_by_telegram_id, create_person
-from filters import get_session
 from state_machines.templates import CreateByTemplate
 from state_machines.property_database import PropertyDatabase
 from state_machines.request_refund import RequestRefund
@@ -15,9 +13,8 @@ from state_machines.request_refund import RequestRefund
 router = Router()
 
 
-@router.message(CommandStart())
-async def start(msg: Message, l10n: FluentLocalization, data: Dict[str, Any]):
-    session = get_session(data)
+@router.message(CommandStart(), flags={"requires_db": True})
+async def start(msg: Message, l10n: FluentLocalization, session: AsyncSession):
     person = await get_person_by_telegram_id(session, msg.from_user.id)
     if person is None:
         full_name = msg.from_user.full_name or f"{msg.from_user.first_name or ''} {msg.from_user.last_name or ''}".strip() or "User"

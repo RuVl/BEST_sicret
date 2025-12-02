@@ -34,8 +34,8 @@ services:
     image: redis:8.2.2
     restart: unless-stopped
     env_file: redis/.env
-    expose:
-      - 6379
+    ports:
+      - "6379:6379"  # Проброс порта Redis на хост
     networks:
       - backend
     volumes:
@@ -45,8 +45,8 @@ services:
     image: postgres:17.6
     restart: unless-stopped
     env_file: postgres/.env
-    expose:
-      - 5432
+    ports:
+      - "5433:5432"  # Проброс порта: хост:контейнер (5433 на хосте -> 5432 в контейнере)
     networks:
       - backend
     volumes:

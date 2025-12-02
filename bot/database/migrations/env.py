@@ -3,8 +3,6 @@ import logging
 from logging.config import fileConfig
 from typing import Iterable
 
-# noinspection PyUnresolvedReferences
-import alembic_postgresql_enum
 from alembic import context
 from alembic.operations import MigrationScript
 from alembic.runtime.migration import MigrationContext

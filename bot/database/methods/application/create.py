@@ -1,5 +1,3 @@
-from typing import Dict
-
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import insert
 
@@ -11,7 +9,7 @@ async def create_application(
     person_id: int,
     applicant_name: str,
     purpose: str,
-    items_with_quantities: Dict[int, int],  # Словарь {item_id: quantity}
+    items_with_quantities: dict[int, int],  # Словарь {item_id: quantity}
 ) -> Application:
     """
     Создает новую заявку на использование имущества.
@@ -45,7 +43,6 @@ async def create_application(
         )
         await session.execute(stmt)
 
-    await session.commit()
     await session.refresh(application)
     return application
 

@@ -8,5 +8,5 @@ def register_dialogs(dp: Dispatcher, router: Router):
     router.include_routers(
         user_dialog_router
     )
-
-    setup_dialogs(dp)  # Register on dispatcher for using anywhere
+    # setup_dialogs will be called after commands are registered
+    # to ensure commands have higher priority
