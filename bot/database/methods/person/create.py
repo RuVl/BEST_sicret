@@ -1,11 +1,13 @@
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from database.models.person import Person
 
 
 async def create_person(
-    session: AsyncSession,
-    telegram_id: int,
-    full_name: str,
+        session: AsyncSession,
+        telegram_id: int,
+        full_name: str,
 ) -> Person:
     """
     Создает нового пользователя в базе данных.
@@ -23,7 +25,9 @@ async def create_person(
         full_name=full_name,
     )
     session.add(person)
-    await session.flush()
-    await session.refresh(person)
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise
     return person
-

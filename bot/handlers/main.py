@@ -3,7 +3,6 @@ from aiogram_dialog import setup_dialogs
 
 from dialogs import register_dialogs
 from handlers import commands
-from middlewares.database import DatabaseMiddleware
 
 
 def register_handlers(dp: Dispatcher):
@@ -14,12 +13,6 @@ def register_handlers(dp: Dispatcher):
     Returns:
         tuple: (dialogs_router, commands_router) - роутеры для применения middleware
     """
-
-    # Применяем middleware к роутеру команд ДО регистрации на диспетчере
-    # Это важно для правильной передачи флагов
-    db_mw_for_handlers = DatabaseMiddleware(always_create_session=False)
-    commands.router.message.middleware(db_mw_for_handlers)
-    commands.router.callback_query.middleware(db_mw_for_handlers)
 
     # Register commands router first to ensure commands are processed before dialogs
     # Commands should have higher priority than dialogs

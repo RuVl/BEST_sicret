@@ -8,7 +8,7 @@ from middlewares.localization import L10nMw
 from middlewares.logging import LoggingMw
 
 
-def register_middlewares(dp: Dispatcher, dialogs_router: Router = None, commands_router: Router = None):
+def register_middlewares(dp: Dispatcher, dialogs_router: Router = None):
     """
     Регистрация middleware.
     
@@ -21,9 +21,6 @@ def register_middlewares(dp: Dispatcher, dialogs_router: Router = None, commands
         dialogs_router: Роутер диалогов. Если передан, к нему будет применен
                        DatabaseMiddleware с always_create_session=True,
                        так как все диалоги используют БД.
-        commands_router: Роутер команд. Если передан, к нему будет применен
-                        DatabaseMiddleware с проверкой флагов для хэндлеров
-                        с флагом requires_db.
     """
     # 1. Drop callback data with only space symbol (outer_middleware - выполнится первым)
     dp.callback_query.outer_middleware(DropEmptyCallbackMiddleware())
@@ -41,7 +38,7 @@ def register_middlewares(dp: Dispatcher, dialogs_router: Router = None, commands
         db_mw_for_dialogs = DatabaseMiddleware(always_create_session=True)
         dialogs_router.message.middleware(db_mw_for_dialogs)
         dialogs_router.callback_query.middleware(db_mw_for_dialogs)
-    
+
     # Middleware для роутера команд уже применен в register_handlers
     # (до регистрации на диспетчере, чтобы флаги передавались правильно)
 

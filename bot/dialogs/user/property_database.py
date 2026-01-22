@@ -68,20 +68,18 @@ async def get_items_list(dialog_manager: DialogManager, **_kwargs) -> dict[str, 
     items = await get_items_by_category_id(session, category_id)
     
     # Форматируем список для отображения (экранируем названия из БД)
-    items_list = []
-    for item in items:
-        item_name_escaped = escape_mdv2(item.name) if item.name else ''
-        items_list.append(f"{item_name_escaped} - {item.count} {item.unit}")
-    
+    items_list = [
+        f"{item.name} - {item.count} {item.unit}"
+        for item in items
+    ]
     items_text = "\n".join(items_list) if items_list else l10n.format_value('no-items-available')
     
-    category_name = category.name if category else ''
-    category_name_escaped = escape_mdv2(category_name) if category_name else ''
-    header = l10n.format_value('items-category-header', args={'category_name': category_name_escaped})
+    category_name = escape_mdv2(category.name) if category else ''
+    header = l10n.format_value('items-category-header', args={'category_name': category_name})
     
     return {
-        'items_text': f"{header}\n\n{items_text}",
-        'category_name': category_name_escaped
+        'items_text': escape_mdv2(f"{header}\n\n{items_text}"),
+        'category_name': category_name
     }
 
 
@@ -307,10 +305,7 @@ property_database_dialog = Dialog(
         state=PropertyDatabase.SHOW_LIST_CATEGORY,
     ),
     Window(  # Список предметов категории
-        Multi(
-            Format("{items_text}"),
-            sep="\n"
-        ),
+        Format("{items_text}"),
         Back(L10nFormat('back')),
         getter=get_items_list,
         state=PropertyDatabase.SHOW_LIST_ITEMS,
@@ -321,10 +316,10 @@ property_database_dialog = Dialog(
             L10nFormat('application-form-instruction-name'),
             L10nFormat('application-form-instruction-purpose'),
             L10nFormat('application-form-instruction-items'),
-            Format("Имя: {applicant_name}\n"),
-            Format("Цель: {purpose}\n"),
-            Format("Предметы: {items_text}"),
-            sep="\n"
+            Const('\n'),
+            Format("Имя: {applicant_name}"),
+            Format("Цель: {purpose}"),
+            Format("Предметы: {items_text}")
         ),
         Row(
             Button(

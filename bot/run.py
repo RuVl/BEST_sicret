@@ -37,7 +37,7 @@ async def main():
 
     # Register handlers and middlewares
     dialogs_router, commands_router = register_handlers(dp)
-    register_middlewares(dp, dialogs_router, commands_router)
+    register_middlewares(dp, dialogs_router)
 
     # Start bot
     logger: FilteringBoundLogger = structlog.get_logger()
