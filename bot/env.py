@@ -24,6 +24,8 @@ class PostgresKeys:
 
 
 class RedisKeys:
+    USE_REDIS: Final[bool] = env.bool('USE_REDIS', default=True)
+
     HOST: Final[str] = env.str('REDIS_HOST', default='localhost')
     PORT: Final[str] = env.str('REDIS_PORT', default='6379')
     DATABASE: Final[str] = env.str('REDIS_DB', default='0')

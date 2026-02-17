@@ -2,7 +2,7 @@ import pickle
 from datetime import timedelta
 from typing import Any
 
-from aiogram.fsm.storage.base import BaseStorage, StorageKey, StateType
+from aiogram.fsm.storage.base import StorageKey, StateType
 from aiogram.fsm.storage.redis import DefaultKeyBuilder, RedisStorage
 from redis.asyncio import Redis
 
@@ -37,7 +37,7 @@ class PickleRedisStorage(RedisStorage):
         return pickle.loads(raw) if raw else {}
 
 
-def get_storage(
+def get_redis_storage(
         *,
         cls=RedisStorage,
         state_ttl: timedelta | int | None = None,
@@ -47,9 +47,9 @@ def get_storage(
         key_builder_with_bot_id: bool = False,
         key_builder_with_destiny: bool = False,
         with_destiny: bool = False,
-) -> BaseStorage:
+) -> RedisStorage:
     return cls(
-        get_redis(),
+        Redis.from_url(RedisKeys.URL),
         key_builder=DefaultKeyBuilder(
             prefix=key_builder_prefix,
             separator=key_builder_separator,
@@ -59,7 +59,3 @@ def get_storage(
         state_ttl=state_ttl,
         data_ttl=data_ttl,
     )
-
-
-def get_redis(**kwargs) -> Redis:
-    return Redis.from_url(RedisKeys.URL, **kwargs)

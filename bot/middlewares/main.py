@@ -8,14 +8,14 @@ from middlewares.logging import LoggingMw
 
 
 def register_middlewares(dp: Dispatcher):
-    # Drop callback data with only space symbol
-    dp.callback_query.outer_middleware(DropEmptyCallbackMiddleware())
-
-    # Localization
+    # Localization (first for use in other Mw)
     locale = get_fluent_localization()
     l10n_mw = L10nMw(locale, L10N_FORMAT_KEY)
     dp.message.outer_middleware(l10n_mw)
     dp.callback_query.outer_middleware(l10n_mw)
+
+    # Drop callback data with only space symbol
+    dp.callback_query.outer_middleware(DropEmptyCallbackMiddleware())
 
     # Logging handlers
     logging_mw = LoggingMw(LOGGING_KEY)
