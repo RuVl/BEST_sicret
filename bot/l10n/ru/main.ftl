@@ -7,3 +7,6 @@ start-msg = Добро пожаловать в BEST sicret\! Чтобы выбр
 back = Назад
 delete = Удалить
 add-item = Добавить элемент
+
+# Errors
+invalid-stack = Внутренняя ошибка (забыли вас)
