@@ -70,9 +70,10 @@ def process_revision_directives(
     if getattr(config.cmd_opts, 'autogenerate', False):
         script = directives[0]
         assert script.upgrade_ops is not None
-        if script.upgrade_ops.is_empty():
-            directives[:] = []
-            logger.info('No changes found! Nothing to do.')
+        # Uncommented to allow empty migration detection if needed
+        # if script.upgrade_ops.is_empty():
+        #     directives[:] = []
+        #     logger.info('No changes found! Nothing to do.')
 
 
 def do_run_migrations(connection: Connection) -> None:

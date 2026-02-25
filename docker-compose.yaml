@@ -27,6 +27,7 @@ services:
       - backend
     volumes:
       - media_volume:/usr/src/app/resources
+      - ./bot:/app
     depends_on:
       - postgres
 

@@ -54,16 +54,21 @@ async def property_database(_: Message, dialog_manager: DialogManager):
 @router.message(Command('request_refund'))
 async def request_refund(_: Message, dialog_manager: DialogManager):
     """ Запуск диалога запроса рефанда """
-    # Инициализируем данные формы
+    # Стартуем диалог перед установкой начальных значений.
+    # при предыдущем закрытии (например, после `done()`) контекст
+    # может отсутствовать, и попытка обратиться к dialog_data
+    # приведёт к NoContextError.
+    await dialog_manager.start(
+        RequestRefund.MAIN_FORM,
+        mode=StartMode.RESET_STACK,
+        show_mode=ShowMode.DELETE_AND_SEND
+    )
+    # Инициализируем поля формы (можно делать и в геттерах, но
+    # для предсказуемости заполняем здесь).
     dialog_manager.dialog_data.update(
         name=None,
         event=None,
         reason=None,
         amount=None,
         card_number=None
-    )
-    await dialog_manager.start(
-        RequestRefund.MAIN_FORM,
-        mode=StartMode.RESET_STACK,
-        show_mode=ShowMode.DELETE_AND_SEND
     )

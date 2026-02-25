@@ -75,7 +75,9 @@ async def get_name_input_data(**_kwargs) -> dict[str, Any]:
 async def on_name_input(msg: Message, _widget: TextInput, dialog_manager: DialogManager, value: str):
     """ Сохранение введенного имени """
     dialog_manager.dialog_data['name'] = value
-    await dialog_manager.done()  # Возврат к предыдущему состоянию (MAIN_FORM)
+    # возвращаемся к главной форме явным переходом, иначе
+    # `done()` завершает весь диалог (stack очищается после switch_to)
+    await dialog_manager.switch_to(RequestRefund.MAIN_FORM)
 
 
 # ========== Ввод мероприятия ==========
@@ -86,7 +88,7 @@ async def get_event_input_data(**_kwargs) -> dict[str, Any]:
 async def on_event_input(msg: Message, _widget: TextInput, dialog_manager: DialogManager, value: str):
     """ Сохранение введенного мероприятия """
     dialog_manager.dialog_data['event'] = value
-    await dialog_manager.done()  # Возврат к предыдущему состоянию (MAIN_FORM)
+    await dialog_manager.switch_to(RequestRefund.MAIN_FORM)
 
 
 # ========== Ввод причины ==========
@@ -97,7 +99,7 @@ async def get_reason_input_data(**_kwargs) -> dict[str, Any]:
 async def on_reason_input(msg: Message, _widget: TextInput, dialog_manager: DialogManager, value: str):
     """ Сохранение введенной причины """
     dialog_manager.dialog_data['reason'] = value
-    await dialog_manager.done()  # Возврат к предыдущему состоянию (MAIN_FORM)
+    await dialog_manager.switch_to(RequestRefund.MAIN_FORM)
 
 
 # ========== Ввод суммы ==========
@@ -115,7 +117,7 @@ async def on_amount_input(msg: Message, _widget: TextInput, dialog_manager: Dial
         l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
         await msg.answer(l10n.format_value('enter-number'))
         return
-    await dialog_manager.done()  # Возврат к предыдущему состоянию (MAIN_FORM)
+    await dialog_manager.switch_to(RequestRefund.MAIN_FORM)
 
 
 # ========== Ввод номера карты ==========
@@ -126,7 +128,7 @@ async def get_card_number_input_data(**_kwargs) -> dict[str, Any]:
 async def on_card_number_input(msg: Message, _widget: TextInput, dialog_manager: DialogManager, value: str):
     """ Сохранение введенного номера карты """
     dialog_manager.dialog_data['card_number'] = value
-    await dialog_manager.done()  # Возврат к предыдущему состоянию (MAIN_FORM)
+    await dialog_manager.switch_to(RequestRefund.MAIN_FORM)
 
 
 # ========== Просмотр формы для редактирования ==========
