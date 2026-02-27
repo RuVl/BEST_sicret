@@ -45,7 +45,16 @@ async def get_categories_list(dialog_manager: DialogManager, **_kwargs) -> dict[
     """ Получает список всех категорий """
     session: AsyncSession = dialog_manager.middleware_data[SESSION_KEY]
     categories = await get_all_categories(session)
-    return {'categories': categories}
+    
+    # Создаем обертки для безопасного отображения
+    class CategoryWrapper:
+        def __init__(self, category):
+            self._category = category
+            self.id = category.id
+            self.name = escape_mdv2(str(category.name))
+    
+    wrapped_categories = [CategoryWrapper(cat) for cat in categories]
+    return {'categories': wrapped_categories}
 
 
 async def on_category_selected_for_list(clb: CallbackQuery, _select: Select, dialog_manager: DialogManager, category_id: str):
@@ -69,17 +78,17 @@ async def get_items_list(dialog_manager: DialogManager, **_kwargs) -> dict[str, 
     
     # Форматируем список для отображения (экранируем названия из БД)
     items_list = [
-        f"{item.name} - {item.count} {item.unit}"
+        f"{escape_mdv2(item.name)} \\- {item.count} {escape_mdv2(item.unit)}"
         for item in items
     ]
     items_text = "\n".join(items_list) if items_list else l10n.format_value('no-items-available')
     
-    category_name = escape_mdv2(category.name) if category else ''
-    header = l10n.format_value('items-category-header', args={'category_name': category_name})
+    category_name = category.name if category else ''
+    header = l10n.format_value('items-category-header', args={'category_name': escape_mdv2(category_name) if category_name else ''})
     
     return {
-        'items_text': escape_mdv2(f"{header}\n\n{items_text}"),
-        'category_name': category_name
+        'items_text': f"{header}\n\n{items_text}",
+        'category_name': escape_mdv2(category_name) if category_name else ''
     }
 
 
@@ -93,11 +102,12 @@ async def get_application_form_data(dialog_manager: DialogManager, **_kwargs) ->
     items_count = len(selected_items)
     items_text = f"{items_count} предмет(ов)" if items_count > 0 else "Не выбрано"
     
-    # Экранируем пользовательский ввод для MarkdownV2
+    # Экранируем все данные для MarkdownV2
     return {
-        'applicant_name': escape_mdv2(applicant_name) if isinstance(applicant_name, str) else applicant_name,
-        'purpose': escape_mdv2(purpose) if isinstance(purpose, str) else purpose,
-        'items_text': escape_mdv2(items_text) if isinstance(items_text, str) else items_text
+        'applicant_name': escape_mdv2(str(applicant_name)),
+        'purpose': escape_mdv2(str(purpose)),
+        'items_text': escape_mdv2(str(items_text)),
+        'selected_items': selected_items  # Для when проверки
     }
 
 
@@ -132,8 +142,9 @@ async def on_review_clicked(_clb: CallbackQuery, _button: Button, dialog_manager
 
 
 # ========== Ввод имени ==========
-async def get_name_input_data(**_kwargs) -> dict[str, Any]:
-    return {}
+async def get_name_input_data(dialog_manager: DialogManager, **_kwargs) -> dict[str, Any]:
+    applicant_name = dialog_manager.dialog_data.get('applicant_name', '')
+    return {'applicant_name': applicant_name}
 
 
 async def on_name_input(msg: Message, _widget: TextInput, dialog_manager: DialogManager, value: str):
@@ -143,8 +154,9 @@ async def on_name_input(msg: Message, _widget: TextInput, dialog_manager: Dialog
 
 
 # ========== Ввод цели ==========
-async def get_purpose_input_data(**_kwargs) -> dict[str, Any]:
-    return {}
+async def get_purpose_input_data(dialog_manager: DialogManager, **_kwargs) -> dict[str, Any]:
+    purpose = dialog_manager.dialog_data.get('purpose', '')
+    return {'purpose': purpose}
 
 
 async def on_purpose_input(msg: Message, _widget: TextInput, dialog_manager: DialogManager, value: str):
@@ -158,7 +170,16 @@ async def get_categories_for_selection(dialog_manager: DialogManager, **_kwargs)
     """ Получает список категорий для выбора предметов """
     session: AsyncSession = dialog_manager.middleware_data[SESSION_KEY]
     categories = await get_all_categories(session)
-    return {'categories': categories}
+    
+    # Создаем обертки для безопасного отображения
+    class CategoryWrapper:
+        def __init__(self, category):
+            self._category = category
+            self.id = category.id
+            self.name = escape_mdv2(str(category.name))
+    
+    wrapped_categories = [CategoryWrapper(cat) for cat in categories]
+    return {'categories': wrapped_categories}
 
 
 async def on_category_selected_for_items(clb: CallbackQuery, _select: Select, dialog_manager: DialogManager, category_id: str):
@@ -179,13 +200,24 @@ async def get_items_for_selection(dialog_manager: DialogManager, **_kwargs) -> d
     category = await get_category_by_id(session, category_id)
     items = await get_items_by_category_id(session, category_id)
     
+    # Создаем обертки для безопасного отображения
+    class ItemWrapper:
+        def __init__(self, item):
+            self._item = item
+            self.id = item.id
+            self.name = escape_mdv2(str(item.name))
+            self.count = escape_mdv2(str(item.count))
+            self.unit = escape_mdv2(str(item.unit))
+    
+    wrapped_items = [ItemWrapper(item) for item in items]
+    
     category_name = category.name if category else ''
     category_name_escaped = escape_mdv2(category_name) if category_name else ''
     header = l10n.format_value('select-items-from-category', args={'category_name': category_name_escaped})
     hint = l10n.format_value('select-items-hint')
     
     return {
-        'items': items,
+        'items': wrapped_items,
         'category_name': category_name_escaped,
         'select_items_text': f"{header}\n\n{hint}"
     }
@@ -212,16 +244,17 @@ async def get_review_data(dialog_manager: DialogManager, **_kwargs) -> dict[str,
     for item_id, quantity in selected_items.items():
         item = await get_item_by_id(session, item_id)
         if item:
-            item_name_escaped = escape_mdv2(item.name) if item.name else ''
-            items_list.append(f"{item_name_escaped} - {quantity} {item.unit}")
+            item_name_escaped = escape_mdv2(str(item.name))
+            item_unit_escaped = escape_mdv2(str(item.unit))
+            items_list.append(f"{item_name_escaped} \\- {quantity} {item_unit_escaped}")
     
     items_text = "\n".join(items_list) if items_list else "Нет предметов"
     
-    # Экранируем пользовательский ввод и текст из БД для MarkdownV2
+    # Экранируем пользовательский ввод для MarkdownV2
     return {
-        'applicant_name': escape_mdv2(applicant_name) if applicant_name else '',
-        'purpose': escape_mdv2(purpose) if purpose else '',
-        'items_text': escape_mdv2(items_text) if items_text else ''
+        'applicant_name': escape_mdv2(str(applicant_name)),
+        'purpose': escape_mdv2(str(purpose)),
+        'items_text': items_text  # Уже экранировано выше
     }
 
 
@@ -300,13 +333,21 @@ property_database_dialog = Dialog(
             height=5,
             hide_on_single_page=True
         ),
-        Back(L10nFormat('back')),
+        Button(
+            L10nFormat('back'),
+            id='back_from_list_category',
+            on_click=lambda c, b, d: d.switch_to(PropertyDatabase.MAIN_MENU)
+        ),
         getter=get_categories_list,
         state=PropertyDatabase.SHOW_LIST_CATEGORY,
     ),
     Window(  # Список предметов категории
         Format("{items_text}"),
-        Back(L10nFormat('back')),
+        Button(
+            L10nFormat('back'),
+            id='back_from_list_items',
+            on_click=lambda c, b, d: d.switch_to(PropertyDatabase.SHOW_LIST_CATEGORY)
+        ),
         getter=get_items_list,
         state=PropertyDatabase.SHOW_LIST_ITEMS,
     ),
@@ -317,9 +358,9 @@ property_database_dialog = Dialog(
             L10nFormat('application-form-instruction-purpose'),
             L10nFormat('application-form-instruction-items'),
             Const('\n'),
-            Format("Имя: {applicant_name}"),
-            Format("Цель: {purpose}"),
-            Format("Предметы: {items_text}")
+            Format("Имя\\: {applicant_name}"),
+            Format("Цель\\: {purpose}"),
+            Format("Предметы\\: {items_text}")
         ),
         Row(
             Button(
@@ -346,21 +387,41 @@ property_database_dialog = Dialog(
                 when=F['applicant_name'] & F['purpose'] & F['selected_items']
             )
         ),
-        Back(L10nFormat('back')),
+        Button(
+            L10nFormat('back'),
+            id='back_from_create_application',
+            on_click=lambda c, b, d: d.switch_to(PropertyDatabase.MAIN_MENU)
+        ),
         getter=get_application_form_data,
         state=PropertyDatabase.CREATE_APPLICATION,
     ),
     Window(  # Ввод имени
-        L10nFormat('input-applicant-name'),
+        Multi(
+            L10nFormat('input-applicant-name'),
+            Format("Текущее значение\\: {applicant_name}"),
+            sep="\n"
+        ),
         TextInput('input_name', on_success=on_name_input),
-        Back(L10nFormat('back')),
+        Button(
+            L10nFormat('back'),
+            id='back_from_input_name',
+            on_click=lambda c, b, d: d.switch_to(PropertyDatabase.CREATE_APPLICATION)
+        ),
         getter=get_name_input_data,
         state=PropertyDatabase.INPUT_NAME,
     ),
     Window(  # Ввод цели
-        L10nFormat('input-purpose'),
+        Multi(
+            L10nFormat('input-purpose'),
+            Format("Текущее значение\\: {purpose}"),
+            sep="\n"
+        ),
         TextInput('input_purpose', on_success=on_purpose_input),
-        Back(L10nFormat('back')),
+        Button(
+            L10nFormat('back'),
+            id='back_from_input_purpose',
+            on_click=lambda c, b, d: d.switch_to(PropertyDatabase.CREATE_APPLICATION)
+        ),
         getter=get_purpose_input_data,
         state=PropertyDatabase.INPUT_PURPOSE,
     ),
@@ -379,7 +440,11 @@ property_database_dialog = Dialog(
             height=5,
             hide_on_single_page=True
         ),
-        Back(L10nFormat('back')),
+        Button(
+            L10nFormat('back'),
+            id='back_from_select_items',
+            on_click=lambda c, b, d: d.switch_to(PropertyDatabase.CREATE_APPLICATION)
+        ),
         getter=get_categories_for_selection,
         state=PropertyDatabase.SELECT_ITEMS,
     ),
@@ -390,7 +455,7 @@ property_database_dialog = Dialog(
         ),
         ScrollingGroup(
             Select(
-                Format('{item.name} ({item.count} {item.unit} доступно)'),
+                Format('{item.name} \\({item.count} {item.unit} доступно\\)'),
                 id='items_select',
                 item_id_getter=lambda x: str(x.id),
                 items='items',
@@ -408,15 +473,19 @@ property_database_dialog = Dialog(
                 on_click=lambda c, b, d: d.switch_to(PropertyDatabase.SELECT_ITEMS)
             )
         ),
-        Back(L10nFormat('back')),
+        Button(
+            L10nFormat('back'),
+            id='back_from_select_items_from_category',
+            on_click=lambda c, b, d: d.switch_to(PropertyDatabase.SELECT_ITEMS)
+        ),
         getter=get_items_for_selection,
         state=PropertyDatabase.SELECT_ITEMS_FROM_CATEGORY,
     ),
     Window(  # Просмотр заявки
         Multi(
             L10nFormat('confirm-submit-header'),
-            Format("Имя: {applicant_name}\n"),
-            Format("Цель: {purpose}\n\n"),
+            Format("Имя\\: {applicant_name}\n"),
+            Format("Цель\\: {purpose}\n\n"),
             L10nFormat('selected-items-header'),
             Format("{items_text}"),
             sep=""
@@ -428,7 +497,11 @@ property_database_dialog = Dialog(
                 on_click=on_confirm_application
             )
         ),
-        Back(L10nFormat('back')),
+        Button(
+            L10nFormat('back'),
+            id='back_from_review_application',
+            on_click=lambda c, b, d: d.switch_to(PropertyDatabase.CREATE_APPLICATION)
+        ),
         getter=get_review_data,
         state=PropertyDatabase.REVIEW_APPLICATION,
     ),
