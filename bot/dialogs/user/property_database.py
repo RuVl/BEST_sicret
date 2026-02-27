@@ -282,6 +282,10 @@ async def on_confirm_application(clb: CallbackQuery, _button: Button, dialog_man
         items_with_quantities=selected_items
     )
     
+    # ✅ ЯВНЫЙ COMMIT: Сохраняем созданную заявку в базу
+    # Стратегия: Explicit transaction management
+    await session.commit()
+    
     # Отправляем уведомление казначею
     if TelegramKeys.TREASURER_ID:
         await clb.bot.send_message(

@@ -14,6 +14,34 @@ class DatabaseMiddleware(BaseMiddleware):
     Создает сессию БД только для хэндлеров, помеченных флагом 'requires_db'.
     Если middleware применен к роутеру напрямую (например, для диалогов),
     все хэндлеры в этом роутере автоматически получат сессию.
+    
+    ⚠️ ВАЖНО: Middleware НЕ выполняет автоматический commit!
+    
+    СТРАТЕГИЯ: Explicit transaction management
+    ────────────────────────────────────────
+    Handlers отвечают за явное управление транзакциями:
+    - Middleware предоставляет сессию в data[SESSION_KEY]
+    - Database методы используют только await session.flush()
+    - Handler ЯВНО вызывает await session.commit() для сохранения
+    - При ошибке session.rollback() вызовется автоматически
+    
+    ✅ ПРИМЕР ПРАВИЛЬНОГО ИСПОЛЬЗОВАНИЯ:
+    
+    @router.message(CommandStart())
+    async def start(msg: Message, session: AsyncSession):
+        person = await get_person_by_telegram_id(session, msg.from_user.id)
+        if person is None:
+            person = await create_person(session, msg.from_user.id, name)
+            await session.flush()  # Database method flushes
+            # 👇 Handler явно коммитит
+            await session.commit()
+        return person
+    
+    ПОЧЕМУ ТАК?
+    ──────────
+    - Atomic: Несколько DB операций коммитятся вместе
+    - Explicit: Порядок commit визуально понятен из кода handler
+    - Controllable: Handler решает когда коммитить (с условиями, перепроверками и т.д.)
     """
 
     def __init__(self, always_create_session: bool = False):
@@ -75,13 +103,32 @@ class DatabaseMiddleware(BaseMiddleware):
             event: TelegramObject,
             data: Dict[str, Any],
     ) -> Any:
-        """Вспомогательный метод для создания сессии и вызова хэндлера."""
+        """
+        Вспомогательный метод для создания сессии и вызова хэндлера.
+        
+        ВНИМАНИЕ: Middleware НЕ выполняет автоматический commit!
+        Это следует выбранной стратегии ЯВНОГО управления транзакциями.
+        
+        ОТВЕТСТВЕННОСТЬ HANDLER ЗАКРЫТА:
+        1. Создать сессию (достается из data[SESSION_KEY])
+        2. Вызвать database методы (используют только flush)
+        3. ЯВНО вызвать await session.commit() если операция успешна
+        4. При ошибкe session.rollback() вызывается контекстом or явно в except блоке
+        
+        СТРАТЕГИЯ: Explicit transaction management
+        - Middleware предоставляет сессию
+        - Handler отвечает за commit/rollback
+        - Database методы используют только flush
+        - Атомарность достигается через контролируемые commits в handler коде
+        """
         async with async_session() as session:
             data[SESSION_KEY] = session
             try:
                 result = await handler(event, data)
-                await session.commit()
+                # ✅ ЯВНОЕ управление: НЕ делаем автоматический commit
+                # Handler отвечает за явный await session.commit()
                 return result
             except Exception:
+                # При исключении откатываем изменения, которые были flush'ены
                 await session.rollback()
                 raise

@@ -220,6 +220,10 @@ async def on_confirm_application(clb: CallbackQuery, _button: Button, dialog_man
         payment_id=dialog_manager.dialog_data.get('payment_id')
     )
     
+    # ✅ ЯВНЫЙ COMMIT: Сохраняем созданную заявку на рефанд в базу
+    # Стратегия: Explicit transaction management
+    await session.commit()
+    
     # Отправляем уведомление казначею
     if TelegramKeys.TREASURER_ID:
         await clb.bot.send_message(
