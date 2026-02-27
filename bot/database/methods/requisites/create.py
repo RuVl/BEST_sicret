@@ -9,6 +9,9 @@ async def create_requisites(
 ) -> Requisites:
     """
     Создает новые реквизиты в базе данных.
+    
+    Стратегия: этот метод использует FLUSH без COMMIT.
+    Коммит выполняется на уровне middleware или обработчика.
 
     Args:
         session: Асинхронная сессия SQLAlchemy

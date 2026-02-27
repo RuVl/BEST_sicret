@@ -16,6 +16,9 @@ async def update_item(
 ) -> Item:
     """
     Обновляет данные товара.
+    
+    Стратегия: этот метод использует FLUSH без COMMIT.
+    Коммит выполняется на уровне middleware или обработчика.
 
     Args:
         session: Асинхронная сессия SQLAlchemy

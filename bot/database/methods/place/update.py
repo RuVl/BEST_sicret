@@ -13,6 +13,9 @@ async def update_place(
 ) -> Place:
     """
     Обновляет данные места хранения.
+    
+    Стратегия: этот метод использует FLUSH без COMMIT.
+    Коммит выполняется на уровне middleware или обработчика.
 
     Args:
         session: Асинхронная сессия SQLAlchemy

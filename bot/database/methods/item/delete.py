@@ -9,11 +9,14 @@ async def delete_item(
 ) -> None:
     """
     Удаляет товар из базы данных.
+    
+    Стратегия: этот метод использует FLUSH без COMMIT.
+    Коммит выполняется на уровне middleware или обработчика.
 
     Args:
         session: Асинхронная сессия SQLAlchemy
         item: Объект Item для удаления
     """
-    await session.delete(item)
+    session.delete(item)
     await session.flush()
 

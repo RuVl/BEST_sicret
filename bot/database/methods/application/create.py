@@ -13,6 +13,9 @@ async def create_application(
 ) -> Application:
     """
     Создает новую заявку на использование имущества.
+    
+    Стратегия: этот метод использует FLUSH без COMMIT.
+    Коммит выполняется на уровне middleware или обработчика.
 
     Args:
         session: Асинхронная сессия SQLAlchemy

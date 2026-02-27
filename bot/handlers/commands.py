@@ -25,6 +25,8 @@ async def start(msg: Message, l10n: FluentLocalization):
                 telegram_id=msg.from_user.id,
                 full_name=full_name,
             )
+            # Коммитим транзакцию после создания персоны
+            await session.commit()
         await msg.answer(l10n.format_value('start-msg', args={
             'full_name': person.full_name,
         }))

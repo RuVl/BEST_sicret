@@ -9,11 +9,14 @@ async def delete_payment(
 ) -> None:
     """
     Удаляет платеж из базы данных.
+    
+    Стратегия: этот метод использует FLUSH без COMMIT.
+    Коммит выполняется на уровне middleware или обработчика.
 
     Args:
         session: Асинхронная сессия SQLAlchemy
         payment: Объект Payment для удаления
     """
-    await session.delete(payment)
+    session.delete(payment)
     await session.flush()
 

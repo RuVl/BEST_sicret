@@ -9,12 +9,15 @@ async def delete_refund(
 ) -> None:
     """
     Удаляет возврат из базы данных.
+    
+    Стратегия: этот метод использует FLUSH без COMMIT.
+    Коммит выполняется на уровне middleware или обработчика.
 
     Args:
         session: Асинхронная сессия SQLAlchemy
         refund: Объект Refund для удаления
     """
-    await session.delete(refund)
+    session.delete(refund)
     await session.flush()
 
 

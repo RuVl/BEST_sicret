@@ -1,4 +1,3 @@
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models.person import Person
@@ -11,6 +10,9 @@ async def create_person(
 ) -> Person:
     """
     Создает нового пользователя в базе данных.
+    
+    Стратегия: этот метод использует FLUSH без COMMIT.
+    Коммит выполняется на уровне middleware или обработчика.
 
     Args:
         session: Асинхронная сессия SQLAlchemy
@@ -25,9 +27,6 @@ async def create_person(
         full_name=full_name,
     )
     session.add(person)
-    try:
-        await session.commit()
-    except IntegrityError:
-        await session.rollback()
-        raise
+    await session.flush()
+    await session.refresh(person)
     return person

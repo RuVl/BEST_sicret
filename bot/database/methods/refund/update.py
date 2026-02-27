@@ -15,6 +15,9 @@ async def update_refund(
 ) -> Refund:
     """
     Обновляет данные возврата.
+    
+    Стратегия: этот метод использует FLUSH без COMMIT.
+    Коммит выполняется на уровне middleware или обработчика.
 
     Args:
         session: Асинхронная сессия SQLAlchemy

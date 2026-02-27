@@ -13,6 +13,9 @@ async def update_person(
 ) -> Person:
     """
     Обновляет данные пользователя.
+    
+    Стратегия: этот метод использует FLUSH без COMMIT.
+    Коммит выполняется на уровне middleware или обработчика.
 
     Args:
         session: Асинхронная сессия SQLAlchemy

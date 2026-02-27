@@ -13,6 +13,9 @@ async def create_item(
 ) -> Item:
     """
     Создает новый товар в базе данных.
+    
+    Стратегия: этот метод использует FLUSH без COMMIT.
+    Коммит выполняется на уровне middleware или обработчика.
 
     Args:
         session: Асинхронная сессия SQLAlchemy

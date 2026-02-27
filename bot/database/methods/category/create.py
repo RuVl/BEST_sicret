@@ -9,6 +9,9 @@ async def create_category(
 ) -> Category:
     """
     Создает новую категорию в базе данных.
+    
+    Стратегия: этот метод использует FLUSH без COMMIT.
+    Коммит выполняется на уровне middleware или обработчика.
 
     Args:
         session: Асинхронная сессия SQLAlchemy

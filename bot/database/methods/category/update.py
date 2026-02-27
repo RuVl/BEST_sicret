@@ -12,6 +12,9 @@ async def update_category(
 ) -> Category:
     """
     Обновляет данные категории.
+    
+    Стратегия: этот метод использует FLUSH без COMMIT.
+    Коммит выполняется на уровне middleware или обработчика.
 
     Args:
         session: Асинхронная сессия SQLAlchemy

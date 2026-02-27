@@ -9,10 +9,13 @@ async def delete_requisites(
 ) -> None:
     """
     Удаляет реквизиты из базы данных.
+    
+    Стратегия: этот метод использует FLUSH без COMMIT.
+    Коммит выполняется на уровне middleware или обработчика.
 
     Args:
         session: Асинхронная сессия SQLAlchemy
         requisites: Объект Requisites для удаления
     """
-    await session.delete(requisites)
+    session.delete(requisites)
     await session.flush()
