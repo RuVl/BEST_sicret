@@ -13,6 +13,7 @@ from database.methods.application import create_application
 from database.methods.category import get_all_categories, get_category_by_id
 from database.methods.item import get_items_by_category_id, get_item_by_id
 from database.methods.person import get_person_by_telegram_id
+from database.error_handler import handle_db_commit
 from env import TelegramKeys
 from middlewares import L10N_FORMAT_KEY, SESSION_KEY
 from state_machines.property_database import PropertyDatabase
@@ -282,9 +283,11 @@ async def on_confirm_application(clb: CallbackQuery, _button: Button, dialog_man
         items_with_quantities=selected_items
     )
     
-    # ✅ ЯВНЫЙ COMMIT: Сохраняем созданную заявку в базу
-    # Стратегия: Explicit transaction management
-    await session.commit()
+    # ✅ ОБРАБОТКА ОШИБОК БД: Централизованная обработка через error_handler
+    success, error_msg = await handle_db_commit(session, l10n, "create property application")
+    if not success:
+        await clb.answer(error_msg, show_alert=True)
+        return
     
     # Отправляем уведомление казначею
     if TelegramKeys.TREASURER_ID:

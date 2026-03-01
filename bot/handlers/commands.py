@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.main import async_session
 from database.methods.person import get_person_by_telegram_id, create_person
+from database.error_handler import handle_db_commit
 from state_machines.templates import CreateByTemplate
 from state_machines.property_database import PropertyDatabase
 from state_machines.request_refund import RequestRefund
@@ -25,8 +26,11 @@ async def start(msg: Message, l10n: FluentLocalization):
                 telegram_id=msg.from_user.id,
                 full_name=full_name,
             )
-            # Коммитим транзакцию после создания персоны
-            await session.commit()
+            # ✅ ОБРАБОТКА ОШИБОК БД: Централизованная обработка через error_handler
+            success, error_msg = await handle_db_commit(session, l10n, "create person")
+            if not success:
+                await msg.answer(error_msg)
+                return
         await msg.answer(l10n.format_value('start-msg', args={
             'full_name': person.full_name,
         }))

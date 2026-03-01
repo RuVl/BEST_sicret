@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database.methods.payment import get_payment_by_id
 from database.methods.person import get_person_by_telegram_id
 from database.methods.refund import create_refund, get_refund_by_id
+from database.error_handler import handle_db_commit
 from env import TelegramKeys
 from middlewares import L10N_FORMAT_KEY, SESSION_KEY
 from state_machines.request_refund import RequestRefund
@@ -220,9 +221,11 @@ async def on_confirm_application(clb: CallbackQuery, _button: Button, dialog_man
         payment_id=dialog_manager.dialog_data.get('payment_id')
     )
     
-    # ✅ ЯВНЫЙ COMMIT: Сохраняем созданную заявку на рефанд в базу
-    # Стратегия: Explicit transaction management
-    await session.commit()
+    # ✅ ОБРАБОТКА ОШИБОК БД: Централизованная обработка через error_handler
+    success, error_msg = await handle_db_commit(session, l10n, "create refund request")
+    if not success:
+        await clb.answer(error_msg, show_alert=True)
+        return
     
     # Отправляем уведомление казначею
     if TelegramKeys.TREASURER_ID:
