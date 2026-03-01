@@ -47,13 +47,14 @@ async def get_categories_list(dialog_manager: DialogManager, **_kwargs) -> dict[
     session: AsyncSession = dialog_manager.middleware_data[SESSION_KEY]
     categories = await get_all_categories(session)
     
-    # Создаем обертки для безопасного отображения
+    # Создаем обертки с экранированием для MarkdownV2
+    from utils import escape_mdv2
     class CategoryWrapper:
         def __init__(self, category):
             self._category = category
             self.id = category.id
             self.name = escape_mdv2(str(category.name))
-    
+
     wrapped_categories = [CategoryWrapper(cat) for cat in categories]
     return {'categories': wrapped_categories}
 
@@ -83,12 +84,14 @@ async def get_items_list(dialog_manager: DialogManager, **_kwargs) -> dict[str, 
         for item in items
     ]
     items_text = "\n".join(items_list) if items_list else l10n.format_value('no-items-available')
-    
+
     category_name = category.name if category else ''
-    header = l10n.format_value('items-category-header', args={'category_name': escape_mdv2(category_name) if category_name else ''})
-    
+    header = l10n.format_value('items-category-header', args={'category_name': category_name})
+    from utils import escape_mdv2
+    # Экранируем итоговый текст для MarkdownV2
+    items_text_escaped = escape_mdv2(f"{header}\n\n{items_text}")
     return {
-        'items_text': f"{header}\n\n{items_text}",
+        'items_text': items_text_escaped,
         'category_name': escape_mdv2(category_name) if category_name else ''
     }
 
@@ -127,6 +130,17 @@ async def on_items_clicked(_clb: CallbackQuery, _button: Button, dialog_manager:
     await dialog_manager.switch_to(PropertyDatabase.SELECT_ITEMS)
 
 
+def _has_selected_items(data: dict) -> bool:
+    """ Проверяет, были ли выбраны предметы """
+    selected_items = data.get('selected_items', {})
+    return bool(selected_items)  # Преобразуем словарь в булево значение
+
+
+def _can_review_application(data: dict, widget, manager) -> bool:
+    """ Проверяет, можно ли перейти к просмотру заявки """
+    return bool(data.get('applicant_name')) and bool(data.get('purpose')) and bool(data.get('selected_items'))
+
+
 async def on_review_clicked(_clb: CallbackQuery, _button: Button, dialog_manager: DialogManager):
     """ Переход к просмотру заявки """
     # Проверяем, что все поля заполнены
@@ -140,6 +154,18 @@ async def on_review_clicked(_clb: CallbackQuery, _button: Button, dialog_manager
         return
     
     await dialog_manager.switch_to(PropertyDatabase.REVIEW_APPLICATION)
+
+
+async def on_cancel_application(clb: CallbackQuery, _button: Button, dialog_manager: DialogManager):
+    """ Отмена заявки и очистка всех данных """
+    # Очищаем все данные формы
+    dialog_manager.dialog_data.clear()
+    
+    l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
+    await clb.answer("Заявка отменена", show_alert=True)
+    
+    # Возвращаемся в главное меню
+    await dialog_manager.switch_to(PropertyDatabase.MAIN_MENU)
 
 
 # ========== Ввод имени ==========
@@ -172,13 +198,14 @@ async def get_categories_for_selection(dialog_manager: DialogManager, **_kwargs)
     session: AsyncSession = dialog_manager.middleware_data[SESSION_KEY]
     categories = await get_all_categories(session)
     
-    # Создаем обертки для безопасного отображения
+    # Создаем обертки с экранированием для MarkdownV2
+    from utils import escape_mdv2
     class CategoryWrapper:
         def __init__(self, category):
             self._category = category
             self.id = category.id
             self.name = escape_mdv2(str(category.name))
-    
+
     wrapped_categories = [CategoryWrapper(cat) for cat in categories]
     return {'categories': wrapped_categories}
 
@@ -201,26 +228,26 @@ async def get_items_for_selection(dialog_manager: DialogManager, **_kwargs) -> d
     category = await get_category_by_id(session, category_id)
     items = await get_items_by_category_id(session, category_id)
     
-    # Создаем обертки для безопасного отображения
+    # Создаем обертки (без экранирования для кнопок)
     class ItemWrapper:
         def __init__(self, item):
             self._item = item
             self.id = item.id
-            self.name = escape_mdv2(str(item.name))
-            self.count = escape_mdv2(str(item.count))
-            self.unit = escape_mdv2(str(item.unit))
+            self.name = str(item.name)
+            self.count = str(item.count)
+            self.unit = str(item.unit)
     
     wrapped_items = [ItemWrapper(item) for item in items]
     
     category_name = category.name if category else ''
-    category_name_escaped = escape_mdv2(category_name) if category_name else ''
-    header = l10n.format_value('select-items-from-category', args={'category_name': category_name_escaped})
+    header = l10n.format_value('select-items-from-category', args={'category_name': category_name})
     hint = l10n.format_value('select-items-hint')
-    
+    from utils import escape_mdv2
+    select_items_text = escape_mdv2(f"{header}\n\n{hint}")
     return {
         'items': wrapped_items,
-        'category_name': category_name_escaped,
-        'select_items_text': f"{header}\n\n{hint}"
+        'category_name': escape_mdv2(category_name) if category_name else '',
+        'select_items_text': select_items_text
     }
 
 
@@ -338,7 +365,7 @@ property_database_dialog = Dialog(
             id='categories_scroll',
             width=2,
             height=5,
-            hide_on_single_page=True
+            hide_on_single_page=False
         ),
         Button(
             L10nFormat('back'),
@@ -391,7 +418,7 @@ property_database_dialog = Dialog(
                 L10nFormat('button-review-application'),
                 id='review_application',
                 on_click=on_review_clicked,
-                when=F['applicant_name'] & F['purpose'] & F['selected_items']
+                when=_can_review_application
             )
         ),
         Button(
@@ -433,7 +460,10 @@ property_database_dialog = Dialog(
         state=PropertyDatabase.INPUT_PURPOSE,
     ),
     Window(  # Выбор категории для предметов
-        L10nFormat('select-category-for-items'),
+        Multi(
+            L10nFormat('select-category-for-items'),
+            Const('\n')
+        ),
         ScrollingGroup(
             Select(
                 Format('{item.name}'),
@@ -445,7 +475,7 @@ property_database_dialog = Dialog(
             id='categories_scroll_items',
             width=2,
             height=5,
-            hide_on_single_page=True
+            hide_on_single_page=False
         ),
         Button(
             L10nFormat('back'),
@@ -462,7 +492,7 @@ property_database_dialog = Dialog(
         ),
         ScrollingGroup(
             Select(
-                Format('{item.name} \\({item.count} {item.unit} доступно\\)'),
+                Format('{item.name} ({item.count} {item.unit} доступно)'),
                 id='items_select',
                 item_id_getter=lambda x: str(x.id),
                 items='items',
@@ -471,7 +501,7 @@ property_database_dialog = Dialog(
             id='items_scroll',
             width=1,
             height=5,
-            hide_on_single_page=True
+            hide_on_single_page=False
         ),
         Row(
             Button(
@@ -502,7 +532,12 @@ property_database_dialog = Dialog(
                 L10nFormat('button-confirm-application'),
                 id='confirm_application',
                 on_click=on_confirm_application
-            )
+            ),
+            Button(
+                Const('❌ Отмена'),
+                id='cancel_application',
+                on_click=on_cancel_application
+            ),
         ),
         Button(
             L10nFormat('back'),
