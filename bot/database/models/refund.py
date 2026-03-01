@@ -21,6 +21,6 @@ class Refund(Base):
     customer_id: Mapped[int] = mapped_column(Integer, ForeignKey("persons.id"), nullable=False, comment="ID инициировавшего возврат")
     customer: Mapped['Person'] = relationship("Person", back_populates="refunds")
 
-    # Связь с Payment
-    payment_id: Mapped[int] = mapped_column(Integer, ForeignKey("payments.id"), nullable=False, comment="ID платежа, по которому осуществляется возврат")
-    payment: Mapped['Payment'] = relationship("Payment", back_populates="refunds")
+    # Связь с Payment (nullable=True, так как возврат может быть создан до привязки к платежу)
+    payment_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("payments.id"), nullable=True, comment="ID платежа, по которому осуществляется возврат")
+    payment: Mapped['Payment | None'] = relationship("Payment", back_populates="refunds")

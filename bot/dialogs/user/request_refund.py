@@ -111,15 +111,8 @@ async def get_amount_input_data(dialog_manager: DialogManager, **_kwargs) -> dic
 
 async def on_amount_input(msg: Message, _widget: TextInput, dialog_manager: DialogManager, value: str):
     """ Сохранение введенной суммы """
-    try:
-        amount = float(value)
-        if amount <= 0:
-            await msg.answer("Сумма должна быть положительным числом")
-            return
-        dialog_manager.dialog_data['amount'] = str(amount)
-        await dialog_manager.switch_to(RequestRefund.MAIN_FORM)
-    except ValueError:
-        await msg.answer("Пожалуйста, введите корректную сумму (число с возможной десятичной точкой)")
+    dialog_manager.dialog_data['amount'] = value
+    await dialog_manager.switch_to(RequestRefund.MAIN_FORM)
 
 
 # ========== Ввод номера карты ==========
@@ -132,7 +125,7 @@ async def on_card_number_input(msg: Message, _widget: TextInput, dialog_manager:
     """ Сохранение введенного номера карты """
     # Простая валидация номера карты (от 13 до 19 цифр)
     if not value.isdigit() or not (13 <= len(value) <= 19):
-        await msg.answer("Пожалуйста, введите корректный номер карты (13-19 цифр)")
+        await msg.answer("Пожалуйста, введите корректный номер карты (13-19 цифр)", parse_mode=None)
         return
     dialog_manager.dialog_data['card_number'] = value
     await dialog_manager.switch_to(RequestRefund.MAIN_FORM)
@@ -198,6 +191,18 @@ async def get_review_application_data(dialog_manager: DialogManager, **_kwargs) 
     }
 
 
+async def on_cancel_application(clb: CallbackQuery, _button: Button, dialog_manager: DialogManager):
+    """ Отмена заявки и очистка всех данных """
+    # Очищаем все данные формы
+    dialog_manager.dialog_data.clear()
+    
+    l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
+    await clb.answer("Заявка отменена", show_alert=True)
+    
+    # Возвращаемся в главное меню
+    await dialog_manager.switch_to(RequestRefund.MAIN_FORM)
+
+
 async def on_confirm_application(clb: CallbackQuery, _button: Button, dialog_manager: DialogManager):
     """ Подтверждение и отправка заявки на рефанд """
     session: AsyncSession = dialog_manager.middleware_data[SESSION_KEY]
@@ -209,6 +214,17 @@ async def on_confirm_application(clb: CallbackQuery, _button: Button, dialog_man
         await clb.answer(l10n.format_value('user-not-found'), show_alert=True)
         return
     
+    # Валидируем сумму перед отправкой
+    try:
+        amount_str = dialog_manager.dialog_data.get('amount', '0')
+        amount = float(amount_str)
+        if amount <= 0:
+            await clb.answer("Сумма должна быть больше нуля", show_alert=True)
+            return
+    except ValueError:
+        await clb.answer("Некорректная сумма", show_alert=True)
+        return
+    
     # Создаем заявку на рефанд
     refund_request = await create_refund(
         session=session,
@@ -216,7 +232,7 @@ async def on_confirm_application(clb: CallbackQuery, _button: Button, dialog_man
         name=dialog_manager.dialog_data.get('name'),
         event=dialog_manager.dialog_data.get('event'),
         reason=dialog_manager.dialog_data.get('reason'),
-        amount=float(dialog_manager.dialog_data.get('amount', 0)),
+        amount=amount,
         card_number=dialog_manager.dialog_data.get('card_number'),
         payment_id=dialog_manager.dialog_data.get('payment_id')
     )
@@ -254,11 +270,16 @@ request_refund_dialog = Dialog(
             Const('\n'),
             L10nFormat('request-refund-instruction'),
             Const('\n'),
-            Format("Имя\\: {name}"),
-            Format("Событие\\: {event}"),
-            Format("Причина\\: {reason}"),
-            Format("Сумма\\: {amount}"),
-            Format("Карта\\: {card_number}"),
+            Const("Имя: "),
+            Format("{name}"),
+            Const("Событие: "),
+            Format("{event}"),
+            Const("Причина: "),
+            Format("{reason}"),
+            Const("Сумма: "),
+            Format("{amount}"),
+            Const("Карта: "),
+            Format("{card_number}"),
             sep="\n"
         ),
         Const('\n'),
@@ -304,7 +325,8 @@ request_refund_dialog = Dialog(
     Window(  # Ввод имени
         Multi(
             L10nFormat('input-name'),
-            Format("Текущее значение\\: {name}"),
+            Const("Текущее значение: "),
+            Format("{name}"),
             sep="\n"
         ),
         TextInput('input_name', on_success=on_name_input),
@@ -319,7 +341,8 @@ request_refund_dialog = Dialog(
     Window(  # Ввод события
         Multi(
             L10nFormat('input-event'),
-            Format("Текущее значение\\: {event}"),
+            Const("Текущее значение: "),
+            Format("{event}"),
             sep="\n"
         ),
         TextInput('input_event', on_success=on_event_input),
@@ -334,7 +357,8 @@ request_refund_dialog = Dialog(
     Window(  # Ввод причины
         Multi(
             L10nFormat('input-reason'),
-            Format("Текущее значение\\: {reason}"),
+            Const("Текущее значение: "),
+            Format("{reason}"),
             sep="\n"
         ),
         TextInput('input_reason', on_success=on_reason_input),
@@ -349,7 +373,8 @@ request_refund_dialog = Dialog(
     Window(  # Ввод суммы
         Multi(
             L10nFormat('input-amount'),
-            Format("Текущее значение\\: {amount}"),
+            Const("Текущее значение: "),
+            Format("{amount}"),
             sep="\n"
         ),
         TextInput('input_amount', on_success=on_amount_input),
@@ -364,7 +389,8 @@ request_refund_dialog = Dialog(
     Window(  # Ввод номера карты
         Multi(
             L10nFormat('input-card-number'),
-            Format("Текущее значение\\: {card_number}"),
+            Const("Текущее значение: "),
+            Format("{card_number}"),
             sep="\n"
         ),
         TextInput('input_card_number', on_success=on_card_number_input),
@@ -379,9 +405,13 @@ request_refund_dialog = Dialog(
     Window(  # Форма просмотра
         Multi(
             L10nFormat('review-refund-header'),
-            Format("Имя\\: {name}\n"),
-            Format("Событие\\: {event}\n"),
-            Format("Причина\\: {reason}\n"),
+            Const("\n"),
+            Const("Имя: "),
+            Format("{name}"),
+            Const("\nСобытие: "),
+            Format("{event}"),
+            Const("\nПричина: "),
+            Format("{reason}"),
             sep=""
         ),
         Button(
@@ -400,17 +430,30 @@ request_refund_dialog = Dialog(
     Window(  # Просмотр заявки перед отправкой
         Multi(
             L10nFormat('confirm-submit-header'),
-            Format("Имя\\: {name}\n"),
-            Format("Событие\\: {event}\n"),
-            Format("Причина\\: {reason}\n"),
-            Format("Сумма\\: {amount}\n"),
-            Format("Карта\\: ****{card_number}\n"),
+            Const("\n"),
+            Const("Имя: "),
+            Format("{name}"),
+            Const("\nСобытие: "),
+            Format("{event}"),
+            Const("\nПричина: "),
+            Format("{reason}"),
+            Const("\nСумма: "),
+            Format("{amount}"),
+            Const("\nКарта: ****"),
+            Format("{card_number}"),
             sep=""
         ),
-        Button(
-            L10nFormat('button-submit-refund'),
-            id='confirm_application',
-            on_click=on_confirm_application
+        Row(
+            Button(
+                L10nFormat('button-submit-refund'),
+                id='confirm_application',
+                on_click=on_confirm_application
+            ),
+            Button(
+                Const('❌ Отмена'),
+                id='cancel_application',
+                on_click=on_cancel_application
+            ),
         ),
         Button(
             L10nFormat('back'),

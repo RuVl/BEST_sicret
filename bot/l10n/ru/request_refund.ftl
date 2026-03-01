@@ -13,11 +13,11 @@ field-amount = Сумма
 field-card-number = Номер карты
 
 # Input prompts
-input-name = Введите ваше имя:
-input-event = Введите название мероприятия:
-input-reason = Введите причину запроса рефанда:
-input-amount = Введите сумму в рублях (только число):
-input-card-number = Введите номер карты:
+input-name = Введите ваше имя\:
+input-event = Введите название мероприятия\:
+input-reason = Введите причину запроса рефанда\:
+input-amount = Введите сумму в рублях \(только число\)\:
+input-card-number = Введите номер карты\:
 
 # Review form
 review-form-title = Повторный показ итогового варианта заявки
