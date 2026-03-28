@@ -5,7 +5,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import BotCommand
+from aiogram.types import BotCommand, BotCommandScopeDefault
 from structlog.typing import FilteringBoundLogger
 
 from env import TelegramKeys, ProjectKeys, RedisKeys
@@ -15,7 +15,7 @@ from middlewares import register_middlewares
 
 
 async def main():
-    # Init logging
+    # [DEBUG] main started
     setup_logging()
     logger: FilteringBoundLogger = structlog.get_logger()
 
@@ -26,8 +26,12 @@ async def main():
     )
     await bot.set_my_commands([
         BotCommand(command='start', description='Запуск бота'),
-        BotCommand(command='create_document', description='Создать приказ')
-    ])
+        BotCommand(command='create_document', description='Создать приказ'),
+        BotCommand(command='create_requisites_apply', description='Создать заявку на рефанд')
+    ], scope=BotCommandScopeDefault())
+    # logger.info(f"set_my_commands result: {result}")
+    # print(f"set_my_commands result: {result}")
+    # logger.warning(f"set_my_commands result: {result}")
 
     # Get storage with proper configuration for dialogs
     if RedisKeys.USE_REDIS:
@@ -60,4 +64,5 @@ async def main():
 
 # Start bot
 if __name__ == '__main__':
+    import asyncio
     asyncio.run(main())

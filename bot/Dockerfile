@@ -5,7 +5,9 @@ LABEL authors="SPb BEST"
 ENV TZ="Europe/Moscow"
 ENV PIP_ROOT_USER_ACTION=ignore
 
+
 # Prepare project directory
+RUN mkdir -p /app
 WORKDIR /app
 
 # Copy and install requirements
