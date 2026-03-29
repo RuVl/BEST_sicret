@@ -1,0 +1,1 @@
+choose-apply-equipment = Заплнение заявки на выдачу стаффа
