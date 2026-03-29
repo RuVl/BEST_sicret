@@ -12,11 +12,11 @@ add-item = Добавить элемент
 invalid-stack = Внутренняя ошибка (забыли вас)
 
 # --- Refund Dialog ---
-refund_summary = Заявка на рефанд\n\
-Мероприятие: { $event }\n\
-Причина: { $reason }\n\
-Сумма: { $amount }\n\
-Реквизиты: { $requisites }\n\
+refund_summary = Заявка на рефанд
+Мероприятие: { $event }\\n
+Причина: { $reason }\\n
+Сумма: { $amount }\\n
+Реквизиты: { $requisites }\\n
 Фото чека: { $receipt_photo }
 
 refund_edit_event = Введите название мероприятия:

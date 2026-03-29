@@ -37,11 +37,11 @@ def is_complete(data: dict):
 def refund_summary(data: dict, l10n):
 	return l10n(
 		"refund_summary",
-		event=data.get("event", "-"),
-		reason=data.get("reason", "-"),
-		amount=data.get("amount", "-"),
-		requisites=data.get("requisites", "-"),
-		receipt_photo=("+" if data.get("receipt_photo") else "-")
+		event=escape_mdv2(data.get("event", "-")),
+		reason=escape_mdv2(data.get("reason", "-")),
+		amount=escape_mdv2(data.get("amount", "-")),
+		requisites=escape_mdv2(data.get("requisites", "-")),
+		receipt_photo="+" if data.get("receipt_photo") else "-"
 	)
 
 
@@ -75,52 +75,63 @@ async def on_save_field(c: Message, widget, manager: DialogManager, value: str):
 async def view_getter(dialog_manager: DialogManager, **kwargs):
 	l10n = dialog_manager.middleware_data.get("l10n", lambda k, **a: k)
 	data = get_refund_data(dialog_manager)
+	def _l10n(key, **kwargs):
+		if hasattr(l10n, "format_value"):
+			return l10n.format_value(key, args=kwargs)
+		return l10n(key, **kwargs)
 	return {
-		"summary": refund_summary(data, l10n),
-		"edit_event": l10n("refund_edit_event"),
-		"edit_reason": l10n("refund_edit_reason"),
-		"edit_amount": l10n("refund_edit_amount"),
-		"edit_requisites": l10n("refund_edit_requisites"),
-		"edit_receipt": l10n("refund_edit_receipt"),
-		"send": l10n("refund_send"),
-		"cancel": l10n("refund_cancel"),
+		"summary": refund_summary(data, _l10n),
+		"edit_event": _l10n("refund_edit_event"),
+		"edit_reason": _l10n("refund_edit_reason"),
+		"edit_amount": _l10n("refund_edit_amount"),
+		"edit_requisites": _l10n("refund_edit_requisites"),
+		"edit_receipt": _l10n("refund_edit_receipt"),
+		"send": _l10n("refund_send"),
+		"cancel": _l10n("refund_cancel"),
 		"is_complete": is_complete(data),
 	}
 
 def get_view_window():
 	return Window(
-		Format("{summary}"),
-		Row(
-			Button(Const("{edit_event}"), id="edit_event", on_click=make_edit_field_handler("event")),
-			Button(Const("{edit_reason}"), id="edit_reason", on_click=make_edit_field_handler("reason")),
-			Button(Const("{edit_amount}"), id="edit_amount", on_click=make_edit_field_handler("amount")),
-			Button(Const("{edit_requisites}"), id="edit_requisites", on_click=make_edit_field_handler("requisites")),
-			Button(Const("{edit_receipt}"), id="edit_receipt", on_click=make_edit_field_handler("receipt_photo")),
-		),
-		Row(
-			Button(Const("{send}"), id="send", on_click=on_send_clicked, when="is_complete"),
-			Button(Const("{cancel}"), id="cancel", on_click=on_cancel_clicked),
-		),
-		state=CreateByRefund.VIEW,
-		getter=view_getter,
+				Format("{summary}"),
+				Row(
+					Button(Format("{edit_event}"), id="edit_event", on_click=make_edit_field_handler("event")),
+					Button(Format("{edit_reason}"), id="edit_reason", on_click=make_edit_field_handler("reason")),
+					Button(Format("{edit_amount}"), id="edit_amount", on_click=make_edit_field_handler("amount")),
+					Button(Format("{edit_requisites}"), id="edit_requisites", on_click=make_edit_field_handler("requisites")),
+					Button(Format("{edit_receipt}"), id="edit_receipt", on_click=make_edit_field_handler("receipt_photo")),
+				),
+				Row(
+					Button(Format("{send}"), id="send", on_click=on_send_clicked, when="is_complete"),
+					Button(Format("{cancel}"), id="cancel", on_click=on_cancel_clicked),
+				),
+				state=CreateByRefund.VIEW,
+				getter=view_getter,
+				parse_mode="MarkdownV2",
 	)
 
 # --- Окно редактирования ---
 async def edit_getter(dialog_manager: DialogManager, **kwargs):
 	l10n = dialog_manager.middleware_data.get("l10n", lambda k, **a: k)
 	field = dialog_manager.dialog_data.get("edit_field", "field")
+	def _l10n(key, **kwargs):
+		if hasattr(l10n, "format_value"):
+			return l10n.format_value(key, args=kwargs)
+		return l10n(key, **kwargs)
+	from utils import escape_mdv2
 	return {
-		"edit_prompt": l10n(f"refund_edit_{field}") or "Введите значение:",
-		"back": l10n("refund_back"),
+		"edit_prompt": _l10n(f"refund_edit_{escape_mdv2(field)}"),
+		"back": _l10n("refund_back"),
 	}
 
 def get_edit_window():
 	return Window(
-		Format("{edit_prompt}"),
-		TextInput(id="edit_input", on_success=on_save_field),
-		Row(Button(Const("{back}"), id="back", on_click=lambda c, w, m: m.switch_to(CreateByRefund.VIEW))),
-		state=CreateByRefund.EDIT,
-		getter=edit_getter,
+			Format("{edit_prompt}"),
+			TextInput(id="edit_input", on_success=on_save_field),
+			Row(Button(Format("{back}"), id="back", on_click=lambda c, w, m: m.switch_to(CreateByRefund.VIEW))),
+			state=CreateByRefund.EDIT,
+			getter=edit_getter,
+			parse_mode="MarkdownV2",
 	)
 
 # --- Dialog ---
