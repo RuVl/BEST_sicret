@@ -1,161 +1,162 @@
-from io import BytesIO
-from typing import Any
-
 from aiogram import F
-from aiogram.exceptions import TelegramNetworkError
-from aiogram.types import CallbackQuery, BufferedInputFile, Message
+from aiogram.types import CallbackQuery, Message, PhotoSize
 from aiogram_dialog import Dialog, Window, DialogManager
+
 from aiogram_dialog.widgets.input import TextInput
-from aiogram_dialog.widgets.kbd import ScrollingGroup, Select, Row, Url, Button, Next, Back, SwitchTo
+from aiogram_dialog.widgets.kbd import ScrollingGroup, Select, Row, Button, Back, SwitchTo
 from aiogram_dialog.widgets.text import Format, Multi, Const
 from fluent.runtime import FluentLocalization
-
-from env import TelegramKeys
-from includes import get_available_templates, load_schema, validate_data, generate_document
+from includes import load_schema, validate_data
 from includes.templates import create_context
 from includes.templates.contexts import BaseContext, PrimitiveContext
 from middlewares import L10N_FORMAT_KEY
-from state_machines.templates import CreateByTemplate
-
-from aiogram_dialog import Dialog, Window, DialogManager, StartMode
-from aiogram_dialog.widgets.text import Format, Const
-from aiogram_dialog.widgets.kbd import Row, Button, SwitchTo
-from aiogram_dialog.widgets.input import TextInput
-from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
 from state_machines.refund import CreateByRefund
-from utils import L10nFormat, escape_mdv2
-import os
 
-# --- Хелперы ---
-def get_refund_data(dialog_manager: DialogManager):
-	return dialog_manager.dialog_data.get("refund", {})
+from aiogram_dialog.widgets.input import MessageInput
+from utils import escape_mdv2
 
-def is_complete(data: dict):
-	return all(data.get(k) for k in ("reason", "amount", "requisites", "receipt-photo"))
-
-def refund_summary(data: dict, l10n):
-	return l10n(
-		"refund_summary",
-		reason=escape_mdv2(data.get("reason", "-")),
-		amount=escape_mdv2(data.get("amount", "-")),
-		requisites=escape_mdv2(data.get("requisites", "-")),
-		receipt_photo="+" if data.get("receipt-photo") else "-"
-	)
+from sqlalchemy import select
+from database.main import async_session
+from database.models.refund import Refund
+from database.models.person import Person
+from database.models.payment import Payment
 
 
-# --- Callback handlers ---
-from aiogram.types import CallbackQuery
 
-async def on_send_clicked(c: CallbackQuery, widget, manager: DialogManager):
-	data = get_refund_data(manager)
-	if c.message:
-		await c.message.answer(str(data))
-	else:
-		await c.answer(str(data))
-	await manager.done()
+# --- Инициализация refund context ---
+def get_refund_context(dialog_manager: DialogManager) -> BaseContext:
+    ctx = dialog_manager.dialog_data.get("context")
+    if ctx is None:
+        schema = load_schema("refund")
+        ctx = create_context(schema)
+        dialog_manager.dialog_data["context"] = ctx
+    return ctx
 
-async def on_cancel_clicked(c: CallbackQuery, widget, manager: DialogManager):
-	await manager.done()
+# ========== Окно просмотра ========== 
 
-def make_edit_field_handler(field: str):
-	async def handler(c: CallbackQuery, widget, manager: DialogManager):
-		manager.dialog_data["edit_field"] = field
-		await manager.switch_to(CreateByRefund.EDIT)
-	return handler
 
-async def on_save_field(c: Message, widget, manager: DialogManager, value: str):
-	field = manager.dialog_data.get("edit_field")
-	if field:
-		from includes import load_schema
-		from includes.templates.contexts.primitive_context import PrimitiveContext
-		schema = load_schema("refund")
-		field_schema = schema["properties"].get(field)
-		if not field_schema:
-			await c.answer("Ошибка: поле не найдено в схеме", show_alert=True)
-			return
-		l10n = manager.middleware_data.get("l10n", lambda k, **a: k)
-		try:
-			ctx = PrimitiveContext(field_schema)
-			parsed_value = ctx.parse(value)
-			manager.dialog_data.setdefault("refund", {})[field] = parsed_value
-		except Exception as e:
-			err_key = str(e)
-			if err_key in ("invalid-integer-input", "invalid-number-input", "invalid-boolean-input", "invalid-type"):
-				msg = l10n(err_key)
-			elif err_key == "invalid-pattern":
-				msg = l10n("invalid-type")
-			elif err_key == "invalid-value":
-				msg = l10n("invalid-type")
-			else:
-				msg = f"Ошибка: {err_key}"
-			await c.answer(msg, show_alert=True)
-			return
-	await manager.switch_to(CreateByRefund.VIEW)
+async def get_refund_view(dialog_manager: DialogManager, **_kwargs):
+    l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
+    context = get_refund_context(dialog_manager)
+    data = {
+        'view': context.render_view(l10n),
+        'data_kb': context.render_data_kb(l10n),
+        'can_send': context.filled_required(),
+        'refund_send_button': l10n.format_value('refund_send_button'),
+    }
+    return data
 
-# --- Окно просмотра ---
-async def view_getter(dialog_manager: DialogManager, **kwargs):
-	l10n = dialog_manager.middleware_data.get("l10n", lambda k, **a: k)
-	data = get_refund_data(dialog_manager)
-	def _l10n(key, **kwargs):
-		if hasattr(l10n, "format_value"):
-			return l10n.format_value(key, args=kwargs)
-		return l10n(key, **kwargs)
-	return {
-		"summary": refund_summary(data, _l10n),
-		"edit_reason": _l10n("refund_edit_reason"),
-		"edit_amount": _l10n("refund_edit_amount"),
-		"edit_requisites": _l10n("refund_edit_requisites"),
-		"edit_receipt": _l10n("refund_edit_receipt"),
-		"send": _l10n("refund_send"),
-		"cancel": _l10n("refund_cancel"),
-		"is_complete": is_complete(data),
-	}
+async def on_refund_data_selected(clb: CallbackQuery, _select: Select, dialog_manager: DialogManager, field: str):
+    dialog_manager.dialog_data['edit_field'] = field
+    await dialog_manager.switch_to(CreateByRefund.EDIT)
 
-def get_view_window():
-	return Window(
-		Format("{summary}"),
-		Row(
-			Button(Format("{edit_reason}"), id="edit_reason", on_click=make_edit_field_handler("reason")),
-			Button(Format("{edit_amount}"), id="edit_amount", on_click=make_edit_field_handler("amount")),
-			Button(Format("{edit_requisites}"), id="edit_requisites", on_click=make_edit_field_handler("requisites")),
-			Button(Format("{edit_receipt}"), id="edit_receipt", on_click=make_edit_field_handler("receipt-photo")),
-		),
-		Row(
-			Button(Format("{send}"), id="send", on_click=on_send_clicked, when="is_complete"),
-			Button(Format("{cancel}"), id="cancel", on_click=on_cancel_clicked),
-		),
-		state=CreateByRefund.VIEW,
-		getter=view_getter,
-		parse_mode="MarkdownV2",
-	)
+async def on_refund_send(clb: CallbackQuery, _select: Button, dialog_manager: DialogManager):
+    context = get_refund_context(dialog_manager)
+    data = context.generate_context() if context else {}
+    l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
+    schema = load_schema("refund")
+    success, error_msg = validate_data(schema, data)
+    if not success:
+        await clb.answer(error_msg, show_alert=True)
+        return
 
-# --- Окно редактирования ---
-async def edit_getter(dialog_manager: DialogManager, **kwargs):
-	l10n = dialog_manager.middleware_data.get("l10n", lambda k, **a: k)
-	field = dialog_manager.dialog_data.get("edit_field", "field")
-	def _l10n(key, **kwargs):
-		if hasattr(l10n, "format_value"):
-			return l10n.format_value(key, args=kwargs)
-		return l10n(key, **kwargs)
-	from utils import escape_mdv2
-	return {
-		"edit_prompt": _l10n(f"refund_edit_{escape_mdv2(field)}"),
-		"back": _l10n("refund_back"),
-	}
+    # --- Сохранение заявки в БД ---
+    async with async_session() as session:
+        tg_id = clb.from_user.id
+        person = await session.scalar(select(Person).where(Person.telegram_id == tg_id))
+        if not person:
+            person = Person(telegram_id=tg_id, full_name=clb.from_user.full_name or "")
+            session.add(person)
+            await session.flush()
 
-def get_edit_window():
-	return Window(
-			Format("{edit_prompt}"),
-			TextInput(id="edit_input", on_success=on_save_field),
-			Row(Button(Format("{back}"), id="back", on_click=lambda c, w, m: m.switch_to(CreateByRefund.VIEW))),
-			state=CreateByRefund.EDIT,
-			getter=edit_getter,
-			parse_mode="MarkdownV2",
-	)
+        # Получить payment_id из данных 
+        payment_id = data.get('payment_id')
+        if not payment_id:
+            payment = await session.scalar(select(Payment).where(Payment.id == person.payment_id))
+            if not payment:
+                msg = l10n.format_value('refund_no_payment_error') if l10n else '0'
+                await clb.answer(msg, show_alert=True)
+                return
+            payment_id = payment.id
 
-# --- Dialog ---
+        refund = Refund(
+            name=data.get('reason', ''),
+            description=data.get('requisites', ''),
+            customer_id=person.id,
+            payment_id=payment_id,
+        )
+        session.add(refund)
+        await session.commit()
+
+    await dialog_manager.done()
+
+# ========== Окно редактирования ========== 
+async def get_refund_edit(dialog_manager: DialogManager, **_kwargs):
+    l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
+    context = get_refund_context(dialog_manager)
+    field = dialog_manager.dialog_data.get('edit_field')
+    field_ctx = context.get_property(field) if context else None
+    data = {
+        'question': field_ctx.ask_question() if field_ctx else '',
+        'can_back': True,
+        'refund_back_button': l10n.format_value('refund_back_button'),
+    }
+    return data
+
+async def set_refund_property(msg: Message, _: object, dialog_manager: DialogManager):
+    context = get_refund_context(dialog_manager)
+    field = dialog_manager.dialog_data.get('edit_field')
+    field_ctx = context.get_property(field) if context else None
+    l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
+    try:
+        if not isinstance(field_ctx, PrimitiveContext):
+            raise ValueError(l10n.format_value('refund_invalid_field'))
+        if hasattr(msg, 'photo') and msg.photo:
+            photo: PhotoSize = msg.photo[-1]
+            field_ctx.set_value(photo.file_id)
+        elif msg.text is not None:
+            parsed_value = field_ctx.parse(msg.text)
+            field_ctx.set_value(parsed_value)
+        else:
+            raise ValueError(l10n.format_value('refund_invalid_field'))
+    except Exception as e:
+        msg_text = l10n.format_value('refund_error', {'error': str(e)})
+        await msg.answer(msg_text)
+        return
+    await dialog_manager.switch_to(CreateByRefund.VIEW)
+
+
+# ========== Диалог========== 
 refund_dialog = Dialog(
-	get_view_window(),
-	get_edit_window(),
+    Window(
+        Multi(
+            Format('{view}\n'),
+            sep=''
+        ),
+        ScrollingGroup(
+            Select(
+                Format('{item[0]}'),
+                id='refund_field',
+                item_id_getter=lambda x: x[1],
+                items='data_kb',
+                on_click=on_refund_data_selected
+            ),
+            id='refund_scroll',
+            width=2,
+            height=5,
+            hide_on_single_page=True
+        ),
+        Row(
+            Button(Format('{refund_send_button}'), id='refund_send', on_click=on_refund_send, when=F['can_send'])
+        ),
+        getter=get_refund_view,
+        state=CreateByRefund.VIEW
+    ),
+    Window(
+        Format('{question}'),
+        MessageInput(set_refund_property),
+        Row(Button(Format('{refund_back_button}'), id='refund_back', on_click=lambda c, w, m: m.switch_to(CreateByRefund.VIEW))),
+        getter=get_refund_edit,
+        state=CreateByRefund.EDIT,
+    )
 )
