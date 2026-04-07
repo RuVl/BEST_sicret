@@ -1,1 +1,1 @@
-choose-apply-equipment = Заплнение заявки на выдачу стаффа
+choose-apply-equipment-formal-text = Для оформления заявки Вам необходимо заполнить следующие данные:
