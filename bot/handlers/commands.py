@@ -3,7 +3,7 @@ from aiogram.filters import CommandStart, Command
 from aiogram.types import Message
 from aiogram_dialog import DialogManager, StartMode, ShowMode
 from fluent.runtime import FluentLocalization
-
+from state_machines.inventory import ViewInventory 
 from state_machines.templates import CreateByTemplate
 
 router = Router()
@@ -19,6 +19,14 @@ async def choose_template(_: Message, dialog_manager: DialogManager):
     """ Ask for a template for creation """
     await dialog_manager.start(
         CreateByTemplate.CHOOSE_TEMPLATE,
+        mode=StartMode.RESET_STACK,
+        show_mode=ShowMode.DELETE_AND_SEND
+    )
+
+@router.message(Command('inventory'))
+async def view_inventory(_: Message, dialog_manager: DialogManager):
+    await dialog_manager.start(
+        ViewInventory.CATEGORIES,
         mode=StartMode.RESET_STACK,
         show_mode=ShowMode.DELETE_AND_SEND
     )

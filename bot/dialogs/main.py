@@ -6,7 +6,8 @@ from dialogs.user import user_dialog_router
 
 def register_dialogs(dp: Dispatcher, router: Router):
     router.include_routers(
-        user_dialog_router
+        user_dialog_router,
+        
     )
 
     setup_dialogs(dp)  # Register on dispatcher for using anywhere

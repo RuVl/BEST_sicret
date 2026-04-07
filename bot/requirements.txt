@@ -10,6 +10,7 @@ aiohttp[speedups]==3.12.15  # should be < 3.13 for aiogram
 # aiohttp[speedups]==3.9.5 # for windows use this instead (bcs conflicts with aiodns)
 # cchardet # (aiohttp speedup) high speed universal character encoding detector
 aiodns~=3.5.0 # (aiohttp speedup) provides a simple way for doing asynchronous DNS resolutions
+pycares==4.11.0
 
 # Cache
 redis[hiredis]~=7.0.1
