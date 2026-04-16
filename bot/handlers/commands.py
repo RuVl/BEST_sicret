@@ -26,7 +26,7 @@ async def choose_template(_: Message, dialog_manager: DialogManager):
 @router.message(Command('inventory'))
 async def view_inventory(_: Message, dialog_manager: DialogManager):
     await dialog_manager.start(
-        ViewInventory.CATEGORIES,
+        ViewInventory.VIEW_CATEGORIES,
         mode=StartMode.RESET_STACK,
         show_mode=ShowMode.DELETE_AND_SEND
     )

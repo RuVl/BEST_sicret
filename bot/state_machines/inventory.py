@@ -2,5 +2,5 @@ from aiogram.fsm.state import StatesGroup, State
 
 
 class ViewInventory(StatesGroup):
-    CATEGORIES = State()  # Выбор категории
-    ITEMS = State()       # Просмотр товаров
+    VIEW_CATEGORIES = State()  # Выбор категории
+    VIEW_ITEMS = State()       # Просмотр товаров
