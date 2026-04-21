@@ -28,7 +28,7 @@ async def choose_template(_: Message, dialog_manager: DialogManager):
 @router.message(Command('create_equipment_apply'))
 async def choose_apply_equipment(_: Message, dialog_manager: DialogManager):
     await dialog_manager.start(
-        CreateByApplyEquipment.CHOOSE_APPLY_EQUIPMENT,
+        CreateByApplyEquipment.VIEW,
         mode=StartMode.RESET_STACK,
         show_mode=ShowMode.DELETE_AND_SEND
     )

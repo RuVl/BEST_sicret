@@ -14,9 +14,9 @@ def validate_data(schema: dict, data: dict) -> tuple[bool, str | None]:
 
 
 def load_schema(apply_equipment_name: str) -> dict:
-    equipment_path = ProjectKeys.TEMPLATES_DIR / f'{apply_equipment_name}.json'
-    if not apply_equipment_name.exists():
-        raise FileNotFoundError(f'Schema file {apply_equipment_name} not found')
+    equipment_path = ProjectKeys.EQUIPMENT_PERSON_DATA_DIR / f'{apply_equipment_name}.json'
+    if not equipment_path.exists():
+        raise FileNotFoundError(f'Schema file {equipment_path} not found')
 
-    with open(apply_equipment_name, 'r', encoding='utf-8') as equipment:
+    with open(equipment_path, 'r', encoding='utf-8') as equipment:
         return json.load(equipment)
