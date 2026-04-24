@@ -15,7 +15,7 @@ from includes import get_available_templates, load_schema, validate_data, genera
 from includes.templates import create_context
 from includes.templates.contexts import BaseContext, PrimitiveContext
 from middlewares import L10N_FORMAT_KEY
-from state_machines.templates import CreateByTemplate
+from state_machines import CreateByTemplate
 from utils import L10nFormat, escape_mdv2
 
 

@@ -1,10 +1,9 @@
-FROM python:3.12
+FROM python:3.12-slim
 LABEL authors="SPb BEST"
 
 # Set enviroment variables
 ENV TZ="Europe/Moscow"
 ENV PIP_ROOT_USER_ACTION=ignore
-
 
 # Prepare project directory
 WORKDIR /app

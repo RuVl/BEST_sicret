@@ -15,7 +15,7 @@ from middlewares import register_middlewares
 
 
 async def main():
-    # [DEBUG] main started
+    # Init logging
     setup_logging()
     logger: FilteringBoundLogger = structlog.get_logger()
 
@@ -29,9 +29,6 @@ async def main():
         BotCommand(command='create_document', description='Создать приказ'),
         BotCommand(command='create_requisites_apply', description='Создать заявку на рефанд')
     ], scope=BotCommandScopeDefault())
-    # logger.info(f"set_my_commands result: {result}")
-    # print(f"set_my_commands result: {result}")
-    # logger.warning(f"set_my_commands result: {result}")
 
     # Get storage with proper configuration for dialogs
     if RedisKeys.USE_REDIS:
@@ -64,5 +61,4 @@ async def main():
 
 # Start bot
 if __name__ == '__main__':
-    import asyncio
     asyncio.run(main())

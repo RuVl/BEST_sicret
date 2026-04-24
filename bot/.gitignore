@@ -1,6 +1,7 @@
 # Project specific
 config.toml
 credentials.json
+.python-version
 
 # resources
 resources/templates

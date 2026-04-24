@@ -1,13 +1,10 @@
-import typing
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database.models import Base
-
-if typing.TYPE_CHECKING:
-    from database.models import Refund
+from database.models.refund import Refund
 
 
 class Payment(Base):

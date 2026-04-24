@@ -1,12 +1,8 @@
-import typing
-
 from sqlalchemy import Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database.models import Base
-
-if typing.TYPE_CHECKING:
-    from database.models import Item
+from database.models.item import Item
 
 
 class Category(Base):

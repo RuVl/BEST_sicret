@@ -1,12 +1,9 @@
-import typing
-
 from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database.models import Base
-
-if typing.TYPE_CHECKING:
-    from database.models import Person, Payment
+from database.models.payment import Payment
+from database.models.person import Person
 
 
 class Refund(Base):

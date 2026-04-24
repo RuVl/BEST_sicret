@@ -4,9 +4,8 @@ from aiogram.types import Message
 from aiogram_dialog import DialogManager, StartMode, ShowMode
 from fluent.runtime import FluentLocalization
 
-from state_machines.templates import CreateByTemplate
 from state_machines.refund import CreateByRefund
-from dialogs.user.refund import refund_dialog
+from state_machines.templates import CreateByTemplate
 
 router = Router()
 
