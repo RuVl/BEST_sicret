@@ -1,7 +1,7 @@
 from typing import Any
 
-from aiogram_dialog.widgets.kbd import ScrollingGroup, Select, Row, Url, Button, Next, Back, SwitchTo
-from aiogram.types import CallbackQuery, BufferedInputFile, Message
+from aiogram_dialog.widgets.kbd import ScrollingGroup, Select, Row, Button, Next, Back, SwitchTo
+from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, Window, DialogManager
 from aiogram_dialog.widgets.text import Format, Multi, Const
 from aiogram import F
@@ -11,13 +11,13 @@ from fluent.runtime import FluentLocalization
 from middlewares import L10N_FORMAT_KEY
 
 from database.methods.category import get_categories
+from database.methods.item import get_items_by_categories_id
 from env import TelegramKeys
 from state_machines import CreateByApplyEquipment
 from includes.equipment import load_schema, validate_data
 from includes.equipment import create_context
 from includes.templates.contexts import BaseContext, PrimitiveContext
 from utils import L10nFormat, escape_mdv2
-
 
 
 # для окна просмотра
@@ -48,13 +48,23 @@ async def get_equipment_context(dialog_manager: DialogManager, **_kwargs) -> dic
                 'can_submit': False,
             }
 
+    custom_items = dialog_manager.dialog_data.get("custom_items", {})
+    custom_items_view = ""
+    if custom_items:
+        rows = [
+            f"\\- {escape_mdv2(name)}: {item_data['quantity']} {escape_mdv2(item_data['unit'])}"
+            for name, item_data in custom_items.items()
+        ]
+        custom_items_view = "\n\nВыбрано из категорий:\n" + "\n".join(rows)
+
     return {
-        'view': context.render_view(l10n),
+        'view': context.render_view(l10n) + custom_items_view,
         'data_kb': context.render_data_kb(l10n),
         'action_kb': context.render_action_kb(l10n),
         'categories_kb': categories_kb,
         'can_submit': context.can_generate(),
     }
+
 
 # для окна редактирования
 
@@ -65,6 +75,15 @@ async def get_property_context(dialog_manager: DialogManager, **_kwargs) -> dict
         'question': context.ask_question(),
         'action_kb': context.render_action_kb(l10n),
     }
+
+
+async def on_add_input(msg: Message, text_input: TextInput, dialog_manager: DialogManager, value: str):
+    mode = dialog_manager.dialog_data.get("input_mode", "form_property")
+    if mode == "item_quantity":
+        await on_count_success(msg, text_input, dialog_manager, value)
+        return
+    await set_property(msg, text_input, dialog_manager, value)
+
 
 # оброботчики
 # for json
@@ -78,23 +97,30 @@ async def on_form_equipment_selected(clb: CallbackQuery, _select: Select, dialog
         await clb.answer(l10n.format_value('schema-not-found'), show_alert=True)
         return
 
-    # Send notification to treasurer if exists
-    if TelegramKeys.TREASURER_ID:
-        await clb.bot.send_message(
-            TelegramKeys.TREASURER_ID,
-            l10n.format_value('equipment-chosen', args={
-                'by_username': escape_mdv2(clb.from_user.username)
-            })
-        )
-
     dialog_manager.dialog_data.update(apply_equipment=apply_equipment_data_person, context=context)
     await dialog_manager.switch_to(CreateByApplyEquipment.ADD if isinstance(context, PrimitiveContext) else CreateByApplyEquipment.VIEW)
+
 
 # for categoriya
 async def on_category_selected(clb: CallbackQuery, _select: Select, dialog_manager: DialogManager, callback_id: str):
     cat_id = int(callback_id.replace("cat_", ""))
-    dialog_manager.dialog_data.update(selected_category_id=cat_id)
-    await dialog_manager.show()
+    session = dialog_manager.middleware_data.get("db_session")
+    items = await get_items_by_categories_id(session, cat_id)
+    items_kb = [(item.name, f"item_{item.id}") for item in items]
+
+    item_details = {
+        item.id: {"name": item.name, "available": item.count, "unit": item.unit}
+        for item in items
+    }
+
+    dialog_manager.dialog_data.update(
+        input_mode="category_items",
+        selected_category_id=cat_id,
+        items_kb=items_kb,
+        item_details=item_details
+    )
+    await dialog_manager.switch_to(CreateByApplyEquipment.ADD)
+
 
 # for edit the field
 async def on_data_selected(clb: CallbackQuery, _select: Select, dialog_manager: DialogManager, field_key: str):
@@ -106,6 +132,7 @@ async def on_data_selected(clb: CallbackQuery, _select: Select, dialog_manager: 
         else CreateByApplyEquipment.VIEW
     )
 
+
 # base buttons like nazad, dalee, otmena
 async def on_action_selected(_clb: CallbackQuery, _select: Select, dialog_manager: DialogManager, action: str):
     context: BaseContext = dialog_manager.dialog_data.get('context')
@@ -113,6 +140,7 @@ async def on_action_selected(_clb: CallbackQuery, _select: Select, dialog_manage
 
     dialog_manager.dialog_data.update(context=context)
     await dialog_manager.switch_to(CreateByApplyEquipment.VIEW)
+
 
 # processing user input
 async def set_property(msg: Message, _: TextInput, dialog_manager: DialogManager, value: str):
@@ -134,6 +162,7 @@ async def set_property(msg: Message, _: TextInput, dialog_manager: DialogManager
     dialog_manager.dialog_data.update(context=context)
     await dialog_manager.switch_to(CreateByApplyEquipment.VIEW)
 
+
 # save data
 
 async def on_submit(clb: CallbackQuery, _select: Select, dialog_manager: DialogManager):
@@ -147,8 +176,103 @@ async def on_submit(clb: CallbackQuery, _select: Select, dialog_manager: DialogM
     if not success:
         await clb.answer(error_msg, show_alert=True)
         return
+    # Send notification to treasurer if exists
+    if TelegramKeys.TREASURER_ID:
+        await clb.bot.send_message(
+            TelegramKeys.TREASURER_ID,
+            l10n.format_value('equipment-chosen', args={
+                'by_username': escape_mdv2(clb.from_user.username)})
+        )
+        await clb.message.forward(TelegramKeys.TREASURER_ID)
     await clb.answer(l10n.format_value('application-saved'), show_alert=True)
     await dialog_manager.done()
+
+
+async def on_item_selected(clb: CallbackQuery, _select: Select, dialog_manager: DialogManager, callback_id: str):
+    item_id = int(callback_id.replace("item_", ""))
+    details = dialog_manager.dialog_data["item_details"].get(item_id)
+
+    if not details:
+        l10n = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
+        await clb.answer(l10n.format_value('category-empty'), show_alert=True)
+        return
+
+    dialog_manager.dialog_data.update(
+        input_mode="item_quantity",
+        selected_item_id=item_id,
+        selected_item_name=details["name"],
+        available_count=details["available"],
+        item_unit=details["unit"]
+    )
+    await dialog_manager.switch_to(CreateByApplyEquipment.ADD)
+
+
+async def get_add_context(dialog_manager: DialogManager, **_kwargs) -> dict[str, Any]:
+    l10n = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
+    mode = dialog_manager.dialog_data.get("input_mode", "form_property")
+    context = dialog_manager.dialog_data.get("context")
+
+    if mode == "category_items":
+        return {
+            "question": l10n.format_value("select-item-prompt"),
+            "input_mode": mode,
+            "items_kb": dialog_manager.dialog_data.get("items_kb", []),
+            "action_kb": []
+        }
+
+    elif mode == "item_quantity":
+        name = escape_mdv2(dialog_manager.dialog_data.get("selected_item_name", "предмет"))
+        unit = escape_mdv2(dialog_manager.dialog_data.get("item_unit", "шт"))
+        available = dialog_manager.dialog_data.get("available_count", 0)
+
+        return {
+            "question": l10n.format_value("enter-count-prompt", args={
+                "name": name, "unit": unit, "available": available
+            }),
+            "input_mode": mode,
+            "items_kb": [],
+            "action_kb": []
+        }
+
+    else:  # form_property
+        return {
+            "question": context.ask_question() if context else "",
+            "input_mode": mode,
+            "items_kb": [],
+            "action_kb": context.render_action_kb(l10n) if context else []
+        }
+
+
+async def on_count_success(msg: Message, _: TextInput, dialog_manager: DialogManager, value: str):
+    l10n = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
+    try:
+        count = int(value)
+        if count <= 0: raise ValueError
+    except ValueError:
+        await msg.answer(l10n.format_value("invalid-positive-number"))
+        return
+
+    available = dialog_manager.dialog_data.get("available_count", 0)
+    unit = dialog_manager.dialog_data.get("item_unit", "шт")
+    name = dialog_manager.dialog_data.get("selected_item_name", "предмет")
+
+    if count > available:
+        await msg.answer(l10n.format_value("count-exceeds-available", args={
+            "name": name, "available": available, "unit": unit, "requested": count
+        }))
+        return
+
+    dialog_manager.dialog_data.setdefault("custom_items", {})[name] = {
+        "quantity": count,
+        "unit": unit
+    }
+
+    for key in ("selected_category_id", "selected_item_id", "selected_item_name", "available_count", "item_unit", "item_details", "items_kb"):
+        dialog_manager.dialog_data.pop(key, None)
+    dialog_manager.dialog_data.update(input_mode="form_property")
+
+    await dialog_manager.switch_to(CreateByApplyEquipment.VIEW)
+
 
 check_apply_equipment_dialog = Dialog(
     Window(  # Окно с заявкой
@@ -208,16 +332,35 @@ check_apply_equipment_dialog = Dialog(
     ),
     Window(  # Окно редактирования
         Format('{question}'),
-        TextInput('input_property', on_success=set_property),
+        ScrollingGroup(
+            Select(
+                Format('{item[0]}'),
+                id='item_select',
+                item_id_getter=lambda x: x[1],
+                items='items_kb',
+                on_click=on_item_selected
+            ),
+            id='items_scroll',
+            width=2,
+            height=5,
+            hide_on_single_page=True,
+            when=F["input_mode"] == "category_items"
+        ),
+        TextInput(
+            'input_property',
+            on_success=on_add_input,
+        ),
         Select(
             Format('{item[0]}'),
             id='equipment_action',
             item_id_getter=lambda x: x[1],
             items='action_kb',
-            on_click=on_action_selected
+            on_click=on_action_selected,
+            when=F["input_mode"] == "form_property"
         ),
-        getter=get_property_context,
+        getter=get_add_context,
         state=CreateByApplyEquipment.ADD,
         preview_add_transitions=[Back()]
     )
+
 )
