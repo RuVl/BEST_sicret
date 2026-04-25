@@ -36,7 +36,8 @@ class RedisKeys:
 class ProjectKeys:
     DEBUG: Final[bool] = env.bool('DEBUG')
 
-    TEMPLATES_DIR: Final[Path] = env('TEMPLATES_DIR', default=Path('resources/templates/'))
+    RESOURCE_DIR: Final[Path] = env.str('RESOURCE_DIR', default=Path('resources/'))
+    TEMPLATES_DIR: Final[Path] = env('TEMPLATES_DIR', default=RESOURCE_DIR / 'templates/')
 
     LOCALE_DIR: Final[Path] = env('LOCALE_DIR', default=Path('l10n/'))
     AVAILABLE_LOCALES: Final[list[str]] = env.list('AVAILABLE_LOCALES', default=['ru'])

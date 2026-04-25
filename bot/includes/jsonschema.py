@@ -19,7 +19,7 @@ def get_available_templates() -> list[str]:
     return template_names
 
 
-def load_schema(template_name: str) -> dict:
+def load_template_schema(template_name: str) -> dict:
     """ Load schema from JSON file """
 
     template_path = ProjectKeys.TEMPLATES_DIR / f'{template_name}.json'
@@ -28,6 +28,17 @@ def load_schema(template_name: str) -> dict:
 
     with open(template_path, 'r', encoding='utf-8') as template:
         return json.load(template)
+
+
+def load_schema(resource_path: str) -> dict:
+    """ Load schema from JSON file """
+
+    schema_path = ProjectKeys.RESOURCE_DIR / resource_path
+    if not schema_path.exists():
+        raise FileNotFoundError(f'Schema file {schema_path} not found')
+
+    with open(schema_path, 'r', encoding='utf-8') as schema:
+        return json.load(schema)
 
 
 def validate_data(schema: dict, data: dict) -> tuple[bool, str | None]:

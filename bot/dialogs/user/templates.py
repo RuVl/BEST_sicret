@@ -11,7 +11,7 @@ from aiogram_dialog.widgets.text import Format, Multi, Const
 from fluent.runtime import FluentLocalization
 
 from env import TelegramKeys
-from includes import get_available_templates, load_schema, validate_data, generate_document
+from includes import get_available_templates, load_template_schema, validate_data, generate_document
 from includes.templates import create_context
 from includes.templates.contexts import BaseContext, PrimitiveContext
 from middlewares import L10N_FORMAT_KEY
@@ -29,7 +29,7 @@ async def on_template_selected(clb: CallbackQuery, _select: Select, dialog_manag
     l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
 
     try:
-        schema = load_schema(template_name)
+        schema = load_template_schema(template_name)
         context = create_context(schema)
     except FileNotFoundError:
         await clb.answer(l10n.format_value('schema-not-found'), show_alert=True)
@@ -83,7 +83,7 @@ async def response_document(clb: CallbackQuery, _select: Select, dialog_manager:
     context: BaseContext = dialog_manager.dialog_data.get('context')
 
     data = context.generate_context()
-    schema = load_schema(template_name)
+    schema = load_template_schema(template_name)
     success, error_msg = validate_data(schema, data)
     if not success:
         await clb.answer(error_msg, show_alert=True)

@@ -4,7 +4,7 @@ from aiogram.types import Message
 from aiogram_dialog import DialogManager, StartMode, ShowMode
 from fluent.runtime import FluentLocalization
 
-from state_machines.refund import CreateByRefund
+from state_machines.refund import CreateRefundApply
 from state_machines.templates import CreateByTemplate
 
 router = Router()
@@ -28,7 +28,7 @@ async def choose_template(_: Message, dialog_manager: DialogManager):
 @router.message(Command('create_requisites_apply'))
 async def start_refund(msg: Message, dialog_manager: DialogManager):
     await dialog_manager.start(
-        CreateByRefund.VIEW,
+        CreateRefundApply.VIEW,
         mode=StartMode.RESET_STACK,
         show_mode=ShowMode.DELETE_AND_SEND
     )

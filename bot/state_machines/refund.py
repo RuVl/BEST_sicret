@@ -1,6 +1,6 @@
 from aiogram.fsm.state import StatesGroup, State
 
 
-class CreateByRefund(StatesGroup):
+class CreateRefundApply(StatesGroup):
     VIEW = State()  # Просмотр и подтверждение заявки
     EDIT = State()  # Редактирование выбранного поля
