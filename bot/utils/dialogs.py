@@ -7,6 +7,7 @@ from aiogram_dialog.widgets.text import Text
 from middlewares import L10N_FORMAT_KEY
 
 
+
 class Values(Protocol):
     def __getitem__(self, item: Any) -> Any:
         raise NotImplementedError
