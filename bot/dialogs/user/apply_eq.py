@@ -19,6 +19,7 @@ from includes.equipment import create_context
 from includes.templates.contexts import BaseContext, PrimitiveContext
 from utils import L10nFormat, escape_mdv2
 
+DIALOG_SCHEMA = "apply_equipment"
 
 # для окна просмотра
 async def get_equipment_context(dialog_manager: DialogManager, **_kwargs) -> dict[str, Any]:
@@ -30,7 +31,7 @@ async def get_equipment_context(dialog_manager: DialogManager, **_kwargs) -> dic
     categories_kb = [(cat.name, str(cat.id)) for cat in categories]
 
     if context is None:
-        form_id = dialog_manager.dialog_data.get('form_id', 'apply_equipment')
+        form_id = dialog_manager.dialog_data.get('form_id', DIALOG_SCHEMA)
         try:
             schema = load_schema(form_id)
             context = create_context(schema)
@@ -249,9 +250,13 @@ async def on_count_success(msg: Message, _: TextInput, dialog_manager: DialogMan
         await msg.answer(l10n.format_value("invalid-positive-number"))
         return
 
-    available = dialog_manager.dialog_data.get("available_count", 0)
-    unit = dialog_manager.dialog_data.get("item_unit", "шт")
-    name = dialog_manager.dialog_data.get("selected_item_name", "предмет")
+    item_id = dialog_manager.dialog_data.get("selected_item_id")
+    all_items_details = dialog_manager.dialog_data.get("item_details", {})
+    current_item = all_items_details.get(item_id, {})
+
+    available = current_item.get("available", 0)
+    unit = current_item.get("unit", "шт")
+    name = current_item.get("name", "предмет")
 
     if count > available:
         await msg.answer(l10n.format_value("count-exceeds-available", args={

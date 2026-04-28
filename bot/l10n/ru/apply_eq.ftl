@@ -9,3 +9,4 @@ invalid-positive-number = Число отрицательно
 category-empty = В этой категории нету предметов
 select-item-prompt = Выберите нужный предмет из списка:
 enter-count-prompt = Сколько { $unit } "{ $name }" добавить? Доступно: { $available } { $unit }
+count-exceeds-available = Больше, чем есть
