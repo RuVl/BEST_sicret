@@ -10,6 +10,7 @@ env = environ.Env()
 class TelegramKeys:
     API_TOKEN: Final[str] = env('TG_API_TOKEN')
     PRESIDENT_ID: Final[int] = env.int('PRESIDENT_ID', 0)
+    TREASURER_ID: Final[int] = env.int('TREASURER_ID', 0)
 
 
 class PostgresKeys:
@@ -37,6 +38,7 @@ class ProjectKeys:
     DEBUG: Final[bool] = env.bool('DEBUG')
 
     TEMPLATES_DIR: Final[Path] = env('TEMPLATES_DIR', default=Path('resources/templates/'))
+    EQUIPMENT_PERSON_DATA_DIR: Final[Path] = env('EQUIPMENT_PERSON_DATA_DIR', default=Path('resources/equipments/'))
 
     LOCALE_DIR: Final[Path] = env('LOCALE_DIR', default=Path('l10n/'))
     AVAILABLE_LOCALES: Final[list[str]] = env.list('AVAILABLE_LOCALES', default=['ru'])

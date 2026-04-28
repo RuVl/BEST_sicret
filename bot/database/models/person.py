@@ -1,12 +1,12 @@
 import typing
 
-from sqlalchemy import Integer, String, ForeignKey
+from sqlalchemy import Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database.models import Base
 
 if typing.TYPE_CHECKING:
-    from database.models import Place, Refund, Requisites
+    from database.models import Place, Refund
 
 
 class Person(Base):
@@ -19,10 +19,6 @@ class Person(Base):
 
     # Закрепленное место
     places: Mapped[list['Place']] = relationship('Place', back_populates='person')
-
-    # Связь Requisites
-    requisites: Mapped['Requisites'] = relationship("Requisites", back_populates="person")
-    payment_id: Mapped[int] = mapped_column(Integer, ForeignKey("requisites.id"), unique=True, nullable=True, comment="ID реквизитов")
 
     # Отношение к Refund
     refunds: Mapped[list['Refund']] = relationship("Refund", back_populates="customer")

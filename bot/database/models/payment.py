@@ -24,4 +24,4 @@ class Payment(Base):
     payed_date: Mapped[datetime] = mapped_column(DateTime, nullable=True, comment="Дата фактической оплаты")
 
     # Отношение к Refund
-    refunds: Mapped[list['Refund']] = relationship("refund", back_populates="payment")
+    refunds: Mapped[list['Refund']] = relationship("Refund", back_populates="payment")
