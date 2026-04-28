@@ -26,12 +26,8 @@ async def get_equipment_context(dialog_manager: DialogManager, **_kwargs) -> dic
     session: AsyncSession = dialog_manager.middleware_data.get("db_session")
     context: BaseContext = dialog_manager.dialog_data.get('context')
 
-    if "categories_kb" not in dialog_manager.dialog_data:
-        categories = await get_categories(session)
-        dialog_manager.dialog_data["categories_kb"] = [
-            (cat.name, f"cat_{cat.id}") for cat in categories
-        ]
-    categories_kb = dialog_manager.dialog_data["categories_kb"]
+    categories = await get_categories(session)
+    categories_kb = [(cat.name, str(cat.id)) for cat in categories]
 
     if context is None:
         form_id = dialog_manager.dialog_data.get('form_id', 'apply_equipment')
@@ -41,7 +37,7 @@ async def get_equipment_context(dialog_manager: DialogManager, **_kwargs) -> dic
             dialog_manager.dialog_data.update(form_id=form_id, context=context)
         except FileNotFoundError:
             return {
-                'view': l10n.format_value('welcome-select-equipment'),
+                'view': l10n.format_value('welcome-error-schema-equipment'),
                 'data_kb': [],
                 'action_kb': [],
                 'categories_kb': categories_kb,
@@ -55,7 +51,7 @@ async def get_equipment_context(dialog_manager: DialogManager, **_kwargs) -> dic
             f"\\- {escape_mdv2(name)}: {item_data['quantity']} {escape_mdv2(item_data['unit'])}"
             for name, item_data in custom_items.items()
         ]
-        custom_items_view = "\n\nВыбрано из категорий:\n" + "\n".join(rows)
+        custom_items_view = l10n.format_value('chose_category') + "\n".join(rows)
 
     return {
         'view': context.render_view(l10n) + custom_items_view,
@@ -103,7 +99,7 @@ async def on_form_equipment_selected(clb: CallbackQuery, _select: Select, dialog
 
 # for categoriya
 async def on_category_selected(clb: CallbackQuery, _select: Select, dialog_manager: DialogManager, callback_id: str):
-    cat_id = int(callback_id.replace("cat_", ""))
+    cat_id = int(callback_id)
     session = dialog_manager.middleware_data.get("db_session")
     items = await get_items_by_categories_id(session, cat_id)
     items_kb = [(item.name, f"item_{item.id}") for item in items]
@@ -133,7 +129,7 @@ async def on_data_selected(clb: CallbackQuery, _select: Select, dialog_manager: 
     )
 
 
-# base buttons like nazad, dalee, otmena
+# base buttons
 async def on_action_selected(_clb: CallbackQuery, _select: Select, dialog_manager: DialogManager, action: str):
     context: BaseContext = dialog_manager.dialog_data.get('context')
     context = context.do(action)
@@ -184,7 +180,8 @@ async def on_submit(clb: CallbackQuery, _select: Select, dialog_manager: DialogM
                 'by_username': escape_mdv2(clb.from_user.username)})
         )
         await clb.message.forward(TelegramKeys.TREASURER_ID)
-    await clb.answer(l10n.format_value('application-saved'), show_alert=True)
+        await clb.answer(l10n.format_value('application-saved'), show_alert=True)
+    await clb.answer(l10n.format_value('application-error'), show_alert=True)
     await dialog_manager.done()
 
 
@@ -278,9 +275,8 @@ check_apply_equipment_dialog = Dialog(
     Window(  # Окно с заявкой
         Multi(
             Format('{view}\n\n'),
-            Const(r'_\* \- '),
+            Const(r'_\* \- _'),
             L10nFormat('required-hint'),
-            Const('_'),
             sep=''
         ),
         ScrollingGroup(
