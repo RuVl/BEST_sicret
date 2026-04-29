@@ -49,3 +49,8 @@ asyncpg~=0.30.0  # driver
 # aioamqp  # Async work with AMQP
 # aiocache  # Async work with cache system
 # aiopath  # Async pathlib
+
+# Fuzzy Search
+fuzzywuzzy~=0.18.0
+python-Levenshtein~=0.26.1
+
