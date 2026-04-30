@@ -5,7 +5,7 @@ from aiogram import F
 from aiogram.enums import ButtonStyle, ChatAction, ContentType
 from aiogram.types import CallbackQuery, FSInputFile, Message
 from aiogram.utils.chat_action import ChatActionSender
-from aiogram_dialog import Dialog, DialogManager, ShowMode, Window
+from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, MessageInput, TextInput
 from aiogram_dialog.widgets.kbd import Button, ScrollingGroup, Select, SwitchTo
 from aiogram_dialog.widgets.style import Style
@@ -105,7 +105,7 @@ async def send_apply(
     )
 
     await clb.answer(l10n.format_value("refund-apply-was-sent"))
-    await dialog_manager.done(show_mode=ShowMode.DELETE_AND_SEND)
+    await dialog_manager.done()
 
 
 # ========== Окно редактирования ==========
