@@ -7,37 +7,35 @@ from aiogram_dialog.widgets.input import TextInput
 from aiogram_dialog.widgets.text import Format
 from fluent.runtime import FluentLocalization
 from sqlalchemy import select
-from structlog import get_logger
 from structlog.typing import FilteringBoundLogger
 
 from database.main import async_session
 from database.models import Category
-from middlewares import L10N_FORMAT_KEY
+from middlewares import L10N_FORMAT_KEY, LOGGING_KEY
 from state_machines.inventory import ViewInventory
 from utils import L10nFormat, escape_mdv2, truncate, fuzzy_search
 from database.methods import get_all_categories, get_items_by_category, get_item_by_id
 
-# Structlog-логгер для этого модуля
-logger: FilteringBoundLogger = get_logger("inventory.view")
-
 
 # ========== Геттер: список категорий ==========
-async def get_categories(dialog_manager: DialogManager, **kwargs) -> dict[str, Any]:
-    # Проверяем кэш — если категории уже загружены, не идём в БД
+async def get_categories(
+    dialog_manager: DialogManager,
+    l10n: FluentLocalization,
+    log: FilteringBoundLogger,
+    **kwargs,
+) -> dict[str, Any]:
     categories_map: dict = dialog_manager.dialog_data.get('categories_map', {})
 
     if not categories_map:
-        # Кэш пуст — загружаем из БД
-        logger.debug("categories_cache_miss", reason="cache empty")
+        log.debug("categories_cache_miss", reason="cache empty")
         async with async_session() as session:
             categories = await get_all_categories(session)
 
         categories_map = {str(c.id): c.name for c in categories}
         dialog_manager.dialog_data['categories_map'] = categories_map
     else:
-        logger.debug("categories_cache_hit", count=len(categories_map))
+        log.debug("categories_cache_hit", count=len(categories_map))
 
-    # Преобразуем словарь в список для виджета
     categories_list = [(name, cid) for cid, name in categories_map.items()]
 
     return {
@@ -46,22 +44,23 @@ async def get_categories(dialog_manager: DialogManager, **kwargs) -> dict[str, A
 
 
 # ========== Геттер: список айтемов ==========
-async def get_items(dialog_manager: DialogManager, **kwargs) -> dict[str, Any]:
-    l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
-
+async def get_items(
+    dialog_manager: DialogManager,
+    l10n: FluentLocalization,
+    log: FilteringBoundLogger,
+    **kwargs,
+) -> dict[str, Any]:
     category_id = dialog_manager.dialog_data.get('category_id')
     category_name = dialog_manager.dialog_data.get('category_name', '')
 
     if not category_id:
-        # Не должно происходить — логируем и отправляем назад
-        logger.warning("get_items_no_category")
+        log.warning("get_items_no_category")
         await dialog_manager.switch_to(ViewInventory.SELECT_CATEGORY)
         return {'items': [], 'items_header': ''}
 
     async with async_session() as session:
         all_items = await get_items_by_category(session, int(category_id))
 
-    # Формируем список кнопок: "Название | кол-во ед."
     items_list = [
         (f"{truncate(item.name)}  |  {item.count} {item.unit}", str(item.id))
         for item in all_items
@@ -69,21 +68,23 @@ async def get_items(dialog_manager: DialogManager, **kwargs) -> dict[str, Any]:
 
     return {
         'items': items_list,
-        # Заголовок окна через l10n
         'items_header': l10n.format_value('items-list', {'category_name': category_name}),
     }
 
 
 # ========== Геттер: окно поиска ==========
-async def get_search(dialog_manager: DialogManager, **kwargs) -> dict[str, Any]:
-    l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
-
+async def get_search(
+    dialog_manager: DialogManager,
+    l10n: FluentLocalization,
+    log: FilteringBoundLogger,
+    **kwargs,
+) -> dict[str, Any]:
     category_id = dialog_manager.dialog_data.get('category_id')
     category_name = dialog_manager.dialog_data.get('category_name', '')
     search_query = dialog_manager.dialog_data.get('search_query', '')
 
     if not category_id:
-        logger.warning("get_search_no_category")
+        log.warning("get_search_no_category")
         await dialog_manager.switch_to(ViewInventory.SELECT_CATEGORY)
         return {'items': [], 'items_header': '', 'search_hint': ''}
 
@@ -91,19 +92,17 @@ async def get_search(dialog_manager: DialogManager, **kwargs) -> dict[str, Any]:
         all_items = await get_items_by_category(session, int(category_id))
 
     if search_query:
-        # Передаём список имён в fuzzy_search — он работает со списком строк
         names = [item.name for item in all_items]
         matched_names = fuzzy_search(search_query, names)
 
-        # Фильтруем объекты по совпавшим именам, сохраняя порядок
-        name_to_items = {item.name: item for item in all_items}
-        matched_items = [name_to_items[name] for name in matched_names if name in name_to_items]
+        name_to_item = {item.name: item for item in all_items}
+        matched_items = [name_to_item[name] for name in matched_names if name in name_to_item]
 
         search_hint = l10n.format_value('search-result', {
             'query': search_query,
             'count': len(matched_items),
         })
-        logger.debug("fuzzy_search_done", query=search_query, found=len(matched_items))
+        log.debug("fuzzy_search_done", query=search_query, found=len(matched_items))
     else:
         matched_items = all_items
         search_hint = l10n.format_value('search-hint')
@@ -121,13 +120,16 @@ async def get_search(dialog_manager: DialogManager, **kwargs) -> dict[str, Any]:
 
 
 # ========== Геттер: детали айтема ==========
-async def get_item_detail(dialog_manager: DialogManager, **kwargs) -> dict[str, Any]:
-    l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
-
+async def get_item_detail(
+    dialog_manager: DialogManager,
+    l10n: FluentLocalization,
+    log: FilteringBoundLogger,
+    **kwargs,
+) -> dict[str, Any]:
     item_id = dialog_manager.dialog_data.get('item_id')
 
     if not item_id:
-        logger.warning("get_item_detail_no_id")
+        log.warning("get_item_detail_no_id")
         await dialog_manager.switch_to(ViewInventory.SELECT_ITEM)
         return {'item_text': ''}
 
@@ -135,14 +137,12 @@ async def get_item_detail(dialog_manager: DialogManager, **kwargs) -> dict[str, 
         item = await get_item_by_id(session, int(item_id))
 
     if not item:
-        logger.warning("get_item_detail_not_found", item_id=item_id)
+        log.warning("get_item_detail_not_found", item_id=item_id)
         await dialog_manager.switch_to(ViewInventory.SELECT_ITEM)
         return {'item_text': ''}
 
-    no_place = l10n.format_value('no-place')
-    place_address = item.place.address if item.place else no_place
+    place_address = item.place.address if item.place else l10n.format_value('no-place')
 
-    # Формируем текст карточки через l10n с экранированием спецсимволов
     item_text = l10n.format_value('item-detail', {
         'name': escape_mdv2(item.name),
         'count': item.count,
@@ -159,24 +159,22 @@ async def on_category_selected(
     widget: Select,
     dialog_manager: DialogManager,
     category_id: str,
-):
+) -> None:
     l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
+    log: FilteringBoundLogger = dialog_manager.middleware_data.get(LOGGING_KEY)
 
-    # Ищем имя категории в кэше (словарь, без цикла)
     categories_map: dict = dialog_manager.dialog_data.get('categories_map', {})
     category_name = categories_map.get(category_id)
 
     if not category_name:
-        # Кэш промахнулся — идём в БД
-        logger.warning("category_cache_miss_on_select", category_id=category_id)
+        log.warning("category_cache_miss_on_select", category_id=category_id)
         async with async_session() as session:
             query = select(Category).where(Category.id == int(category_id))
             result = await session.execute(query)
             cat = result.scalar_one_or_none()
 
         if not cat:
-            # Категория не найдена вообще — сбрасываем
-            logger.error("category_not_found_in_db", category_id=category_id)
+            log.error("category_not_found_in_db", category_id=category_id)
             await clb.answer(l10n.format_value('category-not-found'))
             await dialog_manager.switch_to(ViewInventory.SELECT_CATEGORY)
             return
@@ -185,20 +183,18 @@ async def on_category_selected(
 
     dialog_manager.dialog_data['category_id'] = category_id
     dialog_manager.dialog_data['category_name'] = category_name
-    # Сбрасываем поиск при смене категории
     dialog_manager.dialog_data['search_query'] = ''
 
     await clb.answer()
     await dialog_manager.switch_to(ViewInventory.SELECT_ITEM)
 
 
-# ========== Хэндлер: переход в окно поиска ==========
+# ========== Хэндлер: открыть поиск ==========
 async def on_open_search(
     callback: CallbackQuery,
     button: Button,
     dialog_manager: DialogManager,
-):
-    # Сбрасываем предыдущий запрос при открытии поиска
+) -> None:
     dialog_manager.dialog_data['search_query'] = ''
     await callback.answer()
     await dialog_manager.switch_to(ViewInventory.SEARCH_ITEM)
@@ -210,8 +206,7 @@ async def on_search_input(
     widget: TextInput,
     dialog_manager: DialogManager,
     text: str,
-):
-    # Сохраняем запрос — геттер перерисует список
+) -> None:
     dialog_manager.dialog_data['search_query'] = text.strip()
 
 
@@ -221,7 +216,7 @@ async def on_item_selected(
     widget: Select,
     dialog_manager: DialogManager,
     item_id: str,
-):
+) -> None:
     dialog_manager.dialog_data['item_id'] = item_id
     await clb.answer()
     await dialog_manager.switch_to(ViewInventory.VIEW_ITEM)
@@ -232,7 +227,7 @@ async def on_back_to_categories(
     callback: CallbackQuery,
     button: Button,
     dialog_manager: DialogManager,
-):
+) -> None:
     dialog_manager.dialog_data.pop('category_id', None)
     dialog_manager.dialog_data.pop('category_name', None)
     dialog_manager.dialog_data.pop('search_query', None)
@@ -245,18 +240,18 @@ async def on_back_to_items(
     callback: CallbackQuery,
     button: Button,
     dialog_manager: DialogManager,
-):
+) -> None:
     dialog_manager.dialog_data.pop('item_id', None)
     await callback.answer()
     await dialog_manager.switch_to(ViewInventory.SELECT_ITEM)
 
 
-# ========== Хэндлер: назад из поиска к списку ==========
+# ========== Хэндлер: назад из поиска ==========
 async def on_back_from_search(
     callback: CallbackQuery,
     button: Button,
     dialog_manager: DialogManager,
-):
+) -> None:
     dialog_manager.dialog_data.pop('search_query', None)
     await callback.answer()
     await dialog_manager.switch_to(ViewInventory.SELECT_ITEM)
@@ -284,7 +279,7 @@ inventory_dialog = Dialog(
         state=ViewInventory.SELECT_CATEGORY,
     ),
 
-    # --- Окно 2: список айтемов (без поиска) ---
+    # --- Окно 2: список айтемов ---
     Window(
         Format('{items_header}'),
         ScrollingGroup(
@@ -300,7 +295,6 @@ inventory_dialog = Dialog(
             height=10,
             hide_on_single_page=True,
         ),
-        # Кнопка перехода в отдельное окно поиска
         Button(
             L10nFormat('search'),
             id='open_search',
@@ -315,10 +309,9 @@ inventory_dialog = Dialog(
         state=ViewInventory.SELECT_ITEM,
     ),
 
-    # --- Окно 3: поиск (отдельное окно, без смешения логики) ---
+    # --- Окно 3: поиск ---
     Window(
         Format('{items_header}\n\n{search_hint}'),
-        # Поле ввода поискового запроса
         TextInput(
             id='search_input',
             on_success=on_search_input,
