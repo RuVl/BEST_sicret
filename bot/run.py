@@ -29,6 +29,9 @@ async def main():
             BotCommand(command="start", description="Запуск бота"),
             BotCommand(command="create_document", description="Создать приказ"),
             BotCommand(
+                command="create_equipment_apply", description="Создать заявку по стаффу"
+            ),
+            BotCommand(
                 command="requisites_apply", description="Создать заявку на рефанд"
             ),
         ],

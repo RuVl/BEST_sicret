@@ -11,6 +11,7 @@ from aiogram_dialog.widgets.text import Format
 from fluent.runtime import FluentLocalization
 from structlog.typing import FilteringBoundLogger
 
+from env import ProjectKeys
 from includes import load_schema
 from includes.templates import create_context
 from includes.templates.contexts import BaseContext, PrimitiveContext
@@ -42,11 +43,14 @@ async def create_refund_apply(
                 "can_send": False,
             }
 
+    bill = dialog_manager.dialog_data.get("bill")
+
     return {
         "view": ctx.render_view(l10n),
         "data_kb": ctx.render_data_kb(l10n),
         "action_kb": ctx.render_action_kb(l10n),
-        "can_send": ctx.can_generate(),
+        "bill": bill,
+        "can_send": bill and ctx.can_generate(),
     }
 
 
@@ -86,7 +90,6 @@ async def get_property_context(
     return {
         "question": ctx.ask_question(),
         "action_kb": ctx.render_action_kb(l10n),
-        "can_generate": ctx.can_generate(),
     }
 
 
@@ -128,7 +131,7 @@ async def on_action_selected(
 async def add_bill(
     msg: Message, widget: MessageInput, dialog_manager: DialogManager
 ) -> None:
-    pass
+    ProjectKeys.REFUND_BILLS_DIR
 
 
 refund_dialog = Dialog(

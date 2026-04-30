@@ -6,6 +6,7 @@ from fluent.runtime import FluentLocalization
 
 from state_machines.refund import CreateRefundApply
 from state_machines.templates import CreateByTemplate
+from state_machines import CreateByApplyEquipment
 
 router = Router()
 
@@ -30,6 +31,15 @@ async def choose_template(msg: Message, dialog_manager: DialogManager):
 async def start_refund(msg: Message, dialog_manager: DialogManager):
     await dialog_manager.start(
         CreateRefundApply.VIEW,
+        mode=StartMode.RESET_STACK,
+        show_mode=ShowMode.DELETE_AND_SEND,
+    )
+
+
+@router.message(Command("create_equipment_apply"))
+async def choose_apply_equipment(_: Message, dialog_manager: DialogManager):
+    await dialog_manager.start(
+        CreateByApplyEquipment.VIEW,
         mode=StartMode.RESET_STACK,
         show_mode=ShowMode.DELETE_AND_SEND,
     )
