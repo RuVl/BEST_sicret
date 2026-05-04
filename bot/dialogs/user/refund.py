@@ -42,6 +42,7 @@ async def create_refund_apply(
                 "view": l10n.format_value("refund-schema-not-found"),
                 "data_kb": [],
                 "action_kb": [],
+                "bill_filename": "",
                 "can_send": False,
             }
 
