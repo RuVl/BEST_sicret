@@ -17,8 +17,8 @@ class BaseContext(ABC):
         self._parent = parent
         self.required = required
 
-        self.title = schema.get('title', 'No title')
-        self.description = schema.get('description', 'No description')
+        self.title = schema.get('title', "")
+        self.description = schema.get('description', "")
         self.btn_name = schema.get('short_description')  # No need escape
 
         # Escape text

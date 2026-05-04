@@ -1,5 +1,4 @@
 import time
-import traceback
 import types
 from typing import Any, Awaitable, Callable, Dict, Optional
 
@@ -14,7 +13,7 @@ from structlog.typing import FilteringBoundLogger
 class LoggingMw(BaseMiddleware):
     """Middleware for structured logging of handler calls and state changes."""
 
-    def __init__(self, middleware_key: str = 'log', *, patch_fsm: bool = True):
+    def __init__(self, middleware_key: str = "log", *, patch_fsm: bool = True):
         self.logger: FilteringBoundLogger = get_logger()
         self.middleware_key = middleware_key
         self.patch_fsm = patch_fsm
@@ -24,11 +23,13 @@ class LoggingMw(BaseMiddleware):
         """Creates a context dictionary with user information for logging."""
         context = {}
         if user:
-            context.update({
-                "user_id": user.id,
-                "username": user.username,
-                "telegram_name": f"{user.first_name} {user.last_name or ''}".strip(),
-            })
+            context.update(
+                {
+                    "user_id": user.id,
+                    "username": user.username,
+                    "telegram_name": f"{user.first_name} {user.last_name or ''}".strip(),
+                },
+            )
         return context
 
     def patch_fsm_methods(self, fsm: FSMContext, log: FilteringBoundLogger):
@@ -46,10 +47,10 @@ class LoggingMw(BaseMiddleware):
         fsm.set_state = types.MethodType(set_state_with_logging, fsm)
 
     async def __call__(
-            self,
-            handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
-            event: TelegramObject,
-            data: Dict[str, Any],
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any],
     ) -> Any:
         telegram_user = data.get(EVENT_FROM_USER_KEY)
         user_context = self.get_user_context(telegram_user)
@@ -62,8 +63,8 @@ class LoggingMw(BaseMiddleware):
         handler_obj = data.get("handler")
         handler_name = (
             getattr(handler_obj.callback, "__name__", str(handler_obj.callback))
-            if handler_obj and hasattr(handler_obj, "callback") else
-            getattr(handler, "__name__", str(handler))
+            if handler_obj and hasattr(handler_obj, "callback")
+            else getattr(handler, "__name__", str(handler))
         )
 
         # Log handler call
@@ -83,20 +84,15 @@ class LoggingMw(BaseMiddleware):
             execution_time = round(end - start, 3)
 
             # Log successful completion
-            await log.adebug("handler-completed", handler=handler_name, execution_time=execution_time)
+            await log.adebug(
+                "handler-completed", handler=handler_name, execution_time=execution_time
+            )
             return result
 
         except Exception as e:
-            # Get full exception traceback for error logs
-            tb = traceback.format_exc()
-
-            # Log error with detailed context
-            await log.aerror(
+            await log.aexception(
                 "handler-error",
                 handler=handler_name,
-                error_type=type(e).__name__,
-                error=str(e),
-                traceback=tb
+                exc_info=e,
             )
-            # Re-raise to let error handlers deal with it
             raise

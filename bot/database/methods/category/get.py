@@ -1,9 +1,11 @@
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import Category
 
 
-async def get_all_categories(session: AsyncSession) -> list[Category]:
-    result = await session.execute(select(Category))
-    return result.scalars().all()
+async def get_categories(session: AsyncSession) -> list[Category]:
+    query = select(Category)
+    result = await session.execute(query)
+    categories = result.scalars().all()
+    return list(categories)

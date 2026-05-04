@@ -2,5 +2,6 @@
 .env.dist
 
 venv/
+.python-version
 
 aiogram_dialog.png
