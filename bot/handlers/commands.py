@@ -5,6 +5,7 @@ from aiogram_dialog import DialogManager, StartMode, ShowMode
 from fluent.runtime import FluentLocalization
 
 from state_machines.refund import CreateRefundApply
+from state_machines.inventory import ViewInventory
 from state_machines.templates import CreateByTemplate
 from state_machines import CreateByApplyEquipment
 
@@ -37,9 +38,18 @@ async def start_refund(msg: Message, dialog_manager: DialogManager):
 
 
 @router.message(Command("create_equipment_apply"))
-async def choose_apply_equipment(_: Message, dialog_manager: DialogManager):
+async def choose_apply_equipment(msg: Message, dialog_manager: DialogManager):
     await dialog_manager.start(
         CreateByApplyEquipment.VIEW,
+        mode=StartMode.RESET_STACK,
+        show_mode=ShowMode.DELETE_AND_SEND,
+    )
+
+
+@router.message(Command("inventory"))
+async def view_inventory(msg: Message, dialog_manager: DialogManager):
+    await dialog_manager.start(
+        ViewInventory.SELECT_CATEGORY,
         mode=StartMode.RESET_STACK,
         show_mode=ShowMode.DELETE_AND_SEND,
     )

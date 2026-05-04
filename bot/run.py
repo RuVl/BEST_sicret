@@ -34,6 +34,7 @@ async def main():
             BotCommand(
                 command="requisites_apply", description="Создать заявку на рефанд"
             ),
+            BotCommand(command="inventory", description="Просмотр имущества"),
         ],
         scope=BotCommandScopeDefault(),
     )
@@ -44,7 +45,7 @@ async def main():
     else:
         storage = MemoryStorage()
         if not ProjectKeys.DEBUG:
-            logger.warning("You should use RedisStorage in production!")
+            await logger.aerror("You should use RedisStorage in production!")
 
     # Init dispatcher
     dp = Dispatcher(storage=storage)
