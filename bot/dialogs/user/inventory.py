@@ -1,167 +1,39 @@
+from operator import attrgetter
 from typing import Any
 
+from aiogram import F
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
-from aiogram_dialog.widgets.kbd import Button, ScrollingGroup, Select
+from aiogram_dialog.widgets.kbd import Back, Button, ScrollingGroup, Select
 from aiogram_dialog.widgets.text import Format
 from fluent.runtime import FluentLocalization
-from sqlalchemy import select
 from structlog.typing import FilteringBoundLogger
 
 from database.main import async_session
 from database.methods.category import get_categories
-from database.methods.item import get_item, get_items_by_category_id
-from database.models import Category
-from middlewares import L10N_FORMAT_KEY, LOGGING_KEY
+from database.methods.item import get_item_with_place, get_items_by_category_id
 from state_machines.inventory import ViewInventory
-from utils import escape_mdv2, fuzzy_search, L10nFormat, truncate
+from utils import escape_mdv2, fuzzy_search_bests, L10nFormat, truncate
 
 
 # ========== Геттер: список категорий ==========
 async def get_categories_data(
-    dialog_manager: DialogManager, **kwargs
+    dialog_manager: DialogManager,
+    **kwargs,
 ) -> dict[str, Any]:
-    categories_map: dict = dialog_manager.dialog_data.get("categories_map", {})
+    categories_map = dialog_manager.dialog_data.get("categories_map", {})
 
     if not categories_map:
         async with async_session() as session:
             categories = await get_categories(session)
 
-        categories_map = {str(c.id): c.name for c in categories}
+        categories_map = {c.id: c.name for c in categories}
         dialog_manager.dialog_data["categories_map"] = categories_map
 
-    categories_list = [(name, cid) for cid, name in categories_map.items()]
-
     return {
-        "categories": categories_list,
+        "categories": categories_map.items(),
     }
-
-
-# ========== Геттер: список айтемов ==========
-async def get_items_data(
-    dialog_manager: DialogManager,
-    l10n: FluentLocalization,
-    log: FilteringBoundLogger,
-    **kwargs,
-) -> dict[str, Any]:
-    category_id = dialog_manager.dialog_data.get("category_id")
-    category_name = dialog_manager.dialog_data.get("category_name", "")
-
-    if not category_id:
-        await log.aerror("get_items_data: no category")
-        await dialog_manager.switch_to(ViewInventory.SELECT_CATEGORY)
-        return {"items": [], "items_header": ""}
-
-    async with async_session() as session:
-        all_items = await get_items_by_category_id(session, int(category_id))
-
-    items_list = [
-        (f"{truncate(item.name)}  |  {item.count} {item.unit}", str(item.id))
-        for item in all_items
-    ]
-
-    return {
-        "items": items_list,
-        "items_header": l10n.format_value(
-            "items-list", {"category_name": category_name}
-        ),
-    }
-
-
-# ========== Геттер: окно поиска ==========
-async def get_search_data(
-    dialog_manager: DialogManager,
-    l10n: FluentLocalization,
-    log: FilteringBoundLogger,
-    **kwargs,
-) -> dict[str, Any]:
-    category_id = dialog_manager.dialog_data.get("category_id")
-    category_name = dialog_manager.dialog_data.get("category_name", "")
-    search_query = dialog_manager.dialog_data.get("search_query", "")
-
-    if not category_id:
-        await log.aerror("get_search_data: no category")
-        await dialog_manager.switch_to(ViewInventory.SELECT_CATEGORY)
-        return {"items": [], "items_header": "", "search_hint": ""}
-
-    async with async_session() as session:
-        all_items = await get_items_by_category_id(session, int(category_id))
-
-    if search_query:
-        names = [item.name for item in all_items]
-        matched_names = fuzzy_search(search_query, names)
-
-        name_to_item = {item.name: item for item in all_items}
-        matched_items = [
-            name_to_item[name] for name in matched_names if name in name_to_item
-        ]
-
-        search_hint = l10n.format_value(
-            "search-result",
-            {
-                "query": search_query,
-                "count": len(matched_items),
-            },
-        )
-        await log.adebug(
-            "fuzzy_search_done", query=search_query, found=len(matched_items)
-        )
-    else:
-        matched_items = all_items
-        search_hint = l10n.format_value("search-hint")
-
-    items_list = [
-        (f"{truncate(item.name)}  |  {item.count} {item.unit}", str(item.id))
-        for item in matched_items
-    ]
-
-    return {
-        "items": items_list,
-        "items_header": l10n.format_value(
-            "items-list", {"category_name": category_name}
-        ),
-        "search_hint": search_hint,
-    }
-
-
-# ========== Геттер: детали айтема ==========
-async def get_item_detail(
-    dialog_manager: DialogManager,
-    l10n: FluentLocalization,
-    log: FilteringBoundLogger,
-    **kwargs,
-) -> dict[str, Any]:
-    item_id = dialog_manager.dialog_data.get("item_id")
-
-    if not item_id:
-        await log.aerror("get_item_detail_no_id")
-        await dialog_manager.switch_to(ViewInventory.SELECT_ITEM)
-        return {"item_text": ""}
-
-    async with async_session() as session:
-        item = await get_item(session, int(item_id))
-        if item.place:
-            place_address = item.place.address
-        else:
-            place_address = l10n.format_value("no-place")
-
-    if not item:
-        await log.aerror("get_item_detail_not_found", item_id=item_id)
-        await dialog_manager.switch_to(ViewInventory.SELECT_ITEM)
-        return {"item_text": ""}
-
-    item_text = l10n.format_value(
-        "item-detail",
-        {
-            "name": escape_mdv2(item.name),
-            "count": item.count,
-            "unit": escape_mdv2(item.unit),
-            "address": escape_mdv2(place_address),
-        },
-    )
-
-    return {"item_text": item_text}
 
 
 # ========== Хэндлер: выбор категории ==========
@@ -169,43 +41,64 @@ async def on_category_selected(
     clb: CallbackQuery,
     widget: Select,
     dialog_manager: DialogManager,
-    category_id: str,
+    category_id: int,
 ) -> None:
-    l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
-    log: FilteringBoundLogger = dialog_manager.middleware_data.get(LOGGING_KEY)
-
-    categories_map: dict = dialog_manager.dialog_data.get("categories_map", {})
+    categories_map: dict[int, str] = dialog_manager.dialog_data["categories_map"]
     category_name = categories_map.get(category_id)
 
-    if not category_name:
-        await log.aerror("category_cache_miss_on_select", category_id=category_id)
-        async with async_session() as session:
-            query = select(Category).where(Category.id == int(category_id))
-            result = await session.execute(query)
-            cat = result.scalar_one_or_none()
-
-        if not cat:
-            await log.aerror("category_not_found_in_db", category_id=category_id)
-            await clb.answer(l10n.format_value("category-not-found"))
-            await dialog_manager.switch_to(ViewInventory.SELECT_CATEGORY)
-            return
-
-        category_name = cat.name
-
-    dialog_manager.dialog_data["category_id"] = category_id
-    dialog_manager.dialog_data["category_name"] = category_name
-    dialog_manager.dialog_data["search_query"] = ""
-
-    await clb.answer()
+    dialog_manager.dialog_data.update(
+        category_id=category_id,
+        category_name=category_name,
+        search_query="",
+    )
     await dialog_manager.switch_to(ViewInventory.SELECT_ITEM)
 
 
-# ========== Хэндлер: открыть поиск ==========
-async def on_open_search(
-    clb: CallbackQuery, button: Button, dialog_manager: DialogManager
-) -> None:
-    dialog_manager.dialog_data["search_query"] = ""
-    await dialog_manager.switch_to(ViewInventory.SEARCH_ITEM)
+# ========== Геттер: окно поиска ==========
+async def get_items_data(
+    dialog_manager: DialogManager,
+    l10n: FluentLocalization,
+    **kwargs,
+) -> dict[str, Any]:
+    category_id = int(dialog_manager.dialog_data["category_id"])
+    category_name = dialog_manager.dialog_data["category_name"]
+    search_query = dialog_manager.dialog_data.get("search_query")
+
+    async with async_session() as session:
+        all_items = await get_items_by_category_id(session, category_id)
+
+    if search_query:
+        matched_items = fuzzy_search_bests(
+            search_query,
+            all_items,
+            extractor=attrgetter("name"),
+        )
+        search_hint = l10n.format_value(
+            "search-result",
+            args={
+                "query": escape_mdv2(search_query),
+                "count": len(matched_items),
+            },
+        )
+    else:
+        matched_items = all_items
+        search_hint = l10n.format_value("search-hint")
+
+    header_text = l10n.format_value(
+        "items-list",
+        args={"category_name": category_name},
+    )
+    items_list = [
+        (item.id, f"{truncate(item.name)} | {item.count} {item.unit}")
+        for item in matched_items
+    ]
+
+    return {
+        "text": header_text,
+        "hint": search_hint,
+        "items": items_list,
+        "search_query": search_query,
+    }
 
 
 # ========== Хэндлер: ввод поискового запроса ==========
@@ -218,54 +111,72 @@ async def on_search_input(
     dialog_manager.dialog_data["search_query"] = text.strip()
 
 
+# ========== Хэндлер: очистка поискового запроса ==========
+async def clear_search(
+    clb: CallbackQuery,
+    widget: Button,
+    dialog_manager: DialogManager,
+) -> None:
+    dialog_manager.dialog_data.pop("search_query", None)
+
+
 # ========== Хэндлер: выбор айтема ==========
 async def on_item_selected(
-    clb: CallbackQuery, widget: Select, dialog_manager: DialogManager, item_id: str
+    clb: CallbackQuery,
+    widget: Select,
+    dialog_manager: DialogManager,
+    item_id: str,
 ) -> None:
     dialog_manager.dialog_data["item_id"] = item_id
     await dialog_manager.switch_to(ViewInventory.VIEW_ITEM)
 
 
-# ========== Хэндлер: назад к категориям ==========
-async def on_back_to_categories(
-    clb: CallbackQuery, button: Button, dialog_manager: DialogManager
-) -> None:
-    dialog_manager.dialog_data.pop("category_id", None)
-    dialog_manager.dialog_data.pop("category_name", None)
-    dialog_manager.dialog_data.pop("search_query", None)
-    await dialog_manager.switch_to(ViewInventory.SELECT_CATEGORY)
+# ========== Геттер: детали айтема ==========
+async def get_item_detail(
+    dialog_manager: DialogManager,
+    l10n: FluentLocalization,
+    log: FilteringBoundLogger,
+    **kwargs,
+) -> dict[str, Any]:
+    item_id = int(dialog_manager.dialog_data["item_id"])
 
+    async with async_session() as session:
+        item = await get_item_with_place(session, item_id)
 
-# ========== Хэндлер: назад к списку айтемов ==========
-async def on_back_to_items(
-    clb: CallbackQuery, button: Button, dialog_manager: DialogManager
-) -> None:
-    dialog_manager.dialog_data.pop("item_id", None)
-    await dialog_manager.switch_to(ViewInventory.SELECT_ITEM)
+    if not item:
+        await log.aerror("get_item_detail: Item not found", item_id=item_id)
+        await dialog_manager.switch_to(ViewInventory.SELECT_ITEM)
+        return {}
 
+    place_address = item.place.address if item.place else l10n.format_value("no-place")
 
-# ========== Хэндлер: назад из поиска ==========
-async def on_back_from_search(
-    clb: CallbackQuery, button: Button, dialog_manager: DialogManager
-) -> None:
-    dialog_manager.dialog_data.pop("search_query", None)
-    await dialog_manager.switch_to(ViewInventory.SELECT_ITEM)
+    item_text = l10n.format_value(
+        "item-detail",
+        {
+            "name": escape_mdv2(item.name),
+            "count": item.count,
+            "unit": escape_mdv2(item.unit),
+            "address": escape_mdv2(place_address),
+        },
+    )
+    return {"item_text": item_text}
 
 
 # ========== Диалог ==========
 inventory_dialog = Dialog(
-    # --- Окно 1: выбор категории ---
+    # --- Окно 1: выбор Category ---
     Window(
         L10nFormat("choose-category"),
         ScrollingGroup(
             Select(
-                Format("{item[0]}"),
+                Format("{item[1]}"),
                 id="category_select",
-                item_id_getter=lambda x: x[1],
+                item_id_getter=lambda x: x[0],
                 items="categories",
+                type_factory=int,
                 on_click=on_category_selected,
             ),
-            id="category_scroll",
+            id="categories_scroll",
             width=1,
             height=8,
             hide_on_single_page=True,
@@ -273,71 +184,40 @@ inventory_dialog = Dialog(
         getter=get_categories_data,
         state=ViewInventory.SELECT_CATEGORY,
     ),
-    # --- Окно 2: список айтемов ---
+    # --- Окно 2: список Item с поиском ---
     Window(
-        Format("{items_header}"),
-        ScrollingGroup(
-            Select(
-                Format("{item[0]}"),
-                id="item_select",
-                item_id_getter=lambda x: x[1],
-                items="items",
-                on_click=on_item_selected,
-            ),
-            id="items_scroll",
-            width=1,
-            height=10,
-            hide_on_single_page=True,
-        ),
-        Button(
-            L10nFormat("search"),
-            id="open_search",
-            on_click=on_open_search,
-        ),
-        Button(
-            L10nFormat("back"),
-            id="back_to_cats",
-            on_click=on_back_to_categories,
-        ),
-        getter=get_items_data,
-        state=ViewInventory.SELECT_ITEM,
-    ),
-    # --- Окно 3: поиск ---
-    Window(
-        Format("{items_header}\n\n{search_hint}"),
+        Format("{text}\n{hint}"),
         TextInput(
             id="search_input",
             on_success=on_search_input,
         ),
         ScrollingGroup(
             Select(
-                Format("{item[0]}"),
-                id="search_item_select",
-                item_id_getter=lambda x: x[1],
+                Format("{item[1]}"),
+                id="item_select",
+                item_id_getter=lambda x: x[0],
                 items="items",
                 on_click=on_item_selected,
             ),
-            id="search_items_scroll",
+            id="items_scroll",
             width=1,
             height=8,
             hide_on_single_page=True,
         ),
         Button(
-            L10nFormat("back"),
-            id="back_from_search",
-            on_click=on_back_from_search,
+            L10nFormat("clear-search"),
+            id="clear_search",
+            on_click=clear_search,
+            when=F["search_query"],
         ),
-        getter=get_search_data,
-        state=ViewInventory.SEARCH_ITEM,
+        Back(L10nFormat("back")),
+        getter=get_items_data,
+        state=ViewInventory.SELECT_ITEM,
     ),
-    # --- Окно 4: детали айтема ---
+    # --- Окно 3: детали Item ---
     Window(
         Format("{item_text}"),
-        Button(
-            L10nFormat("back"),
-            id="back_to_items",
-            on_click=on_back_to_items,
-        ),
+        Back(L10nFormat("back")),
         getter=get_item_detail,
         state=ViewInventory.VIEW_ITEM,
     ),
