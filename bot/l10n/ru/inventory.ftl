@@ -1,4 +1,3 @@
-# inventory
 choose-category = Выберите категорию имущества:
 
 items-list = Категория: { $category_name }
@@ -11,6 +10,5 @@ item-detail = { $name }, Количество: { $count } { $unit }, Адрес:
 no-items = В этой категории пусто\.
 no-place = Место не указано
 
-back = Назад
 clear-search = Сбросить поиск
 category-not-found = Категория не найдена

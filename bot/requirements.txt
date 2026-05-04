@@ -34,7 +34,8 @@ SQLAlchemy[asyncio]==2.0.48  # ORM
 asyncpg==0.31.0  # driver
 
 # Fuzzy Search
-fuzzywuzzy~=0.18.0
+fuzzywuzzy==0.18.0
+python-Levenshtein==0.27.3
 
 ###############################################################
 ###     Some useful async libraries to use with aiogram     ###

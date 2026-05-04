@@ -1,3 +1,4 @@
+from .base import Base
 from .category import Category
 from .item import Item
 from .payment import Payment
@@ -8,6 +9,7 @@ from .requisites import Requisites
 
 
 __all__ = [
+    "Base",
     "Category",
     "Item",
     "Payment",
