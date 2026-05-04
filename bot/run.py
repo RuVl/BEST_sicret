@@ -5,7 +5,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import BotCommand
+from aiogram.types import BotCommand, BotCommandScopeDefault
 from structlog.typing import FilteringBoundLogger
 
 from env import TelegramKeys, ProjectKeys, RedisKeys
@@ -22,13 +22,21 @@ async def main():
     # Init bot
     bot = Bot(
         token=TelegramKeys.API_TOKEN,
-        default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN_V2)
+        default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN_V2),
     )
-    await bot.set_my_commands([
-        BotCommand(command='start', description='Запуск бота'),
-        BotCommand(command='create_document', description='Создать приказ'),
-        BotCommand(command='create_equipment_apply', description='Создать заявку по стаффу')
-    ])
+    await bot.set_my_commands(
+        [
+            BotCommand(command="start", description="Запуск бота"),
+            BotCommand(command="create_document", description="Создать приказ"),
+            BotCommand(
+                command="create_equipment_apply", description="Создать заявку по стаффу"
+            ),
+            BotCommand(
+                command="requisites_apply", description="Создать заявку на рефанд"
+            ),
+        ],
+        scope=BotCommandScopeDefault(),
+    )
 
     # Get storage with proper configuration for dialogs
     if RedisKeys.USE_REDIS:
@@ -36,7 +44,7 @@ async def main():
     else:
         storage = MemoryStorage()
         if not ProjectKeys.DEBUG:
-            logger.warning('You should use RedisStorage in production!')
+            logger.warning("You should use RedisStorage in production!")
 
     # Init dispatcher
     dp = Dispatcher(storage=storage)
@@ -52,7 +60,7 @@ async def main():
         await dp.start_polling(
             bot,
             skip_updates=ProjectKeys.DEBUG,  # skip updates if debug
-            allowed_updates=dp.resolve_used_update_types()  # Get only registered updates
+            allowed_updates=dp.resolve_used_update_types(),  # Get only registered updates
         )
     finally:
         await bot.session.close()
@@ -60,5 +68,5 @@ async def main():
 
 
 # Start bot
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.run(main())

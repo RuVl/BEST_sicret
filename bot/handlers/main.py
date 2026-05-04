@@ -1,7 +1,8 @@
 from aiogram import Dispatcher, Router
 
 from dialogs import register_dialogs
-from handlers import commands
+from env import ProjectKeys
+from handlers import commands, debug
 
 
 def register_handlers(dp: Dispatcher):
@@ -16,5 +17,8 @@ def register_handlers(dp: Dispatcher):
 
     dp.include_routers(
         commands.router,
-        dialogs_router  # needs to be last
+        dialogs_router,  # should be last
     )
+
+    if ProjectKeys.DEBUG:
+        dp.include_router(debug.router)

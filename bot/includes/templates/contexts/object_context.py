@@ -35,7 +35,12 @@ class ObjectContext(BaseContext):
         )
 
     def render_view(self, l10n: FluentLocalization) -> str:
-        parts = [f'*{self.title}*\n_{self.description}_\n']
+        parts = []
+        if self.title:
+            parts.append(f"*{self.title}*")
+        if self.description:
+            parts.append(f"_{self.description}_")
+
         for key, child in self._children.items():
             parts.append(fr'\-{r' \*' if child.required else ''} {child.render_view(l10n)}')
         return '\n'.join(parts)

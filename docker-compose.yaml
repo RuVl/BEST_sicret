@@ -1,18 +1,3 @@
-volumes:
-  media_volume:
-    name: best_media
-
-  redis_volume:
-    name: best_cache
-
-  postgres_volume:
-    name: best_db
-
-networks:
-  backend:
-    driver: bridge
-    name: best_backend
-
 services:
   telegram_bot:
     build:
@@ -26,7 +11,7 @@ services:
     networks:
       - backend
     volumes:
-      - media_volume:/usr/src/app/resources
+      - media_volume:/app/resources
     depends_on:
       - postgres
 
@@ -51,3 +36,18 @@ services:
       - backend
     volumes:
       - postgres_volume:/var/lib/postgresql/data
+
+networks:
+  backend:
+    driver: bridge
+    name: best_backend
+
+volumes:
+  media_volume:
+    name: best_media
+
+  redis_volume:
+    name: best_cache
+
+  postgres_volume:
+    name: best_db

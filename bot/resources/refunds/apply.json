@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Заявка на рефанд",
+  "description": "",
+  "type": "object",
+  "properties": {
+    "reason": {
+      "type": "string",
+      "description": "Причина",
+      "question": "Введите причину:"
+    },
+    "total_price": {
+      "type": "number",
+      "description": "Сумма",
+      "question": "Введите итоговую сумму:"
+    },
+    "requisites": {
+      "type": "string",
+      "description": "Реквизиты",
+      "question": "Введите ваши реквизиты:"
+    }
+  },
+  "required": [
+    "reason",
+    "total_price",
+    "requisites"
+  ]
+}
