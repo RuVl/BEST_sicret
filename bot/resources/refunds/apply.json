@@ -17,7 +17,7 @@
     "requisites": {
       "type": "string",
       "description": "Реквизиты",
-      "question": "Введите ваши реквизиты:"
+      "question": "Введите ваши реквизиты (номер телефона и банк):"
     }
   },
   "required": [
