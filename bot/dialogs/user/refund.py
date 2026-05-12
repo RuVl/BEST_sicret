@@ -14,12 +14,14 @@ from fluent.runtime import FluentLocalization
 from structlog.typing import FilteringBoundLogger
 
 from env import ProjectKeys, TelegramKeys
-from includes import load_schema
+from includes import load_schema, validate_data
 from includes.templates import create_context
 from includes.templates.contexts import BaseContext, PrimitiveContext
 from middlewares import L10N_FORMAT_KEY, LOGGING_KEY
 from state_machines import CreateRefundApply
 from utils import escape_mdv2, L10nFormat
+
+DIALOG_SCHEMA = "refunds/apply.json"
 
 
 # ========== Окно просмотра ==========
@@ -33,7 +35,7 @@ async def create_refund_apply(
 
     if ctx is None:
         try:
-            schema = load_schema("refunds/apply.json")
+            schema = load_schema(DIALOG_SCHEMA)
             ctx = create_context(schema)
             dialog_manager.dialog_data.update(ctx=ctx)
         except FileNotFoundError as e:
@@ -84,6 +86,13 @@ async def send_apply(
     ctx: BaseContext = dialog_manager.dialog_data.get("ctx")
 
     raw_data = ctx.generate_context()
+    schema = load_schema(DIALOG_SCHEMA)
+
+    success, error_msg = validate_data(schema, raw_data)
+    if not success:
+        await clb.answer(error_msg, show_alert=True)
+        return
+
     raw_data["bill_filename"] = dialog_manager.dialog_data.get("bill_filename")
     raw_data["username"] = clb.from_user.username or clb.from_user.id
 

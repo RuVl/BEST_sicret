@@ -5,7 +5,7 @@ schema-not-found = Схема не найдена, попробуйте выбр
 templates-link-text = Шаблоны на заполнение с/з
 templates-link = https://drive.google.com/drive/u/1/folders/1XPR8fKQAHT0X_4CB7i8uWCQCTT4gnWuo
 
-required-hint = Обязательное поле
+required-hint = _\* \- Обязательное поле_
 
 # format errors
 invalid-integer-input = Не является целым числом\!

@@ -1,5 +1,7 @@
-L10N_FORMAT_KEY = "l10n"
-LOGGING_KEY = "log"
-DB_SESSION_KEY = "db_session"
+from .main import L10N_FORMAT_KEY, LOGGING_KEY, register_middlewares
 
-from .main import register_middlewares
+__all__ = [
+    "register_middlewares",
+    "L10N_FORMAT_KEY",
+    "LOGGING_KEY",
+]
