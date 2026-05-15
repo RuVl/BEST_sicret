@@ -4,24 +4,50 @@ services:
       context: ./bot
       dockerfile: Dockerfile
     restart: unless-stopped
-    volumes:
-      - media_volume:/usr/src/app/resources
     env_file:
       - bot/.env
       - redis/.env
+      - postgres/.env
+    networks:
+      - backend
+    volumes:
+      - media_volume:/app/resources
+    depends_on:
+      - postgres
 
   redis:
-    image: redis:latest
+    image: redis:8.2.2
     restart: unless-stopped
     env_file: redis/.env
     expose:
       - 6379
+    networks:
+      - backend
     volumes:
       - redis_volume:/data
 
+  postgres:
+    image: postgres:17.6
+    restart: unless-stopped
+    env_file: postgres/.env
+    expose:
+      - 5432
+    networks:
+      - backend
+    volumes:
+      - postgres_volume:/var/lib/postgresql/data
+
+networks:
+  backend:
+    driver: bridge
+    name: best_backend
+
 volumes:
   media_volume:
-    driver: local
+    name: best_media
 
   redis_volume:
-    driver: local
+    name: best_cache
+
+  postgres_volume:
+    name: best_db
