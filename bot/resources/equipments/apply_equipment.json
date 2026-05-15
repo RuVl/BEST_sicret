@@ -13,12 +13,12 @@
     "surname_user": {
       "type": "string",
       "description": "Фамилия",
-      "question": "Введите свою Фамилию"
+      "question": "Введите свою фамилию"
     },
     "name_user": {
       "type": "string",
       "description": "Имя",
-      "question": "Введите свое Имя"
+      "question": "Введите свое имя"
     }
   },
   "required": [

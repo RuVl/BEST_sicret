@@ -5,6 +5,7 @@ start-msg = Добро пожаловать в BEST sicret\! Чтобы выбр
 
 # actions
 back = Назад
+cancel = Отмена
 delete = Удалить
 add-item = Добавить элемент
 

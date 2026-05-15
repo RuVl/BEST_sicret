@@ -12,5 +12,6 @@ item-detail = *{ $name }*
 no-items = В этой категории пусто\.
 no-place = Место не указано
 
-# buttins
+# buttons
 clear-search = Сбросить поиск
+select-item = ✅ Выбрать этот предмет

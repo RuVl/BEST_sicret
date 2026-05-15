@@ -1,22 +1,18 @@
 from typing import Any
 
-from aiogram import F
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
-from aiogram_dialog.widgets.kbd import Back, Button, ScrollingGroup, Select, SwitchTo
-from aiogram_dialog.widgets.text import Const, Format, Multi
+from aiogram_dialog.widgets.kbd import Button, ScrollingGroup, Select, SwitchTo
+from aiogram_dialog.widgets.text import Format, Multi
 from fluent.runtime import FluentLocalization
 
-from database.main import async_session
-from database.methods.category import get_categories
-from database.methods.item import get_items_by_category_id
 from env import TelegramKeys
 from includes import load_schema, validate_data
 from includes.templates import create_context
 from includes.templates.contexts import BaseContext, PrimitiveContext
 from middlewares import L10N_FORMAT_KEY
-from state_machines import CreateByApplyEquipment
+from state_machines import CreateByApplyEquipment, ViewInventory
 from utils import escape_mdv2, L10nFormat
 
 DIALOG_SCHEMA = "equipments/apply_equipment.json"
@@ -66,32 +62,6 @@ async def get_main_data(dialog_manager: DialogManager, **kwargs) -> dict[str, An
     }
 
 
-async def get_categories_data(**kwargs) -> dict[str, Any]:
-    async with async_session() as session:
-        categories = await get_categories(session)
-
-    category_buttons = [(cat.name, str(cat.id)) for cat in categories]
-    return {
-        "categories": category_buttons,
-    }
-
-
-async def get_items_data(dialog_manager: DialogManager, **kwargs) -> dict[str, Any]:
-    cat_id = int(dialog_manager.dialog_data.get("selected_category_id"))
-    async with async_session() as session:
-        items = await get_items_by_category_id(session, cat_id)
-
-    item_details = {
-        item.id: {"name": item.name, "available": item.count, "unit": item.unit}
-        for item in items
-    }
-    dialog_manager.dialog_data["item_details"] = item_details
-
-    return {
-        "items": [(item.name, str(item.id)) for item in items],
-    }
-
-
 async def get_quantity_data(dialog_manager: DialogManager, **kwargs) -> dict[str, Any]:
     l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
 
@@ -124,6 +94,26 @@ async def get_property_data(dialog_manager: DialogManager, **kwargs) -> dict[str
 
 
 # ========== Handlers ==========
+async def on_start_add_item(clb: CallbackQuery, button: Button, manager: DialogManager):
+    await manager.start(
+        ViewInventory.SELECT_CATEGORY,
+        data={"selection_mode": True},
+    )
+
+
+async def on_inventory_result(start_data: Any, result: Any, manager: DialogManager):
+    if not result:
+        return
+
+    manager.dialog_data.update(
+        selected_item_id=result["item_id"],
+        selected_item_name=result["name"],
+        available_count=result["count"],
+        item_unit=result["unit"],
+    )
+    await manager.switch_to(CreateByApplyEquipment.INPUT_QUANTITY)
+
+
 async def on_property_selected(
     clb: CallbackQuery,
     select: Select,
@@ -162,39 +152,6 @@ async def on_property_input(
         pass
 
     await dialog_manager.switch_to(CreateByApplyEquipment.VIEW)
-
-
-async def on_category_selected(
-    clb: CallbackQuery,
-    select: Select,
-    dialog_manager: DialogManager,
-    category_id: str,
-):
-    dialog_manager.dialog_data["selected_category_id"] = category_id
-    await dialog_manager.switch_to(CreateByApplyEquipment.SELECT_ITEM)
-
-
-async def on_item_selected(
-    clb: CallbackQuery,
-    select: Select,
-    dialog_manager: DialogManager,
-    item_id: str,
-):
-    item_id_int = int(item_id)
-    details = dialog_manager.dialog_data.get("item_details", {}).get(item_id_int)
-
-    if not details:
-        l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
-        await clb.answer(l10n.format_value("category-empty"), show_alert=True)
-        return
-
-    dialog_manager.dialog_data.update(
-        selected_item_id=item_id_int,
-        selected_item_name=details["name"],
-        available_count=details["available"],
-        item_unit=details["unit"],
-    )
-    await dialog_manager.switch_to(CreateByApplyEquipment.INPUT_QUANTITY)
 
 
 async def on_quantity_input(
@@ -238,12 +195,10 @@ async def on_quantity_input(
 
     # Clean up item selection data
     for key in (
-        "selected_category_id",
         "selected_item_id",
         "selected_item_name",
         "available_count",
         "item_unit",
-        "item_details",
     ):
         dialog_manager.dialog_data.pop(key, None)
 
@@ -304,7 +259,7 @@ async def on_submit(clb: CallbackQuery, widget: Button, dialog_manager: DialogMa
 
 
 # ========== Dialog Definition ==========
-check_apply_equipment_dialog = Dialog(
+apply_equipment_dialog = Dialog(
     # --- VIEW Window ---
     Window(
         Multi(
@@ -338,13 +293,13 @@ check_apply_equipment_dialog = Dialog(
             width=2,
             height=3,
             hide_on_single_page=True,
-            when=F["added_items"],
+            when="added_items",
         ),
         # Navigation to item selection
-        SwitchTo(
-            Const("➕ Добавить предмет"),
-            id="go_to_categories",
-            state=CreateByApplyEquipment.SELECT_CATEGORY,
+        Button(
+            L10nFormat("apply-eq-add-item"),
+            id="go_to_inventory",
+            on_click=on_start_add_item,
         ),
         # Form actions (Submit/Cancel etc)
         Select(
@@ -359,7 +314,7 @@ check_apply_equipment_dialog = Dialog(
             L10nFormat("submit-application"),
             id="submit_app",
             on_click=on_submit,
-            when=F["can_submit"],
+            when="can_submit",
         ),
         getter=get_main_data,
         state=CreateByApplyEquipment.VIEW,
@@ -378,52 +333,17 @@ check_apply_equipment_dialog = Dialog(
         getter=get_property_data,
         state=CreateByApplyEquipment.INPUT_PROPERTY,
     ),
-    # --- SELECT CATEGORY Window ---
-    Window(
-        L10nFormat("choose-category"),
-        ScrollingGroup(
-            Select(
-                Format("{item[0]}"),
-                id="cat_select",
-                item_id_getter=lambda x: x[1],
-                items="categories",
-                on_click=on_category_selected,
-            ),
-            id="cat_scroll",
-            width=2,
-            height=5,
-            hide_on_single_page=True,
-        ),
-        SwitchTo(L10nFormat("back"), "back", CreateByApplyEquipment.VIEW),
-        getter=get_categories_data,
-        state=CreateByApplyEquipment.SELECT_CATEGORY,
-    ),
-    # --- SELECT ITEM Window ---
-    Window(
-        L10nFormat("select-item-prompt"),
-        ScrollingGroup(
-            Select(
-                Format("{item[0]}"),
-                id="item_select",
-                item_id_getter=lambda x: x[1],
-                items="items",
-                on_click=on_item_selected,
-            ),
-            id="items_scroll",
-            width=1,
-            height=8,
-            hide_on_single_page=True,
-        ),
-        Back(L10nFormat("back")),
-        getter=get_items_data,
-        state=CreateByApplyEquipment.SELECT_ITEM,
-    ),
     # --- INPUT QUANTITY Window ---
     Window(
         Format("{question}"),
         TextInput(id="qty_input", on_success=on_quantity_input),
-        Back(L10nFormat("back")),
+        SwitchTo(
+            L10nFormat("back"),
+            id="back_to_view",
+            state=CreateByApplyEquipment.VIEW,
+        ),
         getter=get_quantity_data,
         state=CreateByApplyEquipment.INPUT_QUANTITY,
     ),
+    on_process_result=on_inventory_result,
 )
