@@ -1,7 +1,6 @@
 from operator import attrgetter
 from typing import Any
 
-from aiogram import F
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
@@ -31,27 +30,16 @@ async def get_categories_data(
         categories_map = {c.id: c.name for c in categories}
         dialog_manager.dialog_data["categories_map"] = categories_map
 
+    is_selection_mode = (
+        dialog_manager.start_data.get("selection_mode", False)
+        if dialog_manager.start_data
+        else False
+    )
+
     return {
         "categories": categories_map.items(),
+        "is_selection_mode": is_selection_mode,
     }
-
-
-# ========== Хэндлер: выбор категории ==========
-async def on_category_selected(
-    clb: CallbackQuery,
-    widget: Select,
-    dialog_manager: DialogManager,
-    category_id: int,
-) -> None:
-    categories_map: dict[int, str] = dialog_manager.dialog_data["categories_map"]
-    category_name = categories_map.get(category_id)
-
-    dialog_manager.dialog_data.update(
-        category_id=category_id,
-        category_name=category_name,
-        search_query="",
-    )
-    await dialog_manager.switch_to(ViewInventory.SELECT_ITEM)
 
 
 # ========== Геттер: окно поиска ==========
@@ -101,6 +89,65 @@ async def get_items_data(
     }
 
 
+# ========== Геттер: детали айтема ==========
+async def get_item_detail(
+    dialog_manager: DialogManager,
+    l10n: FluentLocalization,
+    log: FilteringBoundLogger,
+    **kwargs,
+) -> dict[str, Any]:
+    item_id = int(dialog_manager.dialog_data["item_id"])
+
+    async with async_session() as session:
+        item = await get_item_with_place(session, item_id)
+
+    if not item:
+        await log.aerror("get_item_detail: Item not found", item_id=item_id)
+        await dialog_manager.switch_to(ViewInventory.SELECT_ITEM)
+        return {}
+
+    place_address = item.place.address if item.place else l10n.format_value("no-place")
+
+    item_text = l10n.format_value(
+        "item-detail",
+        {
+            "name": escape_mdv2(item.name),
+            "count": item.count,
+            "unit": escape_mdv2(item.unit),
+            "address": escape_mdv2(place_address),
+        },
+    )
+
+    is_selection_mode = (
+        dialog_manager.start_data.get("selection_mode", False)
+        if dialog_manager.start_data
+        else False
+    )
+
+    return {
+        "item_text": item_text,
+        "is_selection_mode": is_selection_mode,
+    }
+
+
+# ========== Хэндлер: выбор категории ==========
+async def on_category_selected(
+    clb: CallbackQuery,
+    widget: Select,
+    dialog_manager: DialogManager,
+    category_id: int,
+) -> None:
+    categories_map: dict[int, str] = dialog_manager.dialog_data["categories_map"]
+    category_name = categories_map.get(category_id)
+
+    dialog_manager.dialog_data.update(
+        category_id=category_id,
+        category_name=category_name,
+        search_query="",
+    )
+    await dialog_manager.switch_to(ViewInventory.SELECT_ITEM)
+
+
 # ========== Хэндлер: ввод поискового запроса ==========
 async def on_search_input(
     msg: Message,
@@ -131,35 +178,29 @@ async def on_item_selected(
     await dialog_manager.switch_to(ViewInventory.VIEW_ITEM)
 
 
-# ========== Геттер: детали айтема ==========
-async def get_item_detail(
+# ========== Хэндлер: выбор айтема (финальный в режиме выбора) ==========
+async def on_item_chosen(
+    clb: CallbackQuery,
+    widget: Button,
     dialog_manager: DialogManager,
-    l10n: FluentLocalization,
-    log: FilteringBoundLogger,
-    **kwargs,
-) -> dict[str, Any]:
-    item_id = int(dialog_manager.dialog_data["item_id"])
-
+) -> None:
+    item_id = dialog_manager.dialog_data["item_id"]
+    # We need to get name and unit too. We can get it from the getter or just re-fetch.
+    # Actually, it's better to fetch it here or have it in dialog_data.
     async with async_session() as session:
-        item = await get_item_with_place(session, item_id)
+        item = await get_item_with_place(session, int(item_id))
 
-    if not item:
-        await log.aerror("get_item_detail: Item not found", item_id=item_id)
-        await dialog_manager.switch_to(ViewInventory.SELECT_ITEM)
-        return {}
-
-    place_address = item.place.address if item.place else l10n.format_value("no-place")
-
-    item_text = l10n.format_value(
-        "item-detail",
-        {
-            "name": escape_mdv2(item.name),
-            "count": item.count,
-            "unit": escape_mdv2(item.unit),
-            "address": escape_mdv2(place_address),
-        },
-    )
-    return {"item_text": item_text}
+    if item:
+        await dialog_manager.done(
+            result={
+                "item_id": item.id,
+                "name": item.name,
+                "unit": item.unit,
+                "count": item.count,
+            },
+        )
+    else:
+        await clb.answer("Item not found", show_alert=True)
 
 
 # ========== Диалог ==========
@@ -180,6 +221,12 @@ inventory_dialog = Dialog(
             width=1,
             height=8,
             hide_on_single_page=True,
+        ),
+        Button(
+            L10nFormat("cancel"),
+            id="cancel_inventory",
+            on_click=lambda c, b, m: m.done(),
+            when="is_selection_mode",
         ),
         getter=get_categories_data,
         state=ViewInventory.SELECT_CATEGORY,
@@ -208,7 +255,7 @@ inventory_dialog = Dialog(
             L10nFormat("clear-search"),
             id="clear_search",
             on_click=clear_search,
-            when=F["search_query"],
+            when="search_query",
         ),
         Back(L10nFormat("back")),
         getter=get_items_data,
@@ -217,6 +264,12 @@ inventory_dialog = Dialog(
     # --- Окно 3: детали Item ---
     Window(
         Format("{item_text}"),
+        Button(
+            L10nFormat("select-item"),
+            id="select_item_btn",
+            on_click=on_item_chosen,
+            when="is_selection_mode",
+        ),
         Back(L10nFormat("back")),
         getter=get_item_detail,
         state=ViewInventory.VIEW_ITEM,

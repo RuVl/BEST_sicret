@@ -31,9 +31,7 @@ async def main():
             BotCommand(
                 command="create_equipment_apply", description="Создать заявку по стаффу"
             ),
-            BotCommand(
-                command="requisites_apply", description="Создать заявку на рефанд"
-            ),
+            BotCommand(command="refund", description="Создать заявку на рефанд"),
             BotCommand(command="inventory", description="Просмотр имущества"),
         ],
         scope=BotCommandScopeDefault(),

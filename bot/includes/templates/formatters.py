@@ -4,7 +4,7 @@ from typing import Any
 from structlog import get_logger
 from structlog.typing import FilteringBoundLogger
 
-logger: FilteringBoundLogger = get_logger('templates.formatters')
+logger: FilteringBoundLogger = get_logger("templates.formatters")
 
 
 class Formatter(ABC):
@@ -23,31 +23,32 @@ class IntegerFormatter(Formatter):
         try:
             return int(value)
         except ValueError:
-            raise ValueError('invalid-integer-input')
+            raise ValueError("invalid-integer-input")
 
 
 class NumberFormatter(Formatter):
     def format(self, value: str) -> float:
+        value = value.replace(",", ".")
         try:
             return float(value)
         except ValueError:
-            raise ValueError('invalid-number-input')
+            raise ValueError("invalid-number-input")
 
 
 class BooleanFormatter(Formatter):
     def format(self, value: str) -> bool:
-        if value in ['Да', 'Yes']:
+        if value in ["Да", "Yes"]:
             return True
-        elif value in ['Нет', 'No']:
+        elif value in ["Нет", "No"]:
             return False
         else:
-            raise ValueError('invalid-boolean-input')
+            raise ValueError("invalid-boolean-input")
 
 
 class DummyFormatter(Formatter):
     def __init__(self, formatter_type):
         if formatter_type:
-            logger.warning(f'{formatter_type} not implemented!')
+            logger.warning(f"{formatter_type} not implemented!")
 
     def format(self, value: str) -> str:
         return value

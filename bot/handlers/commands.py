@@ -28,7 +28,7 @@ async def choose_template(msg: Message, dialog_manager: DialogManager):
     )
 
 
-@router.message(Command("requisites_apply"))
+@router.message(Command("refund"))
 async def start_refund(msg: Message, dialog_manager: DialogManager):
     await dialog_manager.start(
         CreateRefundApply.VIEW,

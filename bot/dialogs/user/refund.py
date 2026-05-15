@@ -14,12 +14,14 @@ from fluent.runtime import FluentLocalization
 from structlog.typing import FilteringBoundLogger
 
 from env import ProjectKeys, TelegramKeys
-from includes import load_schema
+from includes import load_schema, validate_data
 from includes.templates import create_context
 from includes.templates.contexts import BaseContext, PrimitiveContext
 from middlewares import L10N_FORMAT_KEY, LOGGING_KEY
 from state_machines import CreateRefundApply
 from utils import escape_mdv2, L10nFormat
+
+DIALOG_SCHEMA = "refunds/apply.json"
 
 
 # ========== Окно просмотра ==========
@@ -33,7 +35,7 @@ async def create_refund_apply(
 
     if ctx is None:
         try:
-            schema = load_schema("refunds/apply.json")
+            schema = load_schema(DIALOG_SCHEMA)
             ctx = create_context(schema)
             dialog_manager.dialog_data.update(ctx=ctx)
         except FileNotFoundError as e:
@@ -84,6 +86,13 @@ async def send_apply(
     ctx: BaseContext = dialog_manager.dialog_data.get("ctx")
 
     raw_data = ctx.generate_context()
+    schema = load_schema(DIALOG_SCHEMA)
+
+    success, error_msg = validate_data(schema, raw_data)
+    if not success:
+        await clb.answer(error_msg, show_alert=True)
+        return
+
     raw_data["bill_filename"] = dialog_manager.dialog_data.get("bill_filename")
     raw_data["username"] = clb.from_user.username or clb.from_user.id
 
@@ -162,6 +171,8 @@ async def download_bill(
     widget: MessageInput,
     dialog_manager: DialogManager,
 ) -> None:
+    logger: FilteringBoundLogger = dialog_manager.middleware_data.get(LOGGING_KEY)
+
     document = msg.document
     if document.file_size > 5 * 1024 * 1024:  # 5 MB
         l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
@@ -171,6 +182,12 @@ async def download_bill(
     # мб это вынести в инициализацию проекта
     ProjectKeys.REFUND_BILLS_DIR.mkdir(parents=True, exist_ok=True)
 
+    # Удаляем предыдущий загруженный чек
+    if old_bill_path := dialog_manager.dialog_data.get("bill_path"):
+        await logger.ainfo("Delete old refund", file_path=old_bill_path)
+        Path(old_bill_path).unlink(missing_ok=True)
+
+    # Формируем путь для нового чека
     filename = Path(document.file_name or "no_name")
     save_filename = f"{filename.stem}_{document.file_id}{filename.suffix}"
     file_path = ProjectKeys.REFUND_BILLS_DIR / save_filename
@@ -181,16 +198,13 @@ async def download_bill(
         action=ChatAction.UPLOAD_DOCUMENT,
         initial_sleep=0,
     ):
+        await logger.ainfo("Downloading refund bill", file_path=file_path)
         file = await msg.bot.get_file(document.file_id)
         await msg.bot.download_file(file.file_path, destination=file_path)
 
-    # Удаляем предыдущий загруженный документ
-    if old_bill_path := dialog_manager.dialog_data.get("bill_path"):
-        Path(old_bill_path).unlink(missing_ok=True)
-
     # мб проверку на тип файла добавить (pdf, jpg, etc.)
-    dialog_manager.dialog_data["bill_filename"] = filename
-    dialog_manager.dialog_data["bill_path"] = str(file_path)
+    dialog_manager.dialog_data["bill_filename"] = str(filename)
+    dialog_manager.dialog_data["bill_path"] = file_path
 
     await dialog_manager.switch_to(CreateRefundApply.VIEW)
 

@@ -42,12 +42,9 @@ class ProjectKeys:
         "TEMPLATES_DIR",
         default=RESOURCE_DIR / "templates/",
     )
-    EQUIPMENT_PERSON_DATA_DIR: Final[Path] = env(
-        "EQUIPMENT_PERSON_DATA_DIR",
-        default=RESOURCE_DIR / "equipments/",
-    )
     REFUND_BILLS_DIR: Final[Path] = env(
-        "REFUND_BILLS_DIR", default=RESOURCE_DIR / "refund_bills/"
+        "REFUND_BILLS_DIR",
+        default=RESOURCE_DIR / "refund_bills/",
     )
 
     LOCALE_DIR: Final[Path] = env("LOCALE_DIR", default=Path("l10n/"))
