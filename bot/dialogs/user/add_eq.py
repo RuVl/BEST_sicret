@@ -1,3 +1,4 @@
+from copy import deepcopy
 from typing import Any
 
 from aiogram import F
@@ -11,13 +12,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.methods.category import get_categories, create_category, get_category_by_id
 from database.methods.item import create_item
+from database.methods.item import get_places, get_place_by_id
 from includes.equipment import load_schema, validate_data, create_context
 from includes.templates.contexts import BaseContext, PrimitiveContext
-from middlewares import L10N_FORMAT_KEY
+from middlewares import L10N_FORMAT_KEY, DB_SESSION_KEY
 from state_machines import EquipmentAdd
 from utils import L10nFormat, escape_mdv2
 
 DIALOG_SCHEMA = 'add_equipment'
+
+
+def _clean_context_data(data: dict) -> dict:
+    return {k: v for k, v in data.items() if v is not None}
+
+
+def _get_place_title(place: Any) -> str:
+    for attr in ('name', 'title', 'address'):
+        value = getattr(place, attr, None)
+        if value:
+            return str(value)
+    return f'ID {getattr(place, "id", "")}'
 
 
 def _render_context(context: BaseContext) -> tuple[str, list[tuple[str, str]]]:
@@ -29,7 +43,7 @@ def _render_context(context: BaseContext) -> tuple[str, list[tuple[str, str]]]:
             continue
 
         value = escape_mdv2(str(child._value)) if child._value is not None else '—'
-        description = escape_mdv2(str(child.description))
+        description = str(child.description)
         required_prefix = r'\* ' if child.required else ''
 
         view_lines.append(f'{required_prefix}*{description}*: {value}')
@@ -39,7 +53,6 @@ def _render_context(context: BaseContext) -> tuple[str, list[tuple[str, str]]]:
 
 
 def _restore_context_data(context: BaseContext, data: dict):
-    """Восстанавливает данные в контекст из словаря"""
     for key, value in data.items():
         if key in context._children:
             child = context._children[key]
@@ -47,7 +60,6 @@ def _restore_context_data(context: BaseContext, data: dict):
                 child._value = value
 
 
-# ========== Окно просмотра ==========
 async def get_equipment_context(dialog_manager: DialogManager, **_kwargs) -> dict[str, Any]:
     l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
 
@@ -60,33 +72,35 @@ async def get_equipment_context(dialog_manager: DialogManager, **_kwargs) -> dic
         return {
             'view': escape_mdv2(l10n.format_value('schema-not-found')),
             'data_kb': [],
-            'category_view': escape_mdv2(l10n.format_value('category-view', args={
-                'name': '—'
-            })),
+            'category_view': r'*Категория*: —',
+            'place_view': r'*Место хранения*: —',
             'can_submit': False,
             L10N_FORMAT_KEY: l10n,
         }
 
-    # ИСПРАВЛЕНИЕ: create_context принимает только schema, без context_data
-    context = create_context(schema)
-    
-    # Восстанавливаем данные из dialog_data
-    context_data = dialog_manager.dialog_data.get('context', {})
+    context = create_context(deepcopy(schema))
+
+    context_data = _clean_context_data(dialog_manager.dialog_data.get('context', {}))
     if context_data:
         _restore_context_data(context, context_data)
 
     view, data_kb = _render_context(context)
 
     category_name = dialog_manager.dialog_data.get('category_name') or '—'
-    category_view = escape_mdv2(l10n.format_value('category-view', args={
-        'name': escape_mdv2(str(category_name))
-    }))
+    place_name = dialog_manager.dialog_data.get('place_name') or '—'
+
+    can_submit, _ = validate_data(schema, context_data)
 
     return {
         'view': view,
         'data_kb': data_kb,
-        'category_view': category_view,
-        'can_submit': validate_data(schema, context_data)[0] and bool(dialog_manager.dialog_data.get('category_id')),
+        'category_view': rf'*Категория*: {escape_mdv2(str(category_name))}',
+        'place_view': rf'*Место хранения*: {escape_mdv2(str(place_name))}',
+        'can_submit': (
+            can_submit
+            and bool(dialog_manager.dialog_data.get('category_id'))
+            and bool(dialog_manager.dialog_data.get('place_id'))
+        ),
         L10N_FORMAT_KEY: l10n,
     }
 
@@ -107,16 +121,20 @@ async def on_submit(
     dialog_manager: DialogManager
 ):
     l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
-    session: AsyncSession = dialog_manager.middleware_data.get('session')
+    session: AsyncSession = dialog_manager.middleware_data.get(DB_SESSION_KEY)
 
-    # Проверка session
     if session is None:
         await clb.answer(l10n.format_value('database-error'), show_alert=True)
         return
 
     category_id = dialog_manager.dialog_data.get('category_id')
     if not category_id:
-        await clb.answer(l10n.format_value('invalid-category'), show_alert=True)
+        await clb.answer('Сначала выберите категорию', show_alert=True)
+        return
+
+    place_id = dialog_manager.dialog_data.get('place_id')
+    if not place_id:
+        await clb.answer('Сначала выберите место хранения', show_alert=True)
         return
 
     try:
@@ -125,7 +143,7 @@ async def on_submit(
         await clb.answer(l10n.format_value('schema-not-found'), show_alert=True)
         return
 
-    context_data = dialog_manager.dialog_data.get('context', {})
+    context_data = _clean_context_data(dialog_manager.dialog_data.get('context', {}))
     success, error_msg = validate_data(schema, context_data)
     if not success:
         await clb.answer(error_msg or l10n.format_value('invalid-data'), show_alert=True)
@@ -138,12 +156,12 @@ async def on_submit(
             category_id=category_id,
             count=context_data.get('count', 0),
             unit=context_data.get('unit', ''),
-            description=context_data.get('description', '')
+            place_id=place_id,
         )
 
         await clb.message.answer(
             escape_mdv2(l10n.format_value('item-saved', args={
-                'name': escape_mdv2(item.name)
+                'name': item.name
             }))
         )
         await dialog_manager.done()
@@ -153,7 +171,6 @@ async def on_submit(
         print(f'Error creating item: {e}')
 
 
-# ========== Окно редактирования ==========
 async def get_property_context(dialog_manager: DialogManager, **_kwargs) -> dict[str, Any]:
     l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
     current_field = dialog_manager.dialog_data.get('current_field')
@@ -169,25 +186,21 @@ async def get_property_context(dialog_manager: DialogManager, **_kwargs) -> dict
             L10N_FORMAT_KEY: l10n,
         }
 
-    # ИСПРАВЛЕНИЕ: create_context принимает только schema
-    context = create_context(schema)
-    
-    # Восстанавливаем данные
-    context_data = dialog_manager.dialog_data.get('context', {})
+    context = create_context(deepcopy(schema))
+
+    context_data = _clean_context_data(dialog_manager.dialog_data.get('context', {}))
     if context_data:
         _restore_context_data(context, context_data)
-    
+
     child = context._children.get(current_field)
 
     if isinstance(child, PrimitiveContext):
-        field_description = escape_mdv2(str(child.description))
+        field_description = str(child.description)
     else:
         field_description = escape_mdv2(str(current_field))
 
     return {
-        'question': escape_mdv2(l10n.format_value('field-input-prompt', args={
-            'field': field_description
-        })),
+        'question': f'Введите значение для: {field_description}',
         L10N_FORMAT_KEY: l10n,
     }
 
@@ -206,11 +219,9 @@ async def set_property(msg: Message, _: TextInput, dialog_manager: DialogManager
         await msg.answer(escape_mdv2(l10n.format_value('schema-not-found')))
         return
 
-    # ИСПРАВЛЕНИЕ: create_context принимает только schema
-    context = create_context(schema)
-    
-    # Восстанавливаем существующие данные
-    context_data = dialog_manager.dialog_data.get('context', {})
+    context = create_context(deepcopy(schema))
+
+    context_data = _clean_context_data(dialog_manager.dialog_data.get('context', {}))
     if context_data:
         _restore_context_data(context, context_data)
 
@@ -229,7 +240,10 @@ async def set_property(msg: Message, _: TextInput, dialog_manager: DialogManager
                 await msg.answer(escape_mdv2(l10n.format_value('invalid-number')))
                 return
         else:
-            parsed_value = value
+            parsed_value = value.strip()
+            if not parsed_value:
+                await msg.answer('Поле не может быть пустым')
+                return
     except ValueError:
         await msg.answer(escape_mdv2(l10n.format_value('invalid-number')))
         return
@@ -239,19 +253,16 @@ async def set_property(msg: Message, _: TextInput, dialog_manager: DialogManager
         return
 
     context._children[current_field]._value = parsed_value
-    
-    # ИСПРАВЛЕНИЕ: Используем get_value() вместо to_dict()
-    updated_context_data = context.get_value()
+
+    updated_context_data = _clean_context_data(context.get_value())
     dialog_manager.dialog_data.update(context=updated_context_data)
     await dialog_manager.switch_to(EquipmentAdd.START)
 
 
-# ========== Окно выбора категории ==========
 async def get_categories_data(dialog_manager: DialogManager, **_kwargs) -> dict[str, Any]:
     l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
-    session: AsyncSession = dialog_manager.middleware_data.get('session')
+    session: AsyncSession = dialog_manager.middleware_data.get(DB_SESSION_KEY)
 
-    # ИСПРАВЛЕНИЕ: Проверка на None для session
     if session is None:
         return {
             'categories': [],
@@ -279,13 +290,12 @@ async def on_category_selected(
     category_id: str
 ):
     l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
-    session: AsyncSession = dialog_manager.middleware_data.get('session')
+    session: AsyncSession = dialog_manager.middleware_data.get(DB_SESSION_KEY)
 
-    # ИСПРАВЛЕНИЕ: Проверка session на None
     if session is None:
         await clb.answer(l10n.format_value('database-error'), show_alert=True)
         return
-    
+
     try:
         category = await get_category_by_id(session, int(category_id))
     except Exception as e:
@@ -301,9 +311,7 @@ async def on_category_selected(
         category_name=category.name,
     )
 
-    await clb.answer(escape_mdv2(l10n.format_value('category-selected', args={
-        'name': category.name
-    })))
+    await clb.answer(f'Выбрана категория: {category.name}')
     await dialog_manager.switch_to(EquipmentAdd.START)
 
 
@@ -315,7 +323,64 @@ async def on_create_category_click(
     await dialog_manager.switch_to(EquipmentAdd.CREATE_CATEGORY)
 
 
-# ========== Окно создания категории ==========
+async def get_places_data(dialog_manager: DialogManager, **_kwargs) -> dict[str, Any]:
+    l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
+    session: AsyncSession = dialog_manager.middleware_data.get(DB_SESSION_KEY)
+
+    if session is None:
+        return {
+            'places': [],
+            L10N_FORMAT_KEY: l10n,
+        }
+
+    try:
+        places = await get_places(session)
+        return {
+            'places': [
+                (escape_mdv2(_get_place_title(place)), str(place.id))
+                for place in places
+            ],
+            L10N_FORMAT_KEY: l10n,
+        }
+    except Exception as e:
+        print(f'Error getting places: {e}')
+        return {
+            'places': [],
+            L10N_FORMAT_KEY: l10n,
+        }
+
+
+async def on_place_selected(
+    clb: CallbackQuery,
+    _select: Select,
+    dialog_manager: DialogManager,
+    place_id: str
+):
+    session: AsyncSession = dialog_manager.middleware_data.get(DB_SESSION_KEY)
+
+    if session is None:
+        await clb.answer('Ошибка подключения к БД', show_alert=True)
+        return
+
+    try:
+        place = await get_place_by_id(session, int(place_id))
+    except Exception as e:
+        print(f'Error getting place: {e}')
+        place = None
+
+    if not place:
+        await clb.answer('Некорректное место хранения', show_alert=True)
+        return
+
+    dialog_manager.dialog_data.update(
+        place_id=place.id,
+        place_name=_get_place_title(place),
+    )
+
+    await clb.answer(f'Выбрано место: {_get_place_title(place)}')
+    await dialog_manager.switch_to(EquipmentAdd.START)
+
+
 async def on_category_name_input(
     msg: Message,
     _: TextInput,
@@ -323,9 +388,8 @@ async def on_category_name_input(
     text: str
 ):
     l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
-    session: AsyncSession = dialog_manager.middleware_data.get('session')
+    session: AsyncSession = dialog_manager.middleware_data.get(DB_SESSION_KEY)
 
-    # ИСПРАВЛЕНИЕ: Проверка session на None
     if session is None:
         await msg.answer(escape_mdv2(l10n.format_value('database-error')))
         return
@@ -340,7 +404,7 @@ async def on_category_name_input(
 
         await msg.answer(
             escape_mdv2(l10n.format_value('category-created', args={
-                'name': escape_mdv2(category.name)
+                'name': category.name
             }))
         )
         await dialog_manager.switch_to(EquipmentAdd.START)
@@ -351,17 +415,16 @@ async def on_category_name_input(
 
 
 dialog = Dialog(
-    Window(  # Окно просмотра
+    Window(
         Multi(
             L10nFormat('add-equipment-title'),
             Const('\n\n'),
             L10nFormat('welcome-text'),
             Const('\n\n'),
             Format('{view}\n\n'),
-            Const(r'_\* \- '),
-            L10nFormat('required-hint'),
-            Const('_\n\n'),
-            Format('{category_view}'),
+            Const(r'_\* \- обязательные поля_\n\n'),
+            Format('{category_view}\n'),
+            Format('{place_view}'),
             sep=''
         ),
         ScrollingGroup(
@@ -383,6 +446,11 @@ dialog = Dialog(
                 id='switch_to_category',
                 state=EquipmentAdd.SELECT_CATEGORY,
             ),
+            SwitchTo(
+                Const('Выбрать место'),
+                id='switch_to_place',
+                state=EquipmentAdd.SELECT_PLACE,
+            ),
         ),
         Row(
             Button(
@@ -397,11 +465,12 @@ dialog = Dialog(
         state=EquipmentAdd.START,
         preview_add_transitions=[
             SwitchTo('', '', EquipmentAdd.SELECT_CATEGORY),
+            SwitchTo('', '', EquipmentAdd.SELECT_PLACE),
             SwitchTo('', '', EquipmentAdd.ADD),
             SwitchTo('', '', EquipmentAdd.CREATE_CATEGORY),
         ]
     ),
-    Window(  # Окно редактирования
+    Window(
         Format('{question}'),
         TextInput('input_property', on_success=set_property),
         Back(L10nFormat('back-button')),
@@ -409,7 +478,7 @@ dialog = Dialog(
         state=EquipmentAdd.ADD,
         preview_add_transitions=[Back()]
     ),
-    Window(  # Окно выбора категории
+    Window(
         L10nFormat('select-category-prompt'),
         ScrollingGroup(
             Select(
@@ -439,7 +508,27 @@ dialog = Dialog(
             SwitchTo('', '', EquipmentAdd.CREATE_CATEGORY),
         ]
     ),
-    Window(  # Окно создания категории
+    Window(
+        Const('Выберите место хранения'),
+        ScrollingGroup(
+            Select(
+                Format('{item[0]}'),
+                id='place_select',
+                item_id_getter=lambda x: x[1],
+                items='places',
+                on_click=on_place_selected
+            ),
+            id='place_scroll',
+            width=1,
+            height=8,
+            hide_on_single_page=True
+        ),
+        Back(L10nFormat('back-button')),
+        getter=get_places_data,
+        state=EquipmentAdd.SELECT_PLACE,
+        preview_add_transitions=[Back()]
+    ),
+    Window(
         L10nFormat('category-name-prompt'),
         TextInput('category_name_input', on_success=on_category_name_input),
         Back(L10nFormat('back-button')),

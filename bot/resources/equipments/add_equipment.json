@@ -19,12 +19,8 @@
       "type": "string",
       "description": "Единица измерения ",
       "question": "Введите единицу измерения:"
-    },
-    "description": {
-      "type": "string",
-      "description": "Описание",
-      "question": "Введите описание предмета:"
     }
+
   },
   "required": [
     "name",
