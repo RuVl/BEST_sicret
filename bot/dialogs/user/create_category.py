@@ -5,10 +5,10 @@ from aiogram_dialog import Dialog, Window, DialogManager
 from aiogram_dialog.widgets.input import TextInput
 from aiogram_dialog.widgets.kbd import Button
 from fluent.runtime import FluentLocalization
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from database.main import async_session
 from database.methods.category import create_category
-from middlewares import L10N_FORMAT_KEY, DB_SESSION_KEY
+from middlewares import L10N_FORMAT_KEY
 from state_machines import CategoryCreate
 from utils import L10nFormat, escape_mdv2
 
@@ -30,14 +30,10 @@ async def on_category_name_input(
     text: str
 ):
     l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
-    session: AsyncSession = dialog_manager.middleware_data.get(DB_SESSION_KEY)
-
-    if session is None:
-        await msg.answer(escape_mdv2(l10n.format_value('database-error')))
-        return
 
     try:
-        category = await create_category(session, name=text)
+        async with async_session() as session:
+            category = await create_category(session, name=text)
 
         await msg.answer(
             escape_mdv2(l10n.format_value('category-created', args={

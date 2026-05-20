@@ -9,20 +9,21 @@ from aiogram_dialog.widgets.input import TextInput
 from aiogram_dialog.widgets.kbd import ScrollingGroup, Select, Row, Button, SwitchTo, Cancel, Start
 from aiogram_dialog.widgets.text import Format, Multi, Const
 from fluent.runtime import FluentLocalization
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from database.main import async_session
 from database.methods.category import get_categories, get_category_by_id
 from database.methods.item import create_item
 from database.methods.item import get_places, get_place_by_id
-from includes.equipment import load_schema, validate_data, create_context
+from includes import load_schema, validate_data
+from includes.templates import create_context
 from includes.templates.contexts import BaseContext, PrimitiveContext
-from middlewares import L10N_FORMAT_KEY, DB_SESSION_KEY
+from middlewares import L10N_FORMAT_KEY
 from state_machines import EquipmentAdd, CategoryCreate
 from utils import L10nFormat, escape_mdv2
 
 logger = logging.getLogger(__name__)
 
-DIALOG_SCHEMA = 'add_equipment'
+DIALOG_SCHEMA = 'equipments/add_equipment.json'
 
 
 def _clean_context_data(data: dict) -> dict:
@@ -146,11 +147,6 @@ async def on_submit(
     dialog_manager: DialogManager
 ):
     l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
-    session: AsyncSession = dialog_manager.middleware_data.get(DB_SESSION_KEY)
-
-    if session is None:
-        await clb.answer(l10n.format_value('database-error'), show_alert=True)
-        return
 
     category_id = dialog_manager.dialog_data.get('category_id')
     place_id = dialog_manager.dialog_data.get('place_id')
@@ -176,14 +172,15 @@ async def on_submit(
         return
 
     try:
-        item = await create_item(
-            session=session,
-            name=context_data['name'],
-            category_id=category_id,
-            count=context_data['count'],
-            unit=context_data['unit'],
-            place_id=place_id,
-        )
+        async with async_session() as session:
+            item = await create_item(
+                session=session,
+                name=context_data['name'],
+                category_id=category_id,
+                count=context_data['count'],
+                unit=context_data['unit'],
+                place_id=place_id,
+            )
 
         await clb.message.answer(
             escape_mdv2(l10n.format_value('item-saved', args={'name': item.name}))
@@ -281,13 +278,10 @@ async def set_property(msg: Message, _: TextInput, dialog_manager: DialogManager
 # ========== Окно выбора категории ==========
 async def get_categories_data(dialog_manager: DialogManager, **_kwargs) -> dict[str, Any]:
     l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
-    session: AsyncSession = dialog_manager.middleware_data.get(DB_SESSION_KEY)
-
-    if session is None:
-        return {'categories': [], L10N_FORMAT_KEY: l10n}
 
     try:
-        categories = await get_categories(session)
+        async with async_session() as session:
+            categories = await get_categories(session)
         return {
             'categories': [(escape_mdv2(cat.name), str(cat.id)) for cat in categories],
             L10N_FORMAT_KEY: l10n,
@@ -304,14 +298,10 @@ async def on_category_selected(
     category_id: str
 ):
     l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
-    session: AsyncSession = dialog_manager.middleware_data.get(DB_SESSION_KEY)
-
-    if session is None:
-        await clb.answer(l10n.format_value('database-error'), show_alert=True)
-        return
 
     try:
-        category = await get_category_by_id(session, int(category_id))
+        async with async_session() as session:
+            category = await get_category_by_id(session, int(category_id))
     except Exception:
         logger.exception("Error getting category id=%s", category_id)
         category = None
@@ -332,13 +322,10 @@ async def on_category_selected(
 # ========== Окно выбора места ==========
 async def get_places_data(dialog_manager: DialogManager, **_kwargs) -> dict[str, Any]:
     l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
-    session: AsyncSession = dialog_manager.middleware_data.get(DB_SESSION_KEY)
-
-    if session is None:
-        return {'places': [], L10N_FORMAT_KEY: l10n}
 
     try:
-        places = await get_places(session)
+        async with async_session() as session:
+            places = await get_places(session)
         return {
             'places': [
                 (escape_mdv2(_get_place_title(p)), str(p.id))
@@ -358,14 +345,10 @@ async def on_place_selected(
     place_id: str
 ):
     l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
-    session: AsyncSession = dialog_manager.middleware_data.get(DB_SESSION_KEY)
-
-    if session is None:
-        await clb.answer(l10n.format_value('database-error'), show_alert=True)
-        return
 
     try:
-        place = await get_place_by_id(session, int(place_id))
+        async with async_session() as session:
+            place = await get_place_by_id(session, int(place_id))
     except Exception:
         logger.exception("Error getting place id=%s", place_id)
         place = None
@@ -394,9 +377,7 @@ dialog = Dialog(
             L10nFormat('welcome-text'),
             Const('\n\n'),
             Format('{view}\n\n'),
-            Const(r'_\* \- '),
             L10nFormat('required-hint'),
-            Const('_\n\n'),
             Format('{category_view}\n'),
             Format('{place_view}'),
             sep=''

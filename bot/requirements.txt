@@ -1,43 +1,41 @@
 # Enviroment
-python-environ~=0.4.54
+python-environ==0.4.54
 
 # Telegram
-aiogram~=3.22.0  # general aiogram
-aiogram-dialog[tools]~=2.4.0  # easy dialogs for aiogram
+aiogram==3.26.0  # general aiogram
+aiogram-dialog[tools]==2.6.0  # easy dialogs for aiogram
 # uvloop  # fast, drop-in replacement of the built-in asyncio event loop. Windows not supported (uncomment if you are on Linux)
-ujson~=5.11.0  # ultra fast JSON encoder and decoder written in pure C
-aiohttp[speedups]==3.12.15  # should be < 3.13 for aiogram
+ujson==5.12.0  # ultra fast JSON encoder and decoder written in pure C
+aiohttp[speedups]==3.13.4  # should be < 3.13 for aiogram
 # aiohttp[speedups]==3.9.5 # for windows use this instead (bcs conflicts with aiodns)
 # cchardet # (aiohttp speedup) high speed universal character encoding detector
-aiodns~=3.5.0 # (aiohttp speedup) provides a simple way for doing asynchronous DNS resolutions
+aiodns==3.5.0 # (aiohttp speedup) provides a simple way for doing asynchronous DNS resolutions
 pycares==4.11.0 # for async dns resolution (aiodns requirement)
 
 # Cache
-redis[hiredis]~=7.0.1
+redis[hiredis]==7.4.0
 
 # Logging
-structlog~=25.5.0
-colorama~=0.4.6
+structlog==25.5.0
+colorama==0.4.6
 
 # Localization
-fluent.runtime~=0.4.0
-fluent.syntax~=0.19.0
+fluent.runtime==0.4.0
+fluent.syntax==0.19.0
 
 # Templates (.docx)
-docxtpl~=0.20.0
-jsonschema~=4.25.1
+docxtpl==0.20.2
+jsonschema==4.26.0
 
 # Database
-alembic~=1.17.1  # migrations
-alembic-postgresql-enum~=1.8.0  # psql enum migrations
-sqlalchemy[asyncio]~=2.0.44  # ORM
-asyncpg~=0.30.0  # driver
+alembic==1.18.4  # migrations
+alembic-postgresql-enum==1.10.0  # psql enum migrations
+SQLAlchemy[asyncio]==2.0.48  # ORM
+asyncpg==0.31.0  # driver
 
-# Database
-alembic~=1.17.0  # migrations
-alembic-postgresql-enum~=1.8.0  # psql enum migrations
-SQLAlchemy[asyncio]~=2.0.40  # ORM
-asyncpg~=0.30.0  # driver
+# Fuzzy Search
+fuzzywuzzy==0.18.0
+python-Levenshtein==0.27.3
 
 ###############################################################
 ###     Some useful async libraries to use with aiogram     ###

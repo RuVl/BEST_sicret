@@ -1,4 +1,4 @@
-foreign-person = Добавлять имущество может только казначей и его команда, уходи!
+foreign-person = Добавлять имущество может только казначей и его команда, уходи
 
 add-equipment-title = Добавление имущества в базу
 welcome-text = Заполните форму для добавления нового имущества
@@ -11,7 +11,7 @@ select-place-prompt = Выберите место хранения
 select-place-btn = Выбрать место
 
 category-name-prompt = Введите название новой категории
-category-created = Категория "{ $name }" успешно создана!
+category-created = Категория "{ $name }" успешно создана
 category-selected = Выбрана категория: { $name }
 category-error = Ошибка при создании категории
 category-label = Категория
@@ -24,7 +24,7 @@ place-invalid = Некорректное место хранения
 field-input-prompt = Введите значение для: { $field }
 field-empty-error = Поле не может быть пустым
 
-item-saved = Имущество "{ $name }" успешно добавлено!
+item-saved = Имущество "{ $name }" успешно добавлено
 item-error = Ошибка при добавлении имущества
 
 back-button = Назад

@@ -1,13 +1,14 @@
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from database.models.category import Category
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from database.models import Category
 
 
 async def get_categories(session: AsyncSession) -> list[Category]:
     query = select(Category)
     result = await session.execute(query)
     categories = result.scalars().all()
-    return categories
+    return list(categories)
 
 async def get_category_by_id(session: AsyncSession, category_id: int) -> Category | None:
     query = select(Category).where(Category.id == category_id)
