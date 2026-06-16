@@ -7,15 +7,17 @@ from .base_context import BaseContext
 
 
 class ObjectContext(BaseContext):
-    def __init__(self, schema: dict, parent: BaseContext = None, required: bool = False):
+    def __init__(
+        self, schema: dict, parent: BaseContext = None, required: bool = False
+    ):
         super().__init__(schema, parent, required)
         if self.btn_name is None:
-            self.btn_name = schema.get('title', 'No button name')
+            self.btn_name = schema.get("title", "No button name")
 
-        required = schema.get('required', [])
+        required = schema.get("required", [])
         self._children = {
             key: create_context(prop_schema, self, required=key in required)
-            for key, prop_schema in schema.get('properties', {}).items()
+            for key, prop_schema in schema.get("properties", {}).items()
         }
 
     def get_value(self) -> dict:
@@ -29,10 +31,7 @@ class ObjectContext(BaseContext):
         return self._children.get(prop)
 
     def filled_required(self) -> bool:
-        return all(
-            child.filled_required()
-            for child in self._children.values()
-        )
+        return all(child.filled_required() for child in self._children.values())
 
     def render_view(self, l10n: FluentLocalization) -> str:
         parts = []
@@ -42,17 +41,19 @@ class ObjectContext(BaseContext):
             parts.append(f"_{self.description}_")
 
         for key, child in self._children.items():
-            parts.append(fr'\-{r' \*' if child.required else ''} {child.render_view(l10n)}')
-        return '\n'.join(parts)
+            parts.append(
+                rf"\-{r' \*' if child.required else ''} {child.render_view(l10n)}"
+            )
+        return "\n".join(parts)
 
     def render_data_kb(self, l10n: FluentLocalization) -> list[tuple[str, str | int]]:
         return list(map(self.property2button, self._children.items()))
 
     @staticmethod
     def property2button(prop: tuple[str, BaseContext]) -> tuple[str, str | int]:
-        """ Адаптер для кнопок для TemplateContext с type: object """
+        """Адаптер для кнопок для TemplateContext с type: object"""
         key, child = prop
         text = child.btn_name
         if child.filled_required() and child.get_value() is not None:
-            text += ' ✅'
+            text += " ✅"
         return text, key

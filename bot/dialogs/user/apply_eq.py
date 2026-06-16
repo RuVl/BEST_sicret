@@ -7,7 +7,7 @@ from aiogram_dialog.widgets.kbd import Button, ScrollingGroup, Select, SwitchTo
 from aiogram_dialog.widgets.text import Format, Multi
 from fluent.runtime import FluentLocalization
 
-from env import TelegramKeys
+from env import settings
 from includes import load_schema, validate_data
 from includes.templates import create_context
 from includes.templates.contexts import BaseContext, PrimitiveContext
@@ -242,15 +242,15 @@ async def on_submit(clb: CallbackQuery, widget: Button, dialog_manager: DialogMa
         await clb.answer(error_msg, show_alert=True)
         return
 
-    if TelegramKeys.TREASURER_ID:
+    if settings.telegram.TREASURER_ID:
         await clb.bot.send_message(
-            TelegramKeys.TREASURER_ID,
+            settings.telegram.TREASURER_ID,
             l10n.format_value(
                 "equipment-chosen",
                 args={"by_username": escape_mdv2(clb.from_user.username)},
             ),
         )
-        await clb.message.forward(TelegramKeys.TREASURER_ID)
+        await clb.message.forward(settings.telegram.TREASURER_ID)
         await clb.answer(l10n.format_value("application-saved"), show_alert=True)
     else:
         await clb.answer(l10n.format_value("application-error"), show_alert=True)

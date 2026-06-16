@@ -10,7 +10,7 @@ from aiogram_dialog.widgets.kbd import Button, Row, ScrollingGroup, Select, Url
 from aiogram_dialog.widgets.text import Format, Multi
 from fluent.runtime import FluentLocalization
 
-from env import TelegramKeys
+from env import settings
 from includes import (
     generate_document,
     get_available_templates,
@@ -46,9 +46,9 @@ async def on_template_selected(
         return
 
     # Send notification to president if exists
-    if TelegramKeys.PRESIDENT_ID:
+    if settings.telegram.PRESIDENT_ID:
         await clb.bot.send_message(
-            TelegramKeys.PRESIDENT_ID,
+            settings.telegram.PRESIDENT_ID,
             l10n.format_value(
                 "template-chosen",
                 args={
@@ -127,9 +127,9 @@ async def response_document(
         sent_doc = await clb.message.answer_document(file)
 
         # Send it to president if exist
-        if TelegramKeys.PRESIDENT_ID:
+        if settings.telegram.PRESIDENT_ID:
             await clb.bot.send_message(
-                TelegramKeys.PRESIDENT_ID,
+                settings.telegram.PRESIDENT_ID,
                 l10n.format_value(
                     "document-generated",
                     args={
@@ -138,7 +138,7 @@ async def response_document(
                     },
                 ),
             )
-            await sent_doc.forward(TelegramKeys.PRESIDENT_ID)
+            await sent_doc.forward(settings.telegram.PRESIDENT_ID)
 
     except TelegramNetworkError as e:
         await clb.answer(l10n.format_value("telegram-network-error"), show_alert=True)

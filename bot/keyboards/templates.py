@@ -6,7 +6,7 @@ from keyboards.common import paginate
 
 
 def choose_template_ikb(*, page=0, templates: list[str] = None) -> InlineKeyboardMarkup:
-    """ Returns inline keyboard to choose user """
+    """Returns inline keyboard to choose user"""
 
     if templates is None:
         templates = get_available_templates()
@@ -20,9 +20,11 @@ def choose_template_ikb(*, page=0, templates: list[str] = None) -> InlineKeyboar
     builder = paginate(templates, page, template2ikb, TemplateFactory.__prefix__)
 
     # Add a special link
-    builder.row(InlineKeyboardButton(
-        text='Шаблоны на заполнение с/з',
-        url='https://drive.google.com/drive/u/1/folders/1XPR8fKQAHT0X_4CB7i8uWCQCTT4gnWuo'
-    ))
+    builder.row(
+        InlineKeyboardButton(
+            text="Шаблоны на заполнение с/з",
+            url="https://drive.google.com/drive/u/1/folders/1XPR8fKQAHT0X_4CB7i8uWCQCTT4gnWuo",
+        )
+    )
 
     return builder.as_markup()

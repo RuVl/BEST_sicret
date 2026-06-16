@@ -13,7 +13,7 @@ from aiogram_dialog.widgets.text import Format, Multi
 from fluent.runtime import FluentLocalization
 from structlog.typing import FilteringBoundLogger
 
-from env import ProjectKeys, TelegramKeys
+from env import settings
 from includes import load_schema, validate_data
 from includes.templates import create_context
 from includes.templates.contexts import BaseContext, PrimitiveContext
@@ -99,7 +99,7 @@ async def send_apply(
     bill_path = dialog_manager.dialog_data.get("bill_path")
     file = FSInputFile(bill_path, raw_data["bill_filename"])
 
-    recipient_id = TelegramKeys.TREASURER_ID or clb.from_user.id
+    recipient_id = settings.telegram.TREASURER_ID or clb.from_user.id
     data = {k: escape_mdv2(v) for k, v in raw_data.items()}
 
     await logger.ainfo(
@@ -180,7 +180,7 @@ async def download_bill(
         return
 
     # мб это вынести в инициализацию проекта
-    ProjectKeys.REFUND_BILLS_DIR.mkdir(parents=True, exist_ok=True)
+    settings.project.REFUND_BILLS_DIR.mkdir(parents=True, exist_ok=True)
 
     # Удаляем предыдущий загруженный чек
     if old_bill_path := dialog_manager.dialog_data.get("bill_path"):
@@ -190,7 +190,7 @@ async def download_bill(
     # Формируем путь для нового чека
     filename = Path(document.file_name or "no_name")
     save_filename = f"{filename.stem}_{document.file_id}{filename.suffix}"
-    file_path = ProjectKeys.REFUND_BILLS_DIR / save_filename
+    file_path = settings.project.REFUND_BILLS_DIR / save_filename
 
     async with ChatActionSender(
         bot=msg.bot,

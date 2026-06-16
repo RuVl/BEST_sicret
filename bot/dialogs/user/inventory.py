@@ -15,6 +15,8 @@ from database.methods.item import get_item_with_place, get_items_by_category_id
 from state_machines.inventory import ViewInventory
 from utils import escape_mdv2, fuzzy_search_bests, L10nFormat, truncate
 
+BTN_TRUNCATE_LEN = 25
+
 
 # ========== Геттер: список категорий ==========
 async def get_categories_data(
@@ -77,7 +79,7 @@ async def get_items_data(
         args={"category_name": category_name},
     )
     items_list = [
-        (item.id, f"{truncate(item.name)} | {item.count} {item.unit}")
+        (item.id, f"{truncate(item.name, BTN_TRUNCATE_LEN)} | {item.count} {item.unit}")
         for item in matched_items
     ]
 

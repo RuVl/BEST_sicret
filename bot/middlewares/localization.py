@@ -11,10 +11,10 @@ class L10nMw(BaseMiddleware):
         self.__middleware_key = middleware_key
 
     async def __call__(
-            self,
-            handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]],
-            event: TelegramObject,
-            data: dict[str, Any]
+        self,
+        handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: dict[str, Any],
     ) -> Any:
         data[self.__middleware_key] = self.__locale
         return await handler(event, data)
