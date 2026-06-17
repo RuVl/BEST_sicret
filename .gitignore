@@ -104,7 +104,7 @@ dmypy.json
 cython_debug/
 
 # IDE
-.idea/
+.vscode/
 
 # CMake
 cmake-build-*/
