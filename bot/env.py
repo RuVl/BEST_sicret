@@ -13,8 +13,8 @@ class TelegramConfig(BaseModel):
 
 
 class PostgresConfig(BaseModel):
-    HOST: str = Field("localhost", alias="DOCKER_POSTGRES_HOST")
-    PORT: str = Field("5432", alias="DOCKER_POSTGRES_PORT")
+    HOST: str = Field("localhost", alias="POSTGRES_HOST")
+    PORT: str = Field("5432", alias="POSTGRES_PORT")
     USER: str = Field("postgres", alias="POSTGRES_USER")
     PASSWORD: str = Field("", alias="POSTGRES_PASSWORD")
     DATABASE: str = Field("database", alias="POSTGRES_DB")

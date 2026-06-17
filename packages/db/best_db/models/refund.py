@@ -3,11 +3,11 @@ from typing import TYPE_CHECKING
 from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from database.models.base import Base
+from best_db.models.base import Base
 
 if TYPE_CHECKING:
-    from database.models.payment import Payment
-    from database.models.person import Person
+    from best_db.models.payment import Payment
+    from best_db.models.person import Person
 
 
 class Refund(Base):

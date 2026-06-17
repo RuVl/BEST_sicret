@@ -3,15 +3,15 @@ name = "BEST_sicret_bot"
 version = "0.1.0"
 description = "Telegram bot for SPb LBG - @BEST_sicret_bot"
 readme = "README.md"
+
 requires-python = ">=3.12"
+
 dependencies = [
+    "best-db",
     "aiodns>=4.0.4",
     "aiogram>=3.29.0",
     "aiogram-dialog>=2.6.0",
     "aiohttp[sppedups]>=3.14.1",
-    "alembic>=1.18.4",
-    "alembic-postgresql-enum>=1.10.0",
-    "asyncpg>=0.31.0",
     "colorama>=0.4.6",
     "docxtpl>=0.20.2",
     "fluent-runtime>=0.4.0",
@@ -22,7 +22,6 @@ dependencies = [
     "pydantic-settings>=2.14.1",
     "python-levenshtein>=0.27.3",
     "redis[hiredis]>=8.0.0",
-    "sqlalchemy[asyncio]>=2.0.51",
     "structlog>=26.1.0",
     "ujson>=5.13.0",
 ]
@@ -31,3 +30,6 @@ dependencies = [
 dev = [
     "pre-commit>=4.6.0",
 ]
+
+[tool.uv.sources]
+best-db = { path = "../packages/db", editable = true }

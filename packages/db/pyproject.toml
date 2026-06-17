@@ -1,0 +1,33 @@
+[project]
+name = "best-db"
+version = "0.1.0"
+description = "Общие модели SQLAlchemy и миграции БД для сервисов проекта"
+requires-python = ">=3.12"
+dependencies = [
+    "SQLAlchemy[asyncio]==2.0.51",
+    "asyncpg==0.31.0",
+    "alembic==1.18.4",
+    "alembic-postgresql-enum==1.10.0",
+]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["best_db*"]
+
+# === ruff ===
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+exclude = [
+    ".venv"
+]
+extend-exclude = ["best_db/migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "W", "C4", "SIM"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["best_db"]
