@@ -21,7 +21,7 @@ cp bot/.env.dist bot/.env        # затем отредактировать
 cd bot && python3 run.py         # или: make run-bot
 
 # postgres + redis для локальной разработки
-make dev-db
+make infra
 ```
 
 ## Конфигурация

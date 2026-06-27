@@ -6,9 +6,7 @@ from .base_context import BaseContext
 class ArrayContext(BaseContext):
     ADD_ITEM = "add-item"
 
-    def __init__(
-        self, schema: dict, parent: BaseContext = None, required: bool = False
-    ):
+    def __init__(self, schema: dict, parent: BaseContext = None, required: bool = False):
         super().__init__(schema, parent, required)
         if self.btn_name is None:
             self.btn_name = schema.get("title", "No button name")

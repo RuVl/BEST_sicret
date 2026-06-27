@@ -2,8 +2,9 @@ from typing import Any
 
 from fluent.runtime import FluentLocalization
 
-from includes.templates import get_validator, get_formatter
+from includes.templates import get_formatter, get_validator
 from utils import escape_mdv2
+
 from .base_context import BaseContext
 
 

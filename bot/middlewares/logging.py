@@ -1,6 +1,7 @@
 import time
 import types
-from typing import Any, Awaitable, Callable, Dict, Optional
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from aiogram import BaseMiddleware
 from aiogram.dispatcher.middlewares.user_context import EVENT_FROM_USER_KEY
@@ -19,7 +20,7 @@ class LoggingMw(BaseMiddleware):
         self.patch_fsm = patch_fsm
 
     @staticmethod
-    def get_user_context(user: Optional[User]) -> dict:
+    def get_user_context(user: User | None) -> dict:
         """Creates a context dictionary with user information for logging."""
         context = {}
         if user:
@@ -48,9 +49,9 @@ class LoggingMw(BaseMiddleware):
 
     async def __call__(
         self,
-        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]],
         event: TelegramObject,
-        data: Dict[str, Any],
+        data: dict[str, Any],
     ) -> Any:
         telegram_user = data.get(EVENT_FROM_USER_KEY)
         user_context = self.get_user_context(telegram_user)
@@ -84,9 +85,7 @@ class LoggingMw(BaseMiddleware):
             execution_time = round(end - start, 3)
 
             # Log successful completion
-            await log.adebug(
-                "handler-completed", handler=handler_name, execution_time=execution_time
-            )
+            await log.adebug("handler-completed", handler=handler_name, execution_time=execution_time)
             return result
 
         except Exception as e:

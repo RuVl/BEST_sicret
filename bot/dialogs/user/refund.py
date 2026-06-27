@@ -19,7 +19,7 @@ from includes.templates import create_context
 from includes.templates.contexts import BaseContext, PrimitiveContext
 from middlewares import L10N_FORMAT_KEY, LOGGING_KEY
 from state_machines import CreateRefundApply
-from utils import escape_mdv2, L10nFormat
+from utils import L10nFormat, escape_mdv2
 
 DIALOG_SCHEMA = "refunds/apply.json"
 

@@ -49,7 +49,7 @@ URL собирается из окружения `POSTGRES_*` (`POSTGRES_HOST/PO
 ```bash
 # локально (нужны переменные окружения; для dev-стека POSTGRES_HOST=localhost)
 cd packages/db && alembic upgrade head            # или: make migrate
-cd packages/db && alembic revision --autogenerate -m "..."   # make revision m="..."
+cd packages/db && alembic revision --autogenerate -m "..."   # make migration m="..."
 
 # в сети docker-compose (host=postgres)
 docker compose run --rm db_migrate                # или: make migrate-docker

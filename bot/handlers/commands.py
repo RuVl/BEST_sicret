@@ -1,13 +1,13 @@
 from aiogram import Router
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
-from aiogram_dialog import DialogManager, StartMode, ShowMode
+from aiogram_dialog import DialogManager, ShowMode, StartMode
 from fluent.runtime import FluentLocalization
 
-from state_machines.refund import CreateRefundApply
-from state_machines.inventory import ViewInventory
-from state_machines.templates import CreateByTemplate
 from state_machines import CreateByApplyEquipment
+from state_machines.inventory import ViewInventory
+from state_machines.refund import CreateRefundApply
+from state_machines.templates import CreateByTemplate
 
 router = Router()
 

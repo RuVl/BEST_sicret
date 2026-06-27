@@ -1,5 +1,5 @@
 import math
-from typing import Callable
+from collections.abc import Callable
 
 from aiogram.types import InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -62,24 +62,18 @@ def paginate[T](
         page_switch_buttons.append(
             InlineKeyboardButton(
                 text="<",
-                callback_data=PaginatorFactory(
-                    menu=prefix, action="change_page", page=page - 1
-                ).pack(),
+                callback_data=PaginatorFactory(menu=prefix, action="change_page", page=page - 1).pack(),
             )
         )
 
-    page_switch_buttons.append(
-        InlineKeyboardButton(text=f"·{page + 1}/{max_pages}·", callback_data=" ")
-    )
+    page_switch_buttons.append(InlineKeyboardButton(text=f"·{page + 1}/{max_pages}·", callback_data=" "))
 
     # If it's not last page
     if page + 1 < max_pages:
         page_switch_buttons.append(
             InlineKeyboardButton(
                 text=">",
-                callback_data=PaginatorFactory(
-                    menu=prefix, action="change_page", page=page + 1
-                ).pack(),
+                callback_data=PaginatorFactory(menu=prefix, action="change_page", page=page + 1).pack(),
             )
         )
 

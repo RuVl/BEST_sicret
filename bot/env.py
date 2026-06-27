@@ -39,9 +39,7 @@ class ProjectConfig(BaseModel):
     DEBUG: bool = Field(alias="DEBUG")
     RESOURCE_DIR: Path = Field(Path("resources/"), alias="RESOURCE_DIR")
     TEMPLATES_DIR: Path = Field(Path("resources/templates/"), alias="TEMPLATES_DIR")
-    REFUND_BILLS_DIR: Path = Field(
-        Path("resources/refund_bills/"), alias="REFUND_BILLS_DIR"
-    )
+    REFUND_BILLS_DIR: Path = Field(Path("resources/refund_bills/"), alias="REFUND_BILLS_DIR")
     LOCALE_DIR: Path = Field(Path("l10n/"), alias="LOCALE_DIR")
     AVAILABLE_LOCALES: list[str] = Field(["ru"], alias="AVAILABLE_LOCALES")
 
@@ -51,11 +49,7 @@ class ProjectConfig(BaseModel):
     def assemble_paths(cls, data: dict) -> dict:
         # Извлекаем RESOURCE_DIR, учитывая дефолтное значение
         resource_dir_raw = data.get("RESOURCE_DIR", "resources/")
-        resource_dir = (
-            Path(resource_dir_raw)
-            if isinstance(resource_dir_raw, str)
-            else resource_dir_raw
-        )
+        resource_dir = Path(resource_dir_raw) if isinstance(resource_dir_raw, str) else resource_dir_raw
 
         if "TEMPLATES_DIR" not in data:
             data["TEMPLATES_DIR"] = resource_dir / "templates/"
@@ -86,19 +80,11 @@ class GlobalSettings(BaseSettings):
     )
 
     # Pydantic сам заполнит переменные данными по alias-именам из env
-    telegram: TelegramConfig = Field(
-        default_factory=lambda: TelegramConfig.model_validate({})
-    )
-    postgres: PostgresConfig = Field(
-        default_factory=lambda: PostgresConfig.model_validate({})
-    )
+    telegram: TelegramConfig = Field(default_factory=lambda: TelegramConfig.model_validate({}))
+    postgres: PostgresConfig = Field(default_factory=lambda: PostgresConfig.model_validate({}))
     redis: RedisConfig = Field(default_factory=lambda: RedisConfig.model_validate({}))
-    project: ProjectConfig = Field(
-        default_factory=lambda: ProjectConfig.model_validate({})
-    )
-    logger: LoggerConfig = Field(
-        default_factory=lambda: LoggerConfig.model_validate({})
-    )
+    project: ProjectConfig = Field(default_factory=lambda: ProjectConfig.model_validate({}))
+    logger: LoggerConfig = Field(default_factory=lambda: LoggerConfig.model_validate({}))
 
 
 # Инициализируем глобальный синглтон настроек

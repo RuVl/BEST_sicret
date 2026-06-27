@@ -43,9 +43,7 @@ def setup_logging():
 
     # --- Шаг 3: Создаем форматтеры logging с разными финальными процессорами structlog ---
     console_formatter = structlog.stdlib.ProcessorFormatter(
-        processor=structlog.dev.ConsoleRenderer(
-            colors=settings.logger.USE_COLORS_IN_CONSOLE, pad_level=True
-        ),
+        processor=structlog.dev.ConsoleRenderer(colors=settings.logger.USE_COLORS_IN_CONSOLE, pad_level=True),
         # foreign_pre_chain=shared_processors,
     )
 

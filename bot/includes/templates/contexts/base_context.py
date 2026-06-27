@@ -86,9 +86,7 @@ class BaseContext(ABC):
         return []
 
     def ask_question(self) -> str:
-        raise NotImplementedError(
-            "Этот контекст не ожидает пользовательского ввода (не примитивный тип)"
-        )
+        raise NotImplementedError("Этот контекст не ожидает пользовательского ввода (не примитивный тип)")
 
     def view(self, data: str | int) -> "BaseContext":
         """Step forward to data from data_kb"""

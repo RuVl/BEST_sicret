@@ -1,0 +1,35 @@
+[project]
+name = "members-sync"
+version = "0.1.0"
+description = "Sync db with google sheets values"
+readme = "README.md"
+
+requires-python = ">=3.12"
+
+dependencies = [
+    "best-db",
+    "apscheduler>=3.10.4",
+    "gspread>=6.2.1",
+    "structlog>=26.1.0",
+    "colorama>=0.4.6",
+    "pydantic-settings>=2.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.uv.sources]
+best-db = { path = "../packages/db", editable = true }
+
+# === ruff ===
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+exclude = [
+    ".venv"
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "W", "C4", "SIM"]

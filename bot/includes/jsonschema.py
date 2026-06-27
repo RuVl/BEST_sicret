@@ -27,7 +27,7 @@ def load_template_schema(template_name: str) -> dict:
     if not template_path.exists():
         raise FileNotFoundError(f"Schema file {template_path} not found")
 
-    with open(template_path, "r", encoding="utf-8") as template:
+    with open(template_path, encoding="utf-8") as template:
         return json.load(template)
 
 
@@ -42,7 +42,7 @@ def load_schema(resource_path: Path | str) -> dict:
     if not schema_path.exists():
         raise FileNotFoundError(f"Schema file {schema_path} not found")
 
-    with open(schema_path, "r", encoding="utf-8") as schema:
+    with open(schema_path, encoding="utf-8") as schema:
         return json.load(schema)
 
 

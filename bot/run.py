@@ -10,7 +10,7 @@ from structlog.typing import FilteringBoundLogger
 
 from env import settings
 from handlers import register_handlers
-from includes import setup_logging, get_redis_storage, PickleRedisStorage
+from includes import PickleRedisStorage, get_redis_storage, setup_logging
 from middlewares import register_middlewares
 
 
@@ -28,9 +28,7 @@ async def main():
         [
             BotCommand(command="start", description="Запуск бота"),
             BotCommand(command="create_document", description="Создать приказ"),
-            BotCommand(
-                command="create_equipment_apply", description="Создать заявку по стаффу"
-            ),
+            BotCommand(command="create_equipment_apply", description="Создать заявку по стаффу"),
             BotCommand(command="refund", description="Создать заявку на рефанд"),
             BotCommand(command="inventory", description="Просмотр имущества"),
         ],

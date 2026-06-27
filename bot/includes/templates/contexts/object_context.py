@@ -3,13 +3,12 @@ from typing import Any
 from fluent.runtime import FluentLocalization
 
 from includes.templates import create_context
+
 from .base_context import BaseContext
 
 
 class ObjectContext(BaseContext):
-    def __init__(
-        self, schema: dict, parent: BaseContext = None, required: bool = False
-    ):
+    def __init__(self, schema: dict, parent: BaseContext = None, required: bool = False):
         super().__init__(schema, parent, required)
         if self.btn_name is None:
             self.btn_name = schema.get("title", "No button name")
@@ -41,9 +40,7 @@ class ObjectContext(BaseContext):
             parts.append(f"_{self.description}_")
 
         for key, child in self._children.items():
-            parts.append(
-                rf"\-{r' \*' if child.required else ''} {child.render_view(l10n)}"
-            )
+            parts.append(rf"\-{r' \*' if child.required else ''} {child.render_view(l10n)}")
         return "\n".join(parts)
 
     def render_data_kb(self, l10n: FluentLocalization) -> list[tuple[str, str | int]]:

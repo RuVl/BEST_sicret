@@ -11,7 +11,7 @@ dependencies = [
     "aiodns>=4.0.4",
     "aiogram>=3.29.0",
     "aiogram-dialog>=2.6.0",
-    "aiohttp[sppedups]>=3.14.1",
+    "aiohttp[speedups]>=3.14.1",
     "colorama>=0.4.6",
     "docxtpl>=0.20.2",
     "fluent-runtime>=0.4.0",
@@ -26,10 +26,16 @@ dependencies = [
     "ujson>=5.13.0",
 ]
 
-[dependency-groups]
-dev = [
-    "pre-commit>=4.6.0",
-]
-
 [tool.uv.sources]
 best-db = { path = "../packages/db", editable = true }
+
+# === ruff ===
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+exclude = [
+    ".venv"
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "W", "C4", "SIM"]

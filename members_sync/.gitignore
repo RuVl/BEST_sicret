@@ -1,0 +1,7 @@
+service_account.json
+.env
+logs/
+output/
+last_sync_report.md
+__pycache__/
+*.pyc

@@ -1,0 +1,18 @@
+# Единый pre-commit на весь репозиторий (лежит в корне — git-хук находит его сам).
+#
+# Сам pre-commit запускается через uvx (не зависит ни от одного venv проекта).
+# Установка хука:  make pre-commit-install   (= uvx pre-commit install)
+# Ручной прогон:   make pre-commit            (= uvx pre-commit run --all-files)
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.12
+    hooks:
+      - id: ruff-check
+        args: ["--fix"]
+      - id: ruff-format
+
+#  - repo: https://github.com/pre-commit/mirrors-mypy
+#    rev: v1.20.2
+#    hooks:
+#      - id: mypy

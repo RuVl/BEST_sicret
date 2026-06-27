@@ -9,7 +9,7 @@ Alembic уже инициализирован (async-шаблон). Это ед�
 
 1. Сгенерировать миграцию по изменениям моделей:
    ```shell
-   alembic revision --autogenerate -m 'message'   # make revision m="message"
+   alembic revision --autogenerate -m 'message'   # make migration m="message"
    ```
 2. Проверить сгенерированный файл и применить:
    ```shell

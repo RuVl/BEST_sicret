@@ -21,7 +21,7 @@ from includes.templates import create_context
 from includes.templates.contexts import BaseContext, PrimitiveContext
 from middlewares import L10N_FORMAT_KEY
 from state_machines import CreateByTemplate
-from utils import escape_mdv2, L10nFormat
+from utils import L10nFormat, escape_mdv2
 
 
 # ========== Окно выбора шаблона ==========
@@ -60,16 +60,12 @@ async def on_template_selected(
 
     dialog_manager.dialog_data.update(template_name=template_name, context=context)
     await dialog_manager.switch_to(
-        CreateByTemplate.ADD
-        if isinstance(context, PrimitiveContext)
-        else CreateByTemplate.VIEW,
+        CreateByTemplate.ADD if isinstance(context, PrimitiveContext) else CreateByTemplate.VIEW,
     )
 
 
 # ========== Окно просмотра ==========
-async def get_template_context(
-    dialog_manager: DialogManager, **_kwargs
-) -> dict[str, Any]:
+async def get_template_context(dialog_manager: DialogManager, **_kwargs) -> dict[str, Any]:
     l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
     context: BaseContext = dialog_manager.dialog_data.get("context")
     return {
@@ -80,23 +76,17 @@ async def get_template_context(
     }
 
 
-async def on_data_selected(
-    _clb: CallbackQuery, _select: Select, dialog_manager: DialogManager, data: str
-):
+async def on_data_selected(_clb: CallbackQuery, _select: Select, dialog_manager: DialogManager, data: str):
     context: BaseContext = dialog_manager.dialog_data.get("context")
     context = context.view(data)
 
     dialog_manager.dialog_data.update(context=context)
     await dialog_manager.switch_to(
-        CreateByTemplate.ADD
-        if isinstance(context, PrimitiveContext)
-        else CreateByTemplate.VIEW,
+        CreateByTemplate.ADD if isinstance(context, PrimitiveContext) else CreateByTemplate.VIEW,
     )
 
 
-async def on_action_selected(
-    _clb: CallbackQuery, _select: Select, dialog_manager: DialogManager, action: str
-):
+async def on_action_selected(_clb: CallbackQuery, _select: Select, dialog_manager: DialogManager, action: str):
     context: BaseContext = dialog_manager.dialog_data.get("context")
     context = context.do(action)
 
@@ -104,9 +94,7 @@ async def on_action_selected(
     await dialog_manager.switch_to(CreateByTemplate.VIEW)
 
 
-async def response_document(
-    clb: CallbackQuery, _select: Select, dialog_manager: DialogManager
-):
+async def response_document(clb: CallbackQuery, _select: Select, dialog_manager: DialogManager):
     l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
     template_name: str = dialog_manager.dialog_data.get("template_name")
     context: BaseContext = dialog_manager.dialog_data.get("context")
@@ -146,9 +134,7 @@ async def response_document(
 
 
 # ========== Окно редактирования ==========
-async def get_property_context(
-    dialog_manager: DialogManager, **_kwargs
-) -> dict[str, Any]:
+async def get_property_context(dialog_manager: DialogManager, **_kwargs) -> dict[str, Any]:
     l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
     context: PrimitiveContext = dialog_manager.dialog_data.get("context")
     return {
@@ -158,9 +144,7 @@ async def get_property_context(
     }
 
 
-async def set_property(
-    msg: Message, _: TextInput, dialog_manager: DialogManager, value: str
-):
+async def set_property(msg: Message, _: TextInput, dialog_manager: DialogManager, value: str):
     context: PrimitiveContext = dialog_manager.dialog_data.get("context")
     try:
         parsed_value = context.parse(value)

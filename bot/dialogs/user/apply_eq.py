@@ -13,7 +13,7 @@ from includes.templates import create_context
 from includes.templates.contexts import BaseContext, PrimitiveContext
 from middlewares import L10N_FORMAT_KEY
 from state_machines import CreateByApplyEquipment, ViewInventory
-from utils import escape_mdv2, L10nFormat
+from utils import L10nFormat, escape_mdv2
 
 DIALOG_SCHEMA = "equipments/apply_equipment.json"
 
@@ -38,10 +38,7 @@ async def get_main_data(dialog_manager: DialogManager, **kwargs) -> dict[str, An
             }
 
     custom_items = dialog_manager.dialog_data.get("custom_items", {})
-    added_items = [
-        (name, f"❌ {name}: {data['quantity']} {data['unit']}")
-        for name, data in custom_items.items()
-    ]
+    added_items = [(name, f"❌ {name}: {data['quantity']} {data['unit']}") for name, data in custom_items.items()]
 
     custom_items_view = ""
     if custom_items:
@@ -49,9 +46,7 @@ async def get_main_data(dialog_manager: DialogManager, **kwargs) -> dict[str, An
             f"\\- {escape_mdv2(name)}: {item_data['quantity']} {escape_mdv2(item_data['unit'])}"
             for name, item_data in custom_items.items()
         ]
-        custom_items_view = (
-            "\n\n" + l10n.format_value("chose-category") + "\n" + "\n".join(rows)
-        )
+        custom_items_view = "\n\n" + l10n.format_value("chose-category") + "\n" + "\n".join(rows)
 
     return {
         "view": context.render_view(l10n) + custom_items_view,
