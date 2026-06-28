@@ -13,6 +13,7 @@ dependencies = [
     "structlog>=26.1.0",
     "colorama>=0.4.6",
     "pydantic-settings>=2.0",
+    "phonenumbers>=9.0.33",
 ]
 
 [dependency-groups]

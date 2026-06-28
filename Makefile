@@ -5,10 +5,14 @@
 # `uv run --no-project`, поэтому grep/sed/find/awk и POSIX-only трюки не нужны.
 #
 #   make init     — подготовить окружение с нуля
-#   make run-bot  — бот локально + postgres/redis в docker
-#   make run-sync — members_sync локально + postgres в docker
-#   make up       — весь стек в docker
+#   make run-bot  — бот локально (dev.env) + postgres/redis в docker
+#   make run-sync — members_sync локально (dev.env) + postgres в docker
+#   make up       — весь стек в docker (.env)
 #   make help     — полный список целей
+#
+# Конфиги: `.env` — для запуска в docker/podman (хосты = имена сервисов compose),
+# `dev.env` — оверрайды для локального запуска (POSTGRES_HOST=localhost и т.п.),
+# грузятся поверх `.env` через `uv run --env-file dev.env`.
 
 COMPOSE     ?= docker compose
 COMPOSE_DEV ?= docker compose -f docker-compose.dev.yaml
@@ -50,9 +54,9 @@ check-deps: ## Проверить наличие uv и docker compose
 	$(COMPOSE) version
 
 .PHONY: env
-env: ## Создать .env из .env.dist там, где их нет
-	@$(PY) -c "import os, shutil; [(shutil.copyfile(d+'/.env.dist', d+'/.env'), print('created', d+'/.env')) for d in ('bot','members_sync','postgres','redis') if os.path.isfile(d+'/.env.dist') and not os.path.isfile(d+'/.env')]"
-	@echo "Не забудьте заполнить .env файлы!"
+env: ## Создать .env (docker) и dev.env (локальный запуск) из *.dist, где их нет
+	@$(PY) -c "import os, shutil; [(shutil.copyfile(t+'.dist', t), print('created', t)) for t in ('bot/.env','members_sync/.env','postgres/.env','redis/.env','bot/dev.env','members_sync/dev.env') if os.path.isfile(t+'.dist') and not os.path.isfile(t)]"
+	@echo "Заполните .env (docker/podman) и dev.env (локальный запуск)!"
 
 # --- Установка зависимостей (все venv) -------------------------------------
 
@@ -82,14 +86,14 @@ infra-down: ## Остановить локальную инфраструкту�
 	$(COMPOSE_DEV) down
 
 .PHONY: run-bot
-run-bot: ## Бот локально + postgres/redis в docker
+run-bot: ## Бот локально (dev.env) + postgres/redis в docker
 	$(COMPOSE_DEV) up -d
-	cd bot && $(UV) run python run.py
+	cd bot && $(UV) run --env-file dev.env python run.py
 
 .PHONY: run-sync
-run-sync: ## members_sync локально + postgres в docker (RUN_MODE из .env)
+run-sync: ## members_sync локально (dev.env) + postgres в docker (RUN_MODE из .env)
 	$(COMPOSE_DEV) up -d postgres
-	cd members_sync && $(UV) run python run.py
+	cd members_sync && $(UV) run --env-file dev.env python run.py
 
 .PHONY: up
 up: ## Поднять весь стек в docker (bot + members_sync + postgres + redis)
@@ -136,10 +140,6 @@ logs: ## Логи всего стека (follow)
 logs-bot: ## Логи бота
 	$(COMPOSE) logs -f telegram_bot
 
-.PHONY: logs-sync
-logs-sync: ## Логи members_sync
-	$(COMPOSE) logs -f members_sync
-
 .PHONY: logs-db
 logs-db: ## Логи postgres
 	$(COMPOSE) logs -f postgres
@@ -153,16 +153,19 @@ logs-redis: ## Логи redis
 
 .PHONY: db-dump
 db-dump: ## Дамп БД в файл (по умолчанию backups/dump.sql; DUMP=… для другого)
+	$(MAKE) infra
 	$(COMPOSE) exec -T postgres pg_dump -U $(PG_USER) -d $(PG_DB) > $(DUMP)
 	@echo "dumped -> $(DUMP)"
 
 .PHONY: db-restore
 db-restore: ## Восстановить БД из файла: make db-restore DUMP=backups/x.sql
+	$(MAKE) infra
 	$(COMPOSE) exec -T postgres psql -U $(PG_USER) -d $(PG_DB) < $(DUMP)
 	@echo "restored <- $(DUMP)"
 
 .PHONY: psql
 psql: ## Интерактивный psql в контейнере
+	$(MAKE) infra
 	$(COMPOSE) exec postgres psql -U $(PG_USER) -d $(PG_DB)
 
 # --- Redis ------------------------------------------------------------------

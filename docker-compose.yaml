@@ -39,8 +39,6 @@ services:
       - postgres
     volumes:
       - ./members_sync/service_account.json:/app/service_account.json:ro
-      - members_sync_logs:/app/logs
-      - members_sync_output:/app/output
 
   # Разовый прогон миграций единого alembic (packages/db). Не стартует с `up`
   # (профиль migrate); запускать явно: docker compose run --rm db_migrate
@@ -94,9 +92,3 @@ volumes:
 
   postgres_volume:
     name: best_db
-
-  members_sync_logs:
-    name: best_members_sync_logs
-
-  members_sync_output:
-    name: best_members_sync_output

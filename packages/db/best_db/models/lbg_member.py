@@ -12,13 +12,7 @@ if TYPE_CHECKING:
 
 
 class LbgMember(Base):
-    """Участник локальной группы BEST, синхронизированный из Google Sheets.
-
-    Одна денормализованная таблица: типизированные поля + ``raw`` (полный сырой
-    слепок строк таблицы). Категории/статусы — строки (без DB-enum), чтобы новые
-    секции в таблице не требовали миграции. Заполняется сервисом ``members_sync``;
-    ``bot`` читает её и опционально связывает с :class:`Person`.
-    """
+    """LBG member BEST from Google Sheets"""
 
     __tablename__ = "lbg_members"
     __table_args__ = {"comment": "Участник LBG (синхронизация из Google Sheets)"}
@@ -43,7 +37,6 @@ class LbgMember(Base):
     best_email: Mapped[str | None] = mapped_column(String(255), index=True, comment="Почта @best-eu.org")
     personal_email: Mapped[str | None] = mapped_column(String(255), comment="Личная почта")
     phone: Mapped[str | None] = mapped_column(String(32), comment="Нормализованный телефон")
-    phone_raw: Mapped[str | None] = mapped_column(String(255), comment="Телефон как в таблице")
     vk_url: Mapped[str | None] = mapped_column(String(255), comment="ВКонтакте")
     telegram: Mapped[str | None] = mapped_column(String(255), comment="Telegram")
     facebook: Mapped[str | None] = mapped_column(String(255), comment="Facebook")
@@ -60,12 +53,8 @@ class LbgMember(Base):
     status_field: Mapped[str | None] = mapped_column(Text, comment="Должность/роли (Status/field)")
 
     birthday: Mapped[date | None] = mapped_column(Date, comment="Дата рождения")
-    birthday_raw: Mapped[str | None] = mapped_column(String(64), comment="Дата рождения как в таблице")
-
     active_since: Mapped[date | None] = mapped_column(Date, comment="Начало активности")
-    active_since_raw: Mapped[str | None] = mapped_column(String(64))
     active_till: Mapped[date | None] = mapped_column(Date, comment="Окончание активности")
-    active_till_raw: Mapped[str | None] = mapped_column(String(64))
 
     local_involvement: Mapped[str | None] = mapped_column(Text)
     international_involvement: Mapped[str | None] = mapped_column(Text)
@@ -88,8 +77,6 @@ class LbgMember(Base):
     # --- Источник ---
     source_sheet: Mapped[str | None] = mapped_column(String(255), comment="Имя листа-источника")
     source_section: Mapped[str | None] = mapped_column(String(255), comment="Секция листа")
-    source_row_start: Mapped[int | None] = mapped_column(Integer, comment="Первая строка в таблице")
-    source_row_end: Mapped[int | None] = mapped_column(Integer, comment="Последняя строка в таблице")
     raw: Mapped[dict] = mapped_column(JSONB, comment="Полный сырой слепок строк")
 
     # --- Служебное ---

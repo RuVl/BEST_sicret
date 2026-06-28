@@ -8,9 +8,11 @@
 Один батч-запрос на всю таблицу.
 """
 
+import time
+
 import structlog
 from gspread import Spreadsheet
-from gspread.utils import a1_to_rowcol
+from gspread.utils import a1_to_rowcol, absolute_range_name
 
 log = structlog.get_logger("members_sync.notes")
 
@@ -50,22 +52,52 @@ class NoteManager:
             }
         }
 
+    def _fetch_sheets_meta(self, titles: set[str]) -> dict[str, tuple[int, list[list[str]]]]:
+        """{title: (sheet_id, заметки)} одним запросом метаданных по всем нужным листам.
+
+        Заменяет ``worksheet.get_notes()`` на каждый лист — это были отдельные round-trip'ы.
+        """
+        params = {
+            "fields": "sheets.properties.title,sheets.properties.sheetId,sheets.data.rowData.values.note",
+            "ranges": [absolute_range_name(t) for t in titles],
+        }
+        try:
+            response = self.spreadsheet.fetch_sheet_metadata(params)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Не удалось прочитать метаданные листов для заметок", error=str(exc))
+            return {}
+
+        result: dict[str, tuple[int, list[list[str]]]] = {}
+        for sheet in response.get("sheets", []):
+            props = sheet.get("properties", {})
+            title = props.get("title")
+            if title is None:
+                continue
+            row_data = (sheet.get("data") or [{}])[0].get("rowData", [])
+            notes = [[cell.get("note", "") for cell in row.get("values", [])] for row in row_data]
+            result[title] = (props.get("sheetId", 0), notes)
+        return result
+
     def flush(self) -> None:
         if not self.enabled:
             pending = sum(len(c) for c in self._pending.values())
             log.info("Заметки отключены (WRITE_SHEET_NOTES=false)", pending=pending)
             return
+        if not self._sheets:
+            log.info("Заметки обновлены", written=0, cleared=0, elapsed_s=0.0)
+            return
 
+        start = time.perf_counter()
+        meta = self._fetch_sheets_meta(self._sheets)
         requests: list[dict] = []
 
         for title in self._sheets:
-            try:
-                worksheet = self.spreadsheet.worksheet(title)
-            except Exception as exc:  # noqa: BLE001
-                log.warning("Лист не найден для заметок", sheet=title, error=str(exc))
+            info = meta.get(title)
+            if info is None:
+                log.warning("Лист не найден для заметок", sheet=title)
                 continue
+            sheet_id, existing = info
 
-            sheet_id = worksheet.id
             pending_cells: dict[tuple[int, int], str] = {}
             for a1, texts in self._pending.get(title, {}).items():
                 try:
@@ -76,11 +108,6 @@ class NoteManager:
                 pending_cells[(row1 - 1, col1 - 1)] = f"{self.marker} {body}"
 
             # Снимаем свои устаревшие заметки.
-            try:
-                existing = worksheet.get_notes()
-            except Exception as exc:  # noqa: BLE001
-                log.warning("Не удалось прочитать заметки", sheet=title, error=str(exc))
-                existing = []
             for r, row_notes in enumerate(existing):
                 for c, note in enumerate(row_notes):
                     if note and note.startswith(self.marker) and (r, c) not in pending_cells:
@@ -94,4 +121,9 @@ class NoteManager:
 
         if requests:
             self.spreadsheet.batch_update({"requests": requests})
-        log.info("Заметки обновлены", written=self.written, cleared=self.cleared)
+        log.info(
+            "Заметки обновлены",
+            written=self.written,
+            cleared=self.cleared,
+            elapsed_s=round(time.perf_counter() - start, 2),
+        )

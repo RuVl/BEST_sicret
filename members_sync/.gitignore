@@ -5,3 +5,5 @@ output/
 last_sync_report.md
 __pycache__/
 *.pyc
+
+ARCHITECTURE.md

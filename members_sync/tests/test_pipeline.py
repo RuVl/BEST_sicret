@@ -1,16 +1,10 @@
-import csv
 from datetime import date
-from pathlib import Path
-
-import pytest
 
 from parsing.issues import IssueCollector
 from parsing.member_builder import build
 from sheets.column_mapper import resolve_columns
 from sheets.record_reader import iterate_records
 from sheets.spec import LAYOUT_A, spec_for_title
-
-ROOT = Path(__file__).resolve().parents[2]
 
 # Заголовок раскладки A (как в page1), сокращён до нужных колонок по позициям.
 HEADER_A = [
@@ -145,36 +139,102 @@ def test_header_reordering_is_handled():
     assert members[0].phone == "+79312988054"
 
 
-def _load_csv(name: str):
-    path = ROOT / name
-    with path.open(encoding="utf-8") as f:
-        return list(csv.reader(f))
+# Заголовок раскладки B (Alumni…/Ex-members), порядок колонок по fallback-индексам spec.
+HEADER_B = [
+    "",
+    "ФИО",
+    "Телефон",
+    "Your BEST gmail",
+    "Status/field",
+    "Birthday",
+    "Active in BEST",
+    "Angel",
+    "Институт, группа",
+    "Вконтакте,\nFacebook",
+    "Local Involvement",
+    "International involvement",
+    "BEST events participated",
+    "Home address",
+    "Место работы",
+    "Instagram",
+]
 
 
-@pytest.mark.skipif(not (ROOT / "page1.csv").exists(), reason="нет page1.csv")
-def test_real_page1_smoke():
-    values = _load_csv("page1.csv")
-    members, issues, colmap = _parse_values(values, spec_for_title("Database of Members"))
+def test_synthetic_page_with_many_members():
+    # Несколько участников под секцией BOARD — массовый разбор листа раскладки A
+    # (замена дымового теста на боевом page1.csv).
+    def row(num, name, email):
+        return [
+            num,
+            name,
+            "89312988054",
+            "https://vk.com/x",
+            email,
+            "President",
+            "20.02.2004",
+            "March 2024",
+            "",
+            "ИСИ",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "Female",
+        ]
+
+    values = [
+        HEADER_A,
+        ["", "BOARD", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+        row("1", "Иванова Анна", "anna@best-eu.org"),
+        row("2", "Петрова Мария", "maria@best-eu.org"),
+        row("3", "Сидорова Ольга", ""),  # без корпоративной почты → идентичность по ФИО
+    ]
+    members, issues, colmap = _parse_values(values, LAYOUT_A)
 
     # Все ключевые колонки сопоставлены.
     for col in ("name", "email", "phone", "birthday", "social", "faculty_group"):
         assert col in colmap
-
-    assert len(members) >= 40
-    # Первая секция — BOARD.
+    assert len(members) == 3
     assert members[0].membership_category == "board"
-    # У большинства активных есть корпоративная почта.
-    with_best = [m for m in members if m.best_email]
-    assert len(with_best) >= len(members) * 0.7
-    # Идентичности уникальны в пределах листа на этих данных не гарантируются,
-    # но критических ошибок парсинга быть не должно (кроме отсутствия идентичности).
     assert all(m.identity_key for m in members)
+    # У большинства есть корпоративная почта.
+    with_best = [m for m in members if m.best_email]
+    assert len(with_best) >= len(members) * 0.6
+    assert not issues.errors
 
 
-@pytest.mark.skipif(not (ROOT / "page3.csv").exists(), reason="нет page3.csv")
-def test_real_page3_ex_members():
-    values = _load_csv("page3.csv")
-    members, _, _ = _parse_values(values, spec_for_title("Ex-members"))
-    assert len(members) >= 40
-    # Все на листе Ex-members имеют ex-статус.
+def test_synthetic_ex_members_status():
+    # Лист Ex-members: записи без секции получают ex-статус по умолчанию из spec
+    # (замена дымового теста на боевом page3.csv).
+    def row(num, name, email):
+        return [
+            num,
+            name,
+            "89312988054",
+            email,
+            "",
+            "20.02.2004",
+            "March 2015 - May 2018",
+            "",
+            "ИСИ",
+            "https://vk.com/x",
+            "",
+            "",
+            "",
+            "",
+            "ООО Рога и Копыта",
+            "",
+        ]
+
+    values = [
+        HEADER_B,
+        row("1", "Иванова Анна", "anna@best-eu.org"),
+        row("2", "Петрова Мария", "maria@best-eu.org"),
+    ]
+    members, _, _ = _parse_values(values, spec_for_title("Ex-members"), title="Ex-members")
+
+    assert len(members) == 2
+    assert all(m.membership_category == "ex_member" for m in members)
     assert all(m.membership_status == "ex" for m in members)
+    assert all(not m.is_active for m in members)

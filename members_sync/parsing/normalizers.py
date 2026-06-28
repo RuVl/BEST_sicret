@@ -8,6 +8,8 @@
 import re
 from datetime import date, datetime
 
+import phonenumbers
+
 # --- общее ---------------------------------------------------------------
 
 _CYR = re.compile(r"[А-Яа-яЁё]")
@@ -58,8 +60,32 @@ def classify_name(values: list[str]) -> tuple[str | None, str | None]:
 # --- телефон -------------------------------------------------------------
 
 
+def _e164_candidate(cand: str) -> str | None:
+    """Сырой кусок → E.164-строка по однозначным правилам (или ``None``).
+
+    Страну угадываем только когда это явно следует из самого номера: ведущий ``+``,
+    международный префикс ``00`` или российские формы (8/7 + 10 цифр, либо 10 цифр).
+    Голый ``32485939831`` без ``+`` намеренно не превращаем в Бельгию — это догадка.
+    """
+    has_plus = "+" in cand
+    digits = re.sub(r"\D", "", cand)
+    if has_plus:
+        return "+" + digits
+    if digits.startswith("00"):
+        return "+" + digits[2:]
+    if len(digits) == 11 and digits[0] in "78":
+        return "+7" + digits[1:]
+    if len(digits) == 10:
+        return "+7" + digits
+    return None
+
+
 def normalize_phone(raw: str) -> tuple[str | None, str | None, str | None]:
-    """(нормализованный, сырой, сообщение). Берёт первый телефоноподобный номер."""
+    """(нормализованный, сырой, сообщение). Берёт первый валидный телефон.
+
+    Валидность (в т.ч. длину по стране) проверяет ``phonenumbers``; поддерживаются
+    иностранные номера в международном формате, а не только российские.
+    """
     raw = (raw or "").strip()
     if not raw:
         return None, None, None
@@ -68,13 +94,15 @@ def normalize_phone(raw: str) -> tuple[str | None, str | None, str | None]:
     # в member_builder) разбираем построчно — иначе соседние номера слипаются в один.
     for line in raw.splitlines():
         for cand in re.findall(r"[+\d][\d()\-\s]{8,}", line):
-            digits = re.sub(r"\D", "", cand)
-            if len(digits) == 11 and digits.startswith("8"):
-                digits = "7" + digits[1:]
-            elif len(digits) == 10:
-                digits = "7" + digits
-            if len(digits) == 11 and digits.startswith("7"):
-                return "+" + digits, raw, None
+            e164 = _e164_candidate(cand)
+            if e164 is None:
+                continue
+            try:
+                parsed = phonenumbers.parse(e164, None)
+            except phonenumbers.NumberParseException:
+                continue
+            if phonenumbers.is_valid_number(parsed):
+                return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164), raw, None
     return None, raw, "не удалось нормализовать телефон"
 
 

@@ -24,6 +24,19 @@ if TYPE_CHECKING:
     from sheets.record_reader import RawRecord
     from sheets.spec import SheetSpec
 
+# Поля ParsedMember, которые не сохраняются в БД (отладка/дамп/координаты строк).
+# ``raw`` остаётся в БД — это полный слепок ячеек для дебага (включая исходные phone/дату).
+_NON_DB_FIELDS = frozenset(
+    {
+        "phone_raw",
+        "birthday_raw",
+        "active_since_raw",
+        "active_till_raw",
+        "source_row_start",
+        "source_row_end",
+    },
+)
+
 
 @dataclass
 class ParsedMember:
@@ -65,8 +78,7 @@ class ParsedMember:
     raw: dict = field(default_factory=dict)
 
     def to_db_values(self) -> dict:
-        """Значения для колонок модели Member (служебные timestamp'ы ставит upsert)."""
-        return asdict(self)
+        return {key: value for key, value in asdict(self).items() if key not in _NON_DB_FIELDS}
 
 
 def _combine(p: str, s: str) -> str | None:

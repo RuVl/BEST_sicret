@@ -48,6 +48,10 @@ def test_parse_date_bad():
         ("79819598702", "+79819598702"),
         # Два номера в одной ячейке через \n — берём первый валидный, а не склейку.
         ("89219185707\n89215384144 (Whats App)", "+79219185707"),
+        # Иностранные номера в международном формате (BEST — международная организация).
+        ("+36 303 82 77 09", "+36303827709"),
+        # Международный префикс 00 вместо «+».
+        ("007 925 227 29 24", "+79252272924"),
     ],
 )
 def test_normalize_phone_ok(raw, expected):
@@ -57,9 +61,21 @@ def test_normalize_phone_ok(raw, expected):
     assert msg is None
 
 
-def test_normalize_phone_garbage():
-    phone, raw_kept, msg = normalize_phone("звоните в вк")
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "звоните в вк",
+        # 12 цифр — на одну длиннее российского номера (опечатка), не «дочиняем».
+        "895127925420",
+        "895335271440",
+        # 11 цифр без «+» и не под российское правило — страну не угадываем.
+        "32485939831",
+    ],
+)
+def test_normalize_phone_garbage(raw):
+    phone, raw_kept, msg = normalize_phone(raw)
     assert phone is None
+    assert raw_kept == raw or raw_kept is None
     assert msg
 
 

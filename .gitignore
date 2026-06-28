@@ -133,6 +133,4 @@ atlassian-ide-plugin.xml
 # Editor-based Rest Client
 .idea/httpRequests
 
-# Test compose files
-test-*.yaml
-dev-*.yaml
+CLAUDE.md

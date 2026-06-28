@@ -54,10 +54,11 @@ def write_report(report: RunReport, path: Path) -> None:
     errors = [i for i in report.issues if i.level == "error"]
     warnings = [i for i in report.issues if i.level == "warning"]
 
-    lines: list[str] = []
-    lines.append("# members_sync — отчёт о последнем прогоне\n")
-    lines.append(f"- **Старт:** {report.started_at:%Y-%m-%d %H:%M:%S}")
-    lines.append(f"- **Длительность:** {report.duration_s:.1f} c")
+    lines: list[str] = [
+        "# members_sync — отчёт о последнем прогоне\n",
+        f"- **Старт:** {report.started_at:%Y-%m-%d %H:%M:%S}",
+        f"- **Длительность:** {report.duration_s:.1f} c",
+    ]
     if report.error:
         lines.append(f"- **СТАТУС: ОШИБКА** — {report.error}")
     else:

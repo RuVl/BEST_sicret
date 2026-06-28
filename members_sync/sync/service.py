@@ -1,8 +1,10 @@
 """Оркестратор одного прогона синхронизации."""
 
+import time
 from datetime import UTC, datetime
 
 import structlog
+from gspread.utils import absolute_range_name
 
 from database.main import async_session
 from database.methods.member import deactivate_missing, upsert_member
@@ -14,25 +16,50 @@ from sheets.client import open_spreadsheet
 from sheets.column_mapper import resolve_columns
 from sheets.notes import NoteManager
 from sheets.record_reader import iterate_records
-from sheets.spec import spec_for_title
+from sheets.spec import SheetSpec, spec_for_title
 from sync.report import RunReport, SheetStat, dump_members, write_report
 
 log = structlog.get_logger("members_sync.service")
 
 
-def _parse_sheets(spreadsheet, issues: IssueCollector, notes: NoteManager, report: RunReport):
-    """Прочитать все подходящие листы и собрать ParsedMember с дедупом по identity_key."""
+def _fetch_sheet_values(spreadsheet) -> list[tuple[str, SheetSpec, list[list[str]]]]:
+    """Одним батч-запросом забрать значения всех листов, под которые есть раскладка.
+
+    Раньше на каждый лист шёл отдельный ``get_all_values()`` — N сетевых round-trip'ов,
+    что упиралось в латентность и rate-limit Google API. Теперь — один ``values_batch_get``.
+    """
+    targets: list[tuple[str, SheetSpec]] = []
+    for worksheet in spreadsheet.worksheets():
+        spec = spec_for_title(worksheet.title)
+        if spec is None:
+            log.debug("Лист пропущен (нет раскладки)", sheet=worksheet.title)
+            continue
+        targets.append((worksheet.title, spec))
+
+    if not targets:
+        return []
+
+    ranges = [absolute_range_name(title) for title, _ in targets]
+    response = spreadsheet.values_batch_get(ranges)
+    value_ranges = response.get("valueRanges", [])  # порядок совпадает с порядком ranges
+
+    result: list[tuple[str, SheetSpec, list[list[str]]]] = []
+    for (title, spec), value_range in zip(targets, value_ranges, strict=False):
+        result.append((title, spec, value_range.get("values", [])))
+    return result
+
+
+def _parse_sheets(
+    sheet_values: list[tuple[str, SheetSpec, list[list[str]]]],
+    issues: IssueCollector,
+    notes: NoteManager,
+    report: RunReport,
+):
+    """Разобрать заранее загруженные листы и собрать ParsedMember с дедупом по identity_key."""
     parsed: dict[str, ParsedMember] = {}
 
-    for worksheet in spreadsheet.worksheets():
-        title = worksheet.title
-        spec = spec_for_title(title)
-        if spec is None:
-            log.debug("Лист пропущен (нет раскладки)", sheet=title)
-            continue
-
+    for title, spec, values in sheet_values:
         notes.register_sheet(title)
-        values = worksheet.get_all_values()
         column_index = resolve_columns(values, spec, title, issues)
 
         count = 0
@@ -74,10 +101,16 @@ async def run_sync() -> RunReport:
     issues = IssueCollector()
 
     try:
+        t = time.perf_counter()
         spreadsheet = open_spreadsheet()
+        log.info("Таблица открыта", elapsed_s=round(time.perf_counter() - t, 2))
         notes = NoteManager(spreadsheet, SyncKeys.SHEET_NOTE_MARKER, SyncKeys.WRITE_SHEET_NOTES)
 
-        parsed = _parse_sheets(spreadsheet, issues, notes, report)
+        t = time.perf_counter()
+        sheet_values = _fetch_sheet_values(spreadsheet)
+        log.info("Значения листов загружены", sheets=len(sheet_values), elapsed_s=round(time.perf_counter() - t, 2))
+
+        parsed = _parse_sheets(sheet_values, issues, notes, report)
         members = list(parsed.values())
         report.total_parsed = len(members)
         for member in members:

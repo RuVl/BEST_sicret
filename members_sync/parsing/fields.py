@@ -1,7 +1,6 @@
 """Канонические имена колонок и классификация секций → статус членства."""
 
 # Канонические колонки (то, что мы ищем в заголовках листа).
-NUMBER = "number"
 NAME = "name"
 PHONE = "phone"
 SOCIAL = "social"
@@ -51,19 +50,19 @@ def classify_section(section: str | None, default: tuple[str, str]) -> tuple[str
 
     # Эвристика для новых/изменённых секций.
     if key.startswith("ex"):
-        return ("ex_member", "ex")
+        return "ex_member", "ex"
     if "alumni" in key:
-        return ("alumni", "alumni")
+        return "alumni", "alumni"
     if "board" in key:
-        return ("board", "active")
+        return "board", "active"
     if "full" in key:
-        return ("full_member", "active")
+        return "full_member", "active"
     if "baby" in key:
-        return ("baby_member", "active")
+        return "baby_member", "active"
     if "observer" in key:
-        return ("observer", "active")
+        return "observer", "active"
     if "inactive" in key or "former" in key:
-        return (key.split()[0], "inactive")
+        return key.split()[0], "inactive"
     return default
 
 
