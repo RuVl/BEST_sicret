@@ -4,6 +4,7 @@ RUN_MODE=once — один прогон и выход (для внешнего �
 RUN_MODE=cron — контейнер живёт постоянно, запуск по расписанию (CRON_HOUR/MINUTE/TZ).
 """
 
+import argparse
 import asyncio
 
 import structlog
@@ -21,9 +22,11 @@ async def _ensure_schema() -> None:
         await create_schema()
 
 
-async def _run_once() -> None:
-    await _ensure_schema()
-    await run_sync()
+async def _run_once(dry_run: bool = False) -> None:
+    # В dry-run БД не трогаем — схему не создаём.
+    if not dry_run:
+        await _ensure_schema()
+    await run_sync(dry_run=dry_run)
 
 
 async def _run_cron() -> None:
@@ -63,7 +66,21 @@ async def _run_cron() -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="members_sync — синхронизация участников из Google Sheets")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Распарсить боевые данные и сохранить дамп в JSON, не записывая в БД (один прогон).",
+    )
+    args = parser.parse_args()
+
     setup_logging()
+
+    if args.dry_run:
+        log.info("members_sync старт", mode="dry-run")
+        asyncio.run(_run_once(dry_run=True))
+        return
+
     log.info("members_sync старт", mode=RunKeys.MODE)
     if RunKeys.MODE == "cron":
         asyncio.run(_run_cron())

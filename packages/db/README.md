@@ -19,11 +19,11 @@ packages/db/
 
 ## Установка (локально)
 
-В venv каждого сервиса:
+Через корневой `Makefile` (`uv`-venv'ы, ручной `pip install` не нужен):
 
 ```bash
-pip install -e packages/db        # из корня репозитория
-# или: make install-bot / make install-sync
+make install-db                   # из корня — venv пакета best_db (uv sync)
+# в venv сервисов best_db ставится editable: make install-bot / make install-sync
 ```
 
 В Docker устанавливается как зависимость через named build context
@@ -44,15 +44,14 @@ from best_db.models import Person, LbgMember          # таблицы — от�
 ## Миграции
 
 URL собирается из окружения `POSTGRES_*` (`POSTGRES_HOST/PORT/USER/PASSWORD/DB`,
-см. `best_db/migrations/env.py`). Запуск:
+см. `best_db/migrations/env.py`). Запуск — через корневой `Makefile` (`uv` сам читает
+`postgres/.env`, для локального стека `POSTGRES_HOST=localhost`):
 
 ```bash
-# локально (нужны переменные окружения; для dev-стека POSTGRES_HOST=localhost)
-cd packages/db && alembic upgrade head            # или: make migrate
-cd packages/db && alembic revision --autogenerate -m "..."   # make migration m="..."
-
-# в сети docker-compose (host=postgres)
-docker compose run --rm db_migrate                # или: make migrate-docker
+make migrate                      # применить миграции локально (alembic upgrade head)
+make migration m="..."            # новая ревизия по изменениям моделей (autogenerate)
+make downgrade [rev=-1]           # откатить миграции
+make migrate-docker               # в сети docker-compose (host=postgres)
 ```
 
 Файлы в `best_db/migrations/versions/` **коммитятся** — это история схемы.
