@@ -22,8 +22,8 @@ class IntegerFormatter(Formatter):
     def format(self, value: str) -> int:
         try:
             return int(value)
-        except ValueError:
-            raise ValueError("invalid-integer-input")
+        except ValueError as err:
+            raise ValueError("invalid-integer-input") from err
 
 
 class NumberFormatter(Formatter):
@@ -31,8 +31,8 @@ class NumberFormatter(Formatter):
         value = value.replace(",", ".")
         try:
             return float(value)
-        except ValueError:
-            raise ValueError("invalid-number-input")
+        except ValueError as err:
+            raise ValueError("invalid-number-input") from err
 
 
 class BooleanFormatter(Formatter):

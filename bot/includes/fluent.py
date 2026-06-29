@@ -21,7 +21,7 @@ def get_fluent_localization() -> FluentLocalization:
             raise NotADirectoryError(f"{lang_dir} is not a directory")
 
     # Add prefix {locale} for language directory mapping
-    locale_files_name = set(map(lambda f: "{locale}/" + f.name, locale_dir.rglob("*.ftl")))
+    locale_files_name = {"{locale}/" + f.name for f in locale_dir.rglob("*.ftl")}
     if not len(locale_files_name):
         raise FileNotFoundError("locale files are not found")
 

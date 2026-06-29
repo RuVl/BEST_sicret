@@ -1,3 +1,4 @@
+import contextlib
 from typing import Any
 
 from fluent.runtime import FluentLocalization
@@ -29,10 +30,9 @@ class PrimitiveContext(BaseContext):
     def parse(self, value: str) -> Any:
         # Форматер преобразует ввод (например, из строки в число)
         formatter = get_formatter(self._type)
-        try:
-            value: Any = formatter.format(value)
-        except ValueError:
-            pass  # TODO
+        # TODO: при ошибке форматирования игнорируем её и идём дальше с исходным значением
+        with contextlib.suppress(ValueError):
+            value = formatter.format(value)
 
         # Валидация правильности ввода (например, дата соответствует ДД.ММ.ГГГГ)
         validator = get_validator(self._format)

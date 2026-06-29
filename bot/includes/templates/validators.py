@@ -21,7 +21,6 @@ class DateValidator(Validator):
             return True
         except ValueError:
             return False
-            raise ValueError("invalid-type")
 
 
 class DummyValidator(Validator):

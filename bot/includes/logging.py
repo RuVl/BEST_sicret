@@ -33,7 +33,8 @@ def setup_logging():
     structlog.configure(
         processors=[
             *shared_processors,
-            # Этот процессор ВАЖЕН для интеграции: он подготавливает event_dict для форматтеров logging. Он должен быть ПОСЛЕДНИМ в этой цепочке.
+            # Этот процессор ВАЖЕН для интеграции: он подготавливает event_dict для форматтеров logging.
+            # Он должен быть ПОСЛЕДНИМ в этой цепочке.
             structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
         ],
         logger_factory=structlog.stdlib.LoggerFactory(),
@@ -104,7 +105,8 @@ def get_shared_processors() -> list:
             )
         )
 
-    # Нет add_log_level, т.к. structlog.stdlib.add_log_level добавляется автоматически при интеграции с logging (в structlog.configure)
+    # Нет add_log_level, т.к. structlog.stdlib.add_log_level добавляется автоматически
+    # при интеграции с logging (в structlog.configure)
 
     processors.extend(
         [

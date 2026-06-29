@@ -39,7 +39,7 @@ class ObjectContext(BaseContext):
         if self.description:
             parts.append(f"_{self.description}_")
 
-        for key, child in self._children.items():
+        for _key, child in self._children.items():
             parts.append(rf"\-{r' \*' if child.required else ''} {child.render_view(l10n)}")
         return "\n".join(parts)
 
