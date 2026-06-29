@@ -55,6 +55,7 @@ class RunConfig(_Section):
         return value.lower()
 
 
+# noinspection DuplicatedCode
 class PostgresConfig(_Section):
     HOST: str = Field("localhost", alias="POSTGRES_HOST")
     PORT: str = Field("5432", alias="POSTGRES_PORT")

@@ -1,18 +1,43 @@
+"""Конфигурация бота через pydantic-settings (nested-паттерн, эталон — members_sync/env.py).
+
+Настройки сгруппированы в подмодели-секции (``TelegramConfig``/``PostgresConfig``/...), собранные
+на едином ``GlobalSettings``. Каждая секция — самостоятельный ``BaseSettings``: pydantic не наполняет
+вложенные ``BaseModel`` из плоских env по alias (нужен ``env_nested_delimiter`` или JSON), поэтому
+секции читают ``.env`` сами.
+
+Доступ: ``settings.telegram.API_TOKEN``.
+
+``.env`` берётся рядом с этим файлом; реальные переменные окружения (docker ``env_file``) имеют
+приоритет над файлом.
+"""
+
 from pathlib import Path
-from typing import Final
+from typing import Annotated, Final
 
-from pydantic import BaseModel, Field, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, field_validator, model_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+_ENV_FILE = Path(__file__).resolve().parent / ".env"
 
 
-# --- ПОДБОРКИ НАСТРОЕК (Обычные модели Pydantic) ---
-class TelegramConfig(BaseModel):
+class _Section(BaseSettings):
+    """Базовая секция: единый источник ``.env`` и игнор лишних переменных."""
+
+    model_config = SettingsConfigDict(
+        env_file=_ENV_FILE,
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+
+class TelegramConfig(_Section):
     API_TOKEN: str = Field(alias="TG_API_TOKEN")
     PRESIDENT_ID: int = 0
     TREASURER_ID: int = 0
 
 
-class PostgresConfig(BaseModel):
+# noinspection DuplicatedCode
+class PostgresConfig(_Section):
     HOST: str = Field("localhost", alias="POSTGRES_HOST")
     PORT: str = Field("5432", alias="POSTGRES_PORT")
     USER: str = Field("postgres", alias="POSTGRES_USER")
@@ -24,7 +49,7 @@ class PostgresConfig(BaseModel):
         return f"postgresql+asyncpg://{self.USER}:{self.PASSWORD}@{self.HOST}:{self.PORT}/{self.DATABASE}"
 
 
-class RedisConfig(BaseModel):
+class RedisConfig(_Section):
     USE_REDIS: bool = Field(True, alias="USE_REDIS")
     HOST: str = Field("localhost", alias="REDIS_HOST")
     PORT: str = Field("6379", alias="REDIS_PORT")
@@ -35,13 +60,21 @@ class RedisConfig(BaseModel):
         return f"redis://{self.HOST}:{self.PORT}/{self.DATABASE}"
 
 
-class ProjectConfig(BaseModel):
+class ProjectConfig(_Section):
     DEBUG: bool = Field(alias="DEBUG")
     RESOURCE_DIR: Path = Field(Path("resources/"), alias="RESOURCE_DIR")
     TEMPLATES_DIR: Path = Field(Path("resources/templates/"), alias="TEMPLATES_DIR")
     REFUND_BILLS_DIR: Path = Field(Path("resources/refund_bills/"), alias="REFUND_BILLS_DIR")
     LOCALE_DIR: Path = Field(Path("l10n/"), alias="LOCALE_DIR")
-    AVAILABLE_LOCALES: list[str] = Field(["ru"], alias="AVAILABLE_LOCALES")
+    # NoDecode: значение в .env — строка через запятую (``ru,en``), а не JSON-список
+    AVAILABLE_LOCALES: Annotated[list[str], NoDecode] = Field(["ru"], alias="AVAILABLE_LOCALES")
+
+    @field_validator("AVAILABLE_LOCALES", mode="before")
+    @classmethod
+    def split_locales(cls, value: str | list[str]) -> list[str]:
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
 
     # Динамическая сборка путей, если они не заданы в .env явно, а зависят от RESOURCE_DIR
     @model_validator(mode="before")
@@ -58,7 +91,7 @@ class ProjectConfig(BaseModel):
         return data
 
 
-class LoggerConfig(BaseModel):
+class LoggerConfig(_Section):
     SHOW_DEBUG_LOGS: bool = Field(False, alias="SHOW_DEBUG_LOGS")
     SHOW_DATETIME: bool = Field(False, alias="SHOW_DATETIME")
     DATETIME_FORMAT: str = Field("%Y-%m-%d %H:%M:%S", alias="DATETIME_FORMAT")
@@ -70,21 +103,14 @@ class LoggerConfig(BaseModel):
     LOG_FILE_BACKUP_COUNT: int = Field(5, alias="LOG_FILE_BACKUP_COUNT")
 
 
-# --- ГЛАВНЫЙ КЛАСС-СБОРЩИК (Управляет загрузкой .env) ---
-# https://pydantic.dev/docs/validation/latest/concepts/pydantic_settings/
-class GlobalSettings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",  # игнорирует другие переменные в окружении
-    )
+class GlobalSettings(_Section):
+    """Главный сборщик секций (pydantic сам вызывает фабрики, секции читают ``.env``)."""
 
-    # Pydantic сам заполнит переменные данными по alias-именам из env
-    telegram: TelegramConfig = Field(default_factory=lambda: TelegramConfig.model_validate({}))
-    postgres: PostgresConfig = Field(default_factory=lambda: PostgresConfig.model_validate({}))
-    redis: RedisConfig = Field(default_factory=lambda: RedisConfig.model_validate({}))
-    project: ProjectConfig = Field(default_factory=lambda: ProjectConfig.model_validate({}))
-    logger: LoggerConfig = Field(default_factory=lambda: LoggerConfig.model_validate({}))
+    telegram: TelegramConfig = Field(default_factory=TelegramConfig)
+    postgres: PostgresConfig = Field(default_factory=PostgresConfig)
+    redis: RedisConfig = Field(default_factory=RedisConfig)
+    project: ProjectConfig = Field(default_factory=ProjectConfig)
+    logger: LoggerConfig = Field(default_factory=LoggerConfig)
 
 
 # Инициализируем глобальный синглтон настроек
