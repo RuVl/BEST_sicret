@@ -5,19 +5,23 @@ Alembic уже инициализирован (async-шаблон). Это ед�
 сервисов (`bot`, `members_sync`); файлы в `versions/` **коммитятся**. Конфиг —
 `packages/db/alembic.ini`, URL собирается из `POSTGRES_*` в `env.py`.
 
-Из каталога `packages/db/` (или через корневой `Makefile`):
+Команды — через корневой `Makefile` (ручной `alembic …` не нужен):
 
 1. Сгенерировать миграцию по изменениям моделей:
    ```shell
-   alembic revision --autogenerate -m 'message'   # make migration m="message"
+   make migration m="message"
    ```
 2. Проверить сгенерированный файл и применить:
    ```shell
-   alembic upgrade head                            # make migrate
+   make migrate
    ```
 3. В сети docker-compose (host=postgres):
    ```shell
-   docker compose run --rm db_migrate              # make migrate-docker
+   make migrate-docker
+   ```
+4. Откатить при необходимости:
+   ```shell
+   make downgrade rev=-1
    ```
 
 > Нужны переменные окружения `POSTGRES_HOST/PORT/USER/PASSWORD/DB`

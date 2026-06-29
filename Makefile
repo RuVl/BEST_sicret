@@ -95,6 +95,10 @@ run-sync: ## members_sync локально (dev.env) + postgres в docker (RUN_M
 	$(COMPOSE_DEV) up -d postgres
 	cd members_sync && $(UV) run --env-file dev.env python run.py
 
+.PHONY: run-sync-dry
+run-sync-dry: ## members_sync: парсинг боевых данных в JSON без записи в БД (dry-run, postgres не нужен)
+	cd members_sync && $(UV) run --env-file dev.env python run.py --dry-run
+
 .PHONY: up
 up: ## Поднять весь стек в docker (bot + members_sync + postgres + redis)
 	$(COMPOSE) up -d --build

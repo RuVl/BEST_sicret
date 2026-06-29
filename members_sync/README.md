@@ -16,7 +16,8 @@ Google-таблица — единственный источник истины
 
 ## Конфигурация
 
-Скопируйте `.env.dist` → `.env` и заполните. Ключевое:
+Создайте конфиги: `make env` (из корня — создаст `.env` для docker и `dev.env` для
+локального запуска из `*.dist`), затем заполните. Ключевое:
 
 | Переменная                                | Назначение                                                                      |
 |-------------------------------------------|---------------------------------------------------------------------------------|
@@ -41,12 +42,17 @@ Google-таблица — единственный источник истины
 (`packages/db`). Зависимости описаны в `pyproject.toml` (`uv`), общий пакет
 подключён как editable (`[tool.uv.sources] best-db = ../packages/db`).
 
+Команды — через корневой `Makefile` (`make help`).
+
 ```bash
 # из корня репозитория — поставить best_db + зависимости сервиса
 make install-sync
 
-# один прогон (RUN_MODE из .env)
-cd members_sync && python3 run.py        # или: make run-sync
+# один прогон локально (dev.env, поднимет postgres в docker; RUN_MODE из .env)
+make run-sync
+
+# dry-run: парсинг боевых данных в JSON без записи в БД (postgres не нужен)
+make run-sync-dry
 ```
 
 В составе docker-compose (контейнер живёт постоянно, синхронизация по расписанию
@@ -54,7 +60,7 @@ cd members_sync && python3 run.py        # или: make run-sync
 (`build.additional_contexts: { database: ./packages/db }`):
 
 ```bash
-docker compose up -d --build members_sync
+make up          # весь стек; или собрать только этот сервис: make build
 ```
 
 ## Миграции

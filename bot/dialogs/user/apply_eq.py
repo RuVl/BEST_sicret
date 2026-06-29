@@ -7,13 +7,14 @@ from aiogram_dialog.widgets.kbd import Button, ScrollingGroup, Select, SwitchTo
 from aiogram_dialog.widgets.text import Format, Multi
 from fluent.runtime import FluentLocalization
 
-from env import settings
+from database.main import async_session
 from includes import load_schema, validate_data
 from includes.templates import create_context
 from includes.templates.contexts import BaseContext, PrimitiveContext
 from middlewares import L10N_FORMAT_KEY
 from state_machines import CreateByApplyEquipment, ViewInventory
 from utils import L10nFormat, escape_mdv2
+from utils.board import get_treasurer_id
 
 DIALOG_SCHEMA = "equipments/apply_equipment.json"
 
@@ -237,15 +238,17 @@ async def on_submit(clb: CallbackQuery, widget: Button, dialog_manager: DialogMa
         await clb.answer(error_msg, show_alert=True)
         return
 
-    if settings.telegram.TREASURER_ID:
+    async with async_session() as session:
+        treasurer_id = await get_treasurer_id(session)
+    if treasurer_id:
         await clb.bot.send_message(
-            settings.telegram.TREASURER_ID,
+            treasurer_id,
             l10n.format_value(
                 "equipment-chosen",
                 args={"by_username": escape_mdv2(clb.from_user.username)},
             ),
         )
-        await clb.message.forward(settings.telegram.TREASURER_ID)
+        await clb.message.forward(treasurer_id)
         await clb.answer(l10n.format_value("application-saved"), show_alert=True)
     else:
         await clb.answer(l10n.format_value("application-error"), show_alert=True)

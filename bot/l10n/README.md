@@ -68,21 +68,21 @@ auth-attempts-left =
 Допустим, вы хотите отобразить сообщение о логине:
 
 ```python
-l10n.format_value("auth-login-success", {"username": "Иван"})
+l10n.format_value("auth-login-success", args={"username": "Иван"})
 # ✅ Вы вошли как Иван
 ```
 
 С ошибкой входа:
 
 ```python
-l10n.format_value("auth-login-failed", {"reason": "user-not-found"})
+l10n.format_value("auth-login-failed", args={"reason": "user-not-found"})
 # ❌ Пользователь не найден
 ```
 
 И с числом попыток:
 
 ```python
-l10n.format_value("auth-attempts-left", {"count": 2})
+l10n.format_value("auth-attempts-left", args={"count": 2})
 # У вас осталось 2 попытки до блокировки
 ```
 

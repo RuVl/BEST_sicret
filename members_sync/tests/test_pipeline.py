@@ -4,7 +4,7 @@ from parsing.issues import IssueCollector
 from parsing.member_builder import build
 from sheets.column_mapper import resolve_columns
 from sheets.record_reader import iterate_records
-from sheets.spec import LAYOUT_A, spec_for_title
+from sheets.spec import LAYOUT_A, LAYOUT_B, spec_for_title
 
 # Заголовок раскладки A (как в page1), сокращён до нужных колонок по позициям.
 HEADER_A = [
@@ -80,6 +80,28 @@ def test_synthetic_two_row_member():
     # raw snapshot не теряет данные
     assert m.raw["cells"]["name"]["p"] == "Иванова Анна Сергеевна"
     assert not issues.errors
+
+
+def test_name_only_secondary_row_not_treated_as_section():
+    # Регрессия: вторая строка участника, где заполнено только имя транслитом,
+    # раньше матчила эвристику секции и протекала в source_section следующих людей.
+    def row(num, name, email):
+        return [num, name, "89312988054", email, "", "", "", "", "", "", "", "", "", "", "", ""]
+
+    values = [
+        HEADER_B,
+        ["", "ALUMNI", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+        row("1", "Колесникович Максим", "maxim@best-eu.org"),
+        ["", "Kolesnikovich Maxim", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+        row("2", "Зеленецкий Илья", "ilia@best-eu.org"),
+    ]
+    members, _, _ = _parse_values(values, LAYOUT_B, title="Alumni+Former")
+
+    assert len(members) == 2
+    assert members[0].full_name_en == "Kolesnikovich Maxim"
+    assert members[0].source_section == "ALUMNI"
+    assert members[1].source_section == "ALUMNI"
+    assert members[1].membership_category == "alumni"
 
 
 def test_identity_fallback_to_name_without_email():

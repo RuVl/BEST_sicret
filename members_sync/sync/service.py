@@ -7,7 +7,7 @@ import structlog
 from gspread.utils import absolute_range_name
 
 from database.main import async_session
-from database.methods.member import deactivate_missing, upsert_member
+from database.methods.member import deactivate_missing, link_unlinked_persons, upsert_member
 from env import SyncKeys
 from parsing import fields as F
 from parsing.issues import IssueCollector
@@ -95,7 +95,12 @@ def _parse_sheets(
     return parsed
 
 
-async def run_sync() -> RunReport:
+async def run_sync(dry_run: bool = False) -> RunReport:
+    """Один прогон синхронизации.
+
+    ``dry_run=True`` — парсим боевые данные из Google Sheets и пишем дамп в JSON,
+    но БД не трогаем и заметки в таблицу не пишем (для проверки парсинга вживую).
+    """
     now = datetime.now(UTC)
     report = RunReport(started_at=now)
     issues = IssueCollector()
@@ -104,7 +109,8 @@ async def run_sync() -> RunReport:
         t = time.perf_counter()
         spreadsheet = open_spreadsheet()
         log.info("Таблица открыта", elapsed_s=round(time.perf_counter() - t, 2))
-        notes = NoteManager(spreadsheet, SyncKeys.SHEET_NOTE_MARKER, SyncKeys.WRITE_SHEET_NOTES)
+        # В dry-run заметки в таблицу не пишем — только читаем и дампим JSON.
+        notes = NoteManager(spreadsheet, SyncKeys.SHEET_NOTE_MARKER, SyncKeys.WRITE_SHEET_NOTES and not dry_run)
 
         t = time.perf_counter()
         sheet_values = _fetch_sheet_values(spreadsheet)
@@ -117,23 +123,28 @@ async def run_sync() -> RunReport:
             report.by_status[member.membership_status or "—"] += 1
             report.by_category[member.membership_category or "—"] += 1
 
-        # Запись в БД.
-        async with async_session() as session:
-            for member in members:
-                result = await upsert_member(session, member, now)
-                if result == "inserted":
-                    report.inserted += 1
-                else:
-                    report.updated += 1
-            report.deactivated = await deactivate_missing(session, parsed.keys(), now)
-            await session.commit()
+        # Запись в БД (в dry-run пропускаем — только дамп в JSON).
+        if dry_run:
+            log.info("dry-run: запись в БД и заметки в таблицу пропущены")
+        else:
+            async with async_session() as session:
+                for member in members:
+                    result = await upsert_member(session, member, now)
+                    if result == "inserted":
+                        report.inserted += 1
+                    else:
+                        report.updated += 1
+                report.deactivated = await deactivate_missing(session, parsed.keys(), now)
+                report.linked_persons = await link_unlinked_persons(session)
+                await session.commit()
 
-        log.info(
-            "БД синхронизирована",
-            inserted=report.inserted,
-            updated=report.updated,
-            deactivated=report.deactivated,
-        )
+            log.info(
+                "БД синхронизирована",
+                inserted=report.inserted,
+                updated=report.updated,
+                deactivated=report.deactivated,
+                linked_persons=report.linked_persons,
+            )
 
         # Заметки об ошибках в таблице.
         for issue in issues:

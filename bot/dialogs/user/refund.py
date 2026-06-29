@@ -13,6 +13,7 @@ from aiogram_dialog.widgets.text import Format, Multi
 from fluent.runtime import FluentLocalization
 from structlog.typing import FilteringBoundLogger
 
+from database.main import async_session
 from env import settings
 from includes import load_schema, validate_data
 from includes.templates import create_context
@@ -20,6 +21,7 @@ from includes.templates.contexts import BaseContext, PrimitiveContext
 from middlewares import L10N_FORMAT_KEY, LOGGING_KEY
 from state_machines import CreateRefundApply
 from utils import L10nFormat, escape_mdv2
+from utils.board import get_treasurer_id
 
 DIALOG_SCHEMA = "refunds/apply.json"
 
@@ -99,7 +101,9 @@ async def send_apply(
     bill_path = dialog_manager.dialog_data.get("bill_path")
     file = FSInputFile(bill_path, raw_data["bill_filename"])
 
-    recipient_id = settings.telegram.TREASURER_ID or clb.from_user.id
+    async with async_session() as session:
+        treasurer_id = await get_treasurer_id(session)
+    recipient_id = treasurer_id or clb.from_user.id
     data = {k: escape_mdv2(v) for k, v in raw_data.items()}
 
     await logger.ainfo(

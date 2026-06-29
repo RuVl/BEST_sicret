@@ -10,7 +10,7 @@ from aiogram_dialog.widgets.kbd import Button, Row, ScrollingGroup, Select, Url
 from aiogram_dialog.widgets.text import Format, Multi
 from fluent.runtime import FluentLocalization
 
-from env import settings
+from database.main import async_session
 from includes import (
     generate_document,
     get_available_templates,
@@ -22,6 +22,7 @@ from includes.templates.contexts import BaseContext, PrimitiveContext
 from middlewares import L10N_FORMAT_KEY
 from state_machines import CreateByTemplate
 from utils import L10nFormat, escape_mdv2
+from utils.board import get_president_id
 
 
 # ========== Окно выбора шаблона ==========
@@ -46,9 +47,11 @@ async def on_template_selected(
         return
 
     # Send notification to president if exists
-    if settings.telegram.PRESIDENT_ID:
+    async with async_session() as session:
+        president_id = await get_president_id(session)
+    if president_id:
         await clb.bot.send_message(
-            settings.telegram.PRESIDENT_ID,
+            president_id,
             l10n.format_value(
                 "template-chosen",
                 args={
@@ -115,9 +118,11 @@ async def response_document(clb: CallbackQuery, _select: Select, dialog_manager:
         sent_doc = await clb.message.answer_document(file)
 
         # Send it to president if exist
-        if settings.telegram.PRESIDENT_ID:
+        async with async_session() as session:
+            president_id = await get_president_id(session)
+        if president_id:
             await clb.bot.send_message(
-                settings.telegram.PRESIDENT_ID,
+                president_id,
                 l10n.format_value(
                     "document-generated",
                     args={
@@ -126,7 +131,7 @@ async def response_document(clb: CallbackQuery, _select: Select, dialog_manager:
                     },
                 ),
             )
-            await sent_doc.forward(settings.telegram.PRESIDENT_ID)
+            await sent_doc.forward(president_id)
 
     except TelegramNetworkError as e:
         await clb.answer(l10n.format_value("telegram-network-error"), show_alert=True)

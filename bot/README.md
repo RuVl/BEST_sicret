@@ -10,17 +10,20 @@ Telegram-бот для СПб BEST: генерация внутренних до
 
 ## Запуск
 
+Команды запускаются через корневой `Makefile` (`make help` — полный список); ручные
+`cd bot && python run.py` / `docker compose …` не нужны.
+
 ```bash
 # зависимости (uv) + общий пакет best_db editable
 make install-bot                 # из корня репозитория
 
-# заполнить конфиг
-cp bot/.env.dist bot/.env        # затем отредактировать
+# создать конфиги из шаблонов: .env (docker) и dev.env (локальный запуск)
+make env                         # затем заполнить bot/.env и bot/dev.env
 
-# локально
-cd bot && python3 run.py         # или: make run-bot
+# локальный запуск (поднимет postgres/redis в docker, стартует бота на dev.env)
+make run-bot
 
-# postgres + redis для локальной разработки
+# только postgres + redis для локальной разработки
 make infra
 ```
 
@@ -34,7 +37,8 @@ make infra
 ## Линт и форматирование
 
 ```bash
-cd bot && ruff check --fix && ruff format    # или репозиторно: make lint / make format
+make lint        # ruff check + проверка форматирования (без правок)
+make format      # ruff check --fix + ruff format
 ```
 
 Архитектура слоёв (handlers → dialogs → includes/templates → database/docx) и

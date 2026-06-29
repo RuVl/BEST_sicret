@@ -28,9 +28,10 @@ make up                  # = docker compose up -d --build
 # Только postgres + redis для локальной разработки
 make infra
 
-# Локальный запуск сервисов (нужны заполненные .env, копируются из .env.dist)
+# Локальный запуск сервисов (на dev.env; конфиги создаются через `make env`)
 make run-bot
 make run-sync
+make run-sync-dry        # парсинг боевых данных в JSON без записи в БД
 
 # Миграции (единый alembic в packages/db)
 make migration m="..."   # новая ревизия

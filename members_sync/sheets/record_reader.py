@@ -111,12 +111,10 @@ def iterate_records(
             secondary_row = None
             if i + 1 < n:
                 nxt = values[i + 1]
-                if (
-                    not _is_empty(nxt)
-                    and not _cell(nxt, num_idx).isdigit()
-                    and not _is_section(nxt, name_idx, num_idx)
-                    and not _looks_like_stats(nxt)
-                ):
+                # Каждый участник = ровно 2 строки: строку сразу за пронумерованной
+                # основной забираем как вторичную безусловно (даже если в ней только
+                # имя транслитом — заголовок секции не стоит вплотную за участником).
+                if not _is_empty(nxt) and not _cell(nxt, num_idx).isdigit() and not _looks_like_stats(nxt):
                     secondary = nxt
                     secondary_row = i + 2  # 1-based
             yield RawRecord(

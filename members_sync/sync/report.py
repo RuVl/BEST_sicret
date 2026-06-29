@@ -29,6 +29,7 @@ class RunReport:
     inserted: int = 0
     updated: int = 0
     deactivated: int = 0
+    linked_persons: int = 0
     notes_enabled: bool = False
     notes_written: int = 0
     notes_cleared: int = 0
@@ -77,8 +78,17 @@ def write_report(report: RunReport, path: Path) -> None:
     lines.append("## Синхронизация\n")
     lines.append(
         _md_table(
-            ["Распознано", "Добавлено", "Обновлено", "Деактивировано", "Дубликатов"],
-            [[report.total_parsed, report.inserted, report.updated, report.deactivated, report.duplicates]],
+            ["Распознано", "Добавлено", "Обновлено", "Деактивировано", "Связано Person", "Дубликатов"],
+            [
+                [
+                    report.total_parsed,
+                    report.inserted,
+                    report.updated,
+                    report.deactivated,
+                    report.linked_persons,
+                    report.duplicates,
+                ]
+            ],
         )
     )
     lines.append("")

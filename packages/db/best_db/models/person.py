@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy import BigInteger, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from best_db.models.base import Base
@@ -17,7 +17,7 @@ class Person(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     telegram_id: Mapped[int] = mapped_column(
-        Integer,
+        BigInteger,
         unique=True,
         index=True,
         nullable=False,
@@ -27,6 +27,12 @@ class Person(Base):
         String(255),
         nullable=False,
         comment="Имя пользователя",
+    )
+    telegram_username: Mapped[str | None] = mapped_column(
+        String(32),
+        index=True,
+        nullable=True,
+        comment="Telegram @username (для авто-связи с LbgMember)",
     )
 
     # Опциональная связь с участником локальной группы (если человек опознан).
