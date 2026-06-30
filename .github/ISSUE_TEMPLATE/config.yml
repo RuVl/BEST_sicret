@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 💬 Вопрос / обсуждение
+    url: https://github.com/RuVl/BEST_sicret/discussions
+    about: Для вопросов и общих обсуждений используйте Discussions, а не Issues.

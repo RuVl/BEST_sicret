@@ -1,0 +1,41 @@
+name: 🔧 Chore / Tech debt
+description: Рефакторинг, зависимости, CI, инфраструктура
+title: "[Chore]: "
+labels: [chore]
+body:
+  - type: textarea
+    id: what-why
+    attributes:
+      label: Что и зачем
+      description: Что нужно сделать и почему (мотивация, технический долг)?
+      placeholder: Например — обновить зависимости, вынести общий код, поправить CI.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: service
+    attributes:
+      label: Сервис / область
+      options:
+        - bot
+        - members_sync
+        - packages/db
+        - инфраструктура (Docker / CI / Makefile)
+        - весь репозиторий
+    validations:
+      required: true
+
+  - type: textarea
+    id: checklist
+    attributes:
+      label: Чек-лист работ
+      value: |
+        - [ ]
+        - [ ]
+
+  - type: textarea
+    id: risks
+    attributes:
+      label: Риски и откат
+      description: Возможные риски и как откатить изменения при проблемах.
+      placeholder: Например — затрагивает миграции БД, нужен бэкап перед применением.

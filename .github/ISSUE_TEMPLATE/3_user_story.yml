@@ -1,0 +1,43 @@
+name: 📖 User Story
+description: Пользовательская история в Agile-формате
+title: "[Story]: "
+labels: [feature, user story]
+body:
+  - type: textarea
+    id: story
+    attributes:
+      label: История
+      description: Опишите в формате «Как <роль> я хочу <цель>, чтобы <ценность>».
+      value: |
+        **Как** <роль>
+        **я хочу** <цель>,
+        **чтобы** <ценность>.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Критерии приёмки
+      description: Условия, при которых история считается выполненной.
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: textarea
+    id: subtasks
+    attributes:
+      label: Подзадачи
+      description: Технические шаги. Любой пункт можно конвертировать в отдельный sub-issue.
+      value: |
+        - [ ]
+        - [ ]
+
+  - type: input
+    id: epic
+    attributes:
+      label: Связанный Epic
+      description: Номер родительского эпика, если есть.
+      placeholder: "#"
