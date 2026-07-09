@@ -13,13 +13,15 @@ from aiogram_dialog.widgets.text import Format, Multi
 from fluent.runtime import FluentLocalization
 from structlog.typing import FilteringBoundLogger
 
-from env import ProjectKeys, TelegramKeys
+from database.main import async_session
+from env import settings
 from includes import load_schema, validate_data
 from includes.templates import create_context
 from includes.templates.contexts import BaseContext, PrimitiveContext
 from middlewares import L10N_FORMAT_KEY, LOGGING_KEY
 from state_machines import CreateRefundApply
-from utils import escape_mdv2, L10nFormat
+from utils import L10nFormat, escape_mdv2
+from utils.board import get_treasurer_id
 
 DIALOG_SCHEMA = "refunds/apply.json"
 
@@ -99,7 +101,9 @@ async def send_apply(
     bill_path = dialog_manager.dialog_data.get("bill_path")
     file = FSInputFile(bill_path, raw_data["bill_filename"])
 
-    recipient_id = TelegramKeys.TREASURER_ID or clb.from_user.id
+    async with async_session() as session:
+        treasurer_id = await get_treasurer_id(session)
+    recipient_id = treasurer_id or clb.from_user.id
     data = {k: escape_mdv2(v) for k, v in raw_data.items()}
 
     await logger.ainfo(
@@ -180,7 +184,7 @@ async def download_bill(
         return
 
     # мб это вынести в инициализацию проекта
-    ProjectKeys.REFUND_BILLS_DIR.mkdir(parents=True, exist_ok=True)
+    settings.project.REFUND_BILLS_DIR.mkdir(parents=True, exist_ok=True)
 
     # Удаляем предыдущий загруженный чек
     if old_bill_path := dialog_manager.dialog_data.get("bill_path"):
@@ -190,7 +194,7 @@ async def download_bill(
     # Формируем путь для нового чека
     filename = Path(document.file_name or "no_name")
     save_filename = f"{filename.stem}_{document.file_id}{filename.suffix}"
-    file_path = ProjectKeys.REFUND_BILLS_DIR / save_filename
+    file_path = settings.project.REFUND_BILLS_DIR / save_filename
 
     async with ChatActionSender(
         bot=msg.bot,

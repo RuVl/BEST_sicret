@@ -10,7 +10,7 @@ from aiogram_dialog.widgets.kbd import Button, Row, ScrollingGroup, Select, Url
 from aiogram_dialog.widgets.text import Format, Multi
 from fluent.runtime import FluentLocalization
 
-from env import TelegramKeys
+from database.main import async_session
 from includes import (
     generate_document,
     get_available_templates,
@@ -21,7 +21,8 @@ from includes.templates import create_context
 from includes.templates.contexts import BaseContext, PrimitiveContext
 from middlewares import L10N_FORMAT_KEY
 from state_machines import CreateByTemplate
-from utils import escape_mdv2, L10nFormat
+from utils import L10nFormat, escape_mdv2
+from utils.board import get_president_id
 
 
 # ========== Окно выбора шаблона ==========
@@ -46,9 +47,11 @@ async def on_template_selected(
         return
 
     # Send notification to president if exists
-    if TelegramKeys.PRESIDENT_ID:
+    async with async_session() as session:
+        president_id = await get_president_id(session)
+    if president_id:
         await clb.bot.send_message(
-            TelegramKeys.PRESIDENT_ID,
+            president_id,
             l10n.format_value(
                 "template-chosen",
                 args={
@@ -60,16 +63,12 @@ async def on_template_selected(
 
     dialog_manager.dialog_data.update(template_name=template_name, context=context)
     await dialog_manager.switch_to(
-        CreateByTemplate.ADD
-        if isinstance(context, PrimitiveContext)
-        else CreateByTemplate.VIEW,
+        CreateByTemplate.ADD if isinstance(context, PrimitiveContext) else CreateByTemplate.VIEW,
     )
 
 
 # ========== Окно просмотра ==========
-async def get_template_context(
-    dialog_manager: DialogManager, **_kwargs
-) -> dict[str, Any]:
+async def get_template_context(dialog_manager: DialogManager, **_kwargs) -> dict[str, Any]:
     l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
     context: BaseContext = dialog_manager.dialog_data.get("context")
     return {
@@ -80,23 +79,17 @@ async def get_template_context(
     }
 
 
-async def on_data_selected(
-    _clb: CallbackQuery, _select: Select, dialog_manager: DialogManager, data: str
-):
+async def on_data_selected(_clb: CallbackQuery, _select: Select, dialog_manager: DialogManager, data: str):
     context: BaseContext = dialog_manager.dialog_data.get("context")
     context = context.view(data)
 
     dialog_manager.dialog_data.update(context=context)
     await dialog_manager.switch_to(
-        CreateByTemplate.ADD
-        if isinstance(context, PrimitiveContext)
-        else CreateByTemplate.VIEW,
+        CreateByTemplate.ADD if isinstance(context, PrimitiveContext) else CreateByTemplate.VIEW,
     )
 
 
-async def on_action_selected(
-    _clb: CallbackQuery, _select: Select, dialog_manager: DialogManager, action: str
-):
+async def on_action_selected(_clb: CallbackQuery, _select: Select, dialog_manager: DialogManager, action: str):
     context: BaseContext = dialog_manager.dialog_data.get("context")
     context = context.do(action)
 
@@ -104,9 +97,7 @@ async def on_action_selected(
     await dialog_manager.switch_to(CreateByTemplate.VIEW)
 
 
-async def response_document(
-    clb: CallbackQuery, _select: Select, dialog_manager: DialogManager
-):
+async def response_document(clb: CallbackQuery, _select: Select, dialog_manager: DialogManager):
     l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
     template_name: str = dialog_manager.dialog_data.get("template_name")
     context: BaseContext = dialog_manager.dialog_data.get("context")
@@ -127,9 +118,11 @@ async def response_document(
         sent_doc = await clb.message.answer_document(file)
 
         # Send it to president if exist
-        if TelegramKeys.PRESIDENT_ID:
+        async with async_session() as session:
+            president_id = await get_president_id(session)
+        if president_id:
             await clb.bot.send_message(
-                TelegramKeys.PRESIDENT_ID,
+                president_id,
                 l10n.format_value(
                     "document-generated",
                     args={
@@ -138,7 +131,7 @@ async def response_document(
                     },
                 ),
             )
-            await sent_doc.forward(TelegramKeys.PRESIDENT_ID)
+            await sent_doc.forward(president_id)
 
     except TelegramNetworkError as e:
         await clb.answer(l10n.format_value("telegram-network-error"), show_alert=True)
@@ -146,9 +139,7 @@ async def response_document(
 
 
 # ========== Окно редактирования ==========
-async def get_property_context(
-    dialog_manager: DialogManager, **_kwargs
-) -> dict[str, Any]:
+async def get_property_context(dialog_manager: DialogManager, **_kwargs) -> dict[str, Any]:
     l10n: FluentLocalization = dialog_manager.middleware_data.get(L10N_FORMAT_KEY)
     context: PrimitiveContext = dialog_manager.dialog_data.get("context")
     return {
@@ -158,9 +149,7 @@ async def get_property_context(
     }
 
 
-async def set_property(
-    msg: Message, _: TextInput, dialog_manager: DialogManager, value: str
-):
+async def set_property(msg: Message, _: TextInput, dialog_manager: DialogManager, value: str):
     context: PrimitiveContext = dialog_manager.dialog_data.get("context")
     try:
         parsed_value = context.parse(value)

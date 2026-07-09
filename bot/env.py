@@ -1,79 +1,117 @@
+"""Конфигурация бота через pydantic-settings (nested-паттерн, эталон — members_sync/env.py).
+
+Настройки сгруппированы в подмодели-секции (``TelegramConfig``/``PostgresConfig``/...), собранные
+на едином ``GlobalSettings``. Каждая секция — самостоятельный ``BaseSettings``: pydantic не наполняет
+вложенные ``BaseModel`` из плоских env по alias (нужен ``env_nested_delimiter`` или JSON), поэтому
+секции читают ``.env`` сами.
+
+Доступ: ``settings.telegram.API_TOKEN``.
+
+``.env`` берётся рядом с этим файлом; реальные переменные окружения (docker ``env_file``) имеют
+приоритет над файлом.
+"""
+
 from pathlib import Path
-from typing import Final
+from typing import Annotated, Final
 
-import environ
+from pydantic import Field, field_validator, model_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
-# set casting, default value (if needed)
-env = environ.Env()
-
-
-class TelegramKeys:
-    API_TOKEN: Final[str] = env("TG_API_TOKEN")
-    PRESIDENT_ID: Final[int] = env.int("PRESIDENT_ID", 0)
-    TREASURER_ID: Final[int] = env.int("TREASURER_ID", 0)
+_ENV_FILE = Path(__file__).resolve().parent / ".env"
 
 
-class PostgresKeys:
-    HOST: Final[str] = env.str("DOCKER_POSTGRES_HOST", default="localhost")
-    PORT: Final[str] = env.str("DOCKER_POSTGRES_PORT", default="5432")
+class _Section(BaseSettings):
+    """Базовая секция: единый источник ``.env`` и игнор лишних переменных."""
 
-    USER: Final[str] = env.str("POSTGRES_USER", default="postgres")
-    PASSWORD: Final[str] = env.str("POSTGRES_PASSWORD", default="")
-    DATABASE: Final[str] = env.str("POSTGRES_DB", default="database")
-
-    URL: Final[str] = f"postgresql+asyncpg://{USER}:{PASSWORD}@{HOST}:{PORT}/{DATABASE}"
-
-
-class RedisKeys:
-    USE_REDIS: Final[bool] = env.bool("USE_REDIS", default=True)
-
-    HOST: Final[str] = env.str("REDIS_HOST", default="localhost")
-    PORT: Final[str] = env.str("REDIS_PORT", default="6379")
-    DATABASE: Final[str] = env.str("REDIS_DB", default="0")
-
-    URL: Final[str] = f"redis://{HOST}:{PORT}/{DATABASE}"
-
-
-class ProjectKeys:
-    DEBUG: Final[bool] = env.bool("DEBUG")
-
-    RESOURCE_DIR: Final[Path] = env("RESOURCE_DIR", default=Path("resources/"))
-    TEMPLATES_DIR: Final[Path] = env(
-        "TEMPLATES_DIR",
-        default=RESOURCE_DIR / "templates/",
-    )
-    REFUND_BILLS_DIR: Final[Path] = env(
-        "REFUND_BILLS_DIR",
-        default=RESOURCE_DIR / "refund_bills/",
+    model_config = SettingsConfigDict(
+        env_file=_ENV_FILE,
+        env_file_encoding="utf-8",
+        extra="ignore",
     )
 
-    LOCALE_DIR: Final[Path] = env("LOCALE_DIR", default=Path("l10n/"))
-    AVAILABLE_LOCALES: Final[list[str]] = env.list("AVAILABLE_LOCALES", default=["ru"])
+
+class TelegramConfig(_Section):
+    API_TOKEN: str = Field(alias="TG_API_TOKEN")
+    PRESIDENT_ID: int = 0
+    TREASURER_ID: int = 0
 
 
-class LoggerKeys:
-    SHOW_DEBUG_LOGS: Final[bool] = env.bool("SHOW_DEBUG_LOGS", default=False)
+# noinspection DuplicatedCode
+class PostgresConfig(_Section):
+    HOST: str = Field("localhost", alias="POSTGRES_HOST")
+    PORT: str = Field("5432", alias="POSTGRES_PORT")
+    USER: str = Field("postgres", alias="POSTGRES_USER")
+    PASSWORD: str = Field("", alias="POSTGRES_PASSWORD")
+    DATABASE: str = Field("database", alias="POSTGRES_DB")
 
-    SHOW_DATETIME: Final[bool] = env.bool("SHOW_DATETIME", default=False)
-    DATETIME_FORMAT: Final[str] = env.str(
-        "DATETIME_FORMAT",
-        default="%Y-%m-%d %H:%M:%S",
-    )
-    TIME_IN_UTC: Final[bool] = env.bool("TIME_IN_UTC", default=False)
+    @property
+    def URL(self) -> str:
+        return f"postgresql+asyncpg://{self.USER}:{self.PASSWORD}@{self.HOST}:{self.PORT}/{self.DATABASE}"
 
-    USE_COLORS_IN_CONSOLE: Final[bool] = env.bool(
-        "USE_COLORS_IN_CONSOLE",
-        default=False,
-    )
 
-    # File logging configuration
-    LOG_TO_FILE: Final[bool] = env.bool("LOG_TO_FILE", default=True)
-    LOG_FILE_PATH: Final[str] = env.str("LOG_FILE_PATH", default="logs/bot.log")
-    LOG_FILE_MAX_SIZE: Final[int] = env.int(
-        "LOG_FILE_MAX_SIZE",
-        default=10 * 1024 * 1024,
-    )  # 10 MB
-    LOG_FILE_BACKUP_COUNT: Final[int] = env.int(
-        "LOG_FILE_BACKUP_COUNT",
-        default=5,
-    )  # Keep 5 backup files
+class RedisConfig(_Section):
+    USE_REDIS: bool = Field(True, alias="USE_REDIS")
+    HOST: str = Field("localhost", alias="REDIS_HOST")
+    PORT: str = Field("6379", alias="REDIS_PORT")
+    DATABASE: str = Field("0", alias="REDIS_DB")
+
+    @property
+    def URL(self) -> str:
+        return f"redis://{self.HOST}:{self.PORT}/{self.DATABASE}"
+
+
+class ProjectConfig(_Section):
+    DEBUG: bool = Field(alias="DEBUG")
+    RESOURCE_DIR: Path = Field(Path("resources/"), alias="RESOURCE_DIR")
+    TEMPLATES_DIR: Path = Field(Path("resources/templates/"), alias="TEMPLATES_DIR")
+    REFUND_BILLS_DIR: Path = Field(Path("resources/refund_bills/"), alias="REFUND_BILLS_DIR")
+    LOCALE_DIR: Path = Field(Path("l10n/"), alias="LOCALE_DIR")
+    # NoDecode: значение в .env — строка через запятую (``ru,en``), а не JSON-список
+    AVAILABLE_LOCALES: Annotated[list[str], NoDecode] = Field(["ru"], alias="AVAILABLE_LOCALES")
+
+    @field_validator("AVAILABLE_LOCALES", mode="before")
+    @classmethod
+    def split_locales(cls, value: str | list[str]) -> list[str]:
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
+    # Динамическая сборка путей, если они не заданы в .env явно, а зависят от RESOURCE_DIR
+    @model_validator(mode="before")
+    @classmethod
+    def assemble_paths(cls, data: dict) -> dict:
+        # Извлекаем RESOURCE_DIR, учитывая дефолтное значение
+        resource_dir_raw = data.get("RESOURCE_DIR", "resources/")
+        resource_dir = Path(resource_dir_raw) if isinstance(resource_dir_raw, str) else resource_dir_raw
+
+        if "TEMPLATES_DIR" not in data:
+            data["TEMPLATES_DIR"] = resource_dir / "templates/"
+        if "REFUND_BILLS_DIR" not in data:
+            data["REFUND_BILLS_DIR"] = resource_dir / "refund_bills/"
+        return data
+
+
+class LoggerConfig(_Section):
+    SHOW_DEBUG_LOGS: bool = Field(False, alias="SHOW_DEBUG_LOGS")
+    SHOW_DATETIME: bool = Field(False, alias="SHOW_DATETIME")
+    DATETIME_FORMAT: str = Field("%Y-%m-%d %H:%M:%S", alias="DATETIME_FORMAT")
+    TIME_IN_UTC: bool = Field(False, alias="TIME_IN_UTC")
+    USE_COLORS_IN_CONSOLE: bool = Field(False, alias="USE_COLORS_IN_CONSOLE")
+    LOG_TO_FILE: bool = Field(True, alias="LOG_TO_FILE")
+    LOG_FILE_PATH: str = Field("logs/bot.log", alias="LOG_FILE_PATH")
+    LOG_FILE_MAX_SIZE: int = Field(10 * 1024 * 1024, alias="LOG_FILE_MAX_SIZE")
+    LOG_FILE_BACKUP_COUNT: int = Field(5, alias="LOG_FILE_BACKUP_COUNT")
+
+
+class GlobalSettings(_Section):
+    """Главный сборщик секций (pydantic сам вызывает фабрики, секции читают ``.env``)."""
+
+    telegram: TelegramConfig = Field(default_factory=TelegramConfig)
+    postgres: PostgresConfig = Field(default_factory=PostgresConfig)
+    redis: RedisConfig = Field(default_factory=RedisConfig)
+    project: ProjectConfig = Field(default_factory=ProjectConfig)
+    logger: LoggerConfig = Field(default_factory=LoggerConfig)
+
+
+# Инициализируем глобальный синглтон настроек
+settings: Final[GlobalSettings] = GlobalSettings()

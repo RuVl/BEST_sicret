@@ -1,3 +1,7 @@
+# DB dumps (make db-dump / db-restore)
+backups/*
+!backups/.gitkeep
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -74,6 +78,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.python-version
 
 # Spyder project settings
 .spyderproject
@@ -90,6 +95,9 @@ venv.bak/
 .dmypy.json
 dmypy.json
 
+# ruff
+.ruff_cache/
+
 # Pyre type checker
 .pyre/
 
@@ -100,7 +108,7 @@ dmypy.json
 cython_debug/
 
 # IDE
-.idea/
+.vscode/
 
 # CMake
 cmake-build-*/
@@ -124,7 +132,3 @@ atlassian-ide-plugin.xml
 .idea/sonarlint/
 # Editor-based Rest Client
 .idea/httpRequests
-
-# Test compose files
-test-*.yaml
-dev-*.yaml

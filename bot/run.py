@@ -8,9 +8,9 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand, BotCommandScopeDefault
 from structlog.typing import FilteringBoundLogger
 
-from env import TelegramKeys, ProjectKeys, RedisKeys
+from env import settings
 from handlers import register_handlers
-from includes import setup_logging, get_redis_storage, PickleRedisStorage
+from includes import PickleRedisStorage, get_redis_storage, setup_logging
 from middlewares import register_middlewares
 
 
@@ -21,16 +21,14 @@ async def main():
 
     # Init bot
     bot = Bot(
-        token=TelegramKeys.API_TOKEN,
+        token=settings.telegram.API_TOKEN,
         default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN_V2),
     )
     await bot.set_my_commands(
         [
             BotCommand(command="start", description="Запуск бота"),
             BotCommand(command="create_document", description="Создать приказ"),
-            BotCommand(
-                command="create_equipment_apply", description="Создать заявку по стаффу"
-            ),
+            BotCommand(command="create_equipment_apply", description="Создать заявку по стаффу"),
             BotCommand(command="refund", description="Создать заявку на рефанд"),
             BotCommand(command="inventory", description="Просмотр имущества"),
         ],
@@ -38,11 +36,11 @@ async def main():
     )
 
     # Get storage with proper configuration for dialogs
-    if RedisKeys.USE_REDIS:
+    if settings.redis.USE_REDIS:
         storage = get_redis_storage(cls=PickleRedisStorage, with_destiny=True)
     else:
         storage = MemoryStorage()
-        if not ProjectKeys.DEBUG:
+        if not settings.project.DEBUG:
             await logger.aerror("You should use RedisStorage in production!")
 
     # Init dispatcher
@@ -58,7 +56,7 @@ async def main():
     try:
         await dp.start_polling(
             bot,
-            skip_updates=ProjectKeys.DEBUG,  # skip updates if debug
+            skip_updates=settings.project.DEBUG,  # skip updates if debug
             allowed_updates=dp.resolve_used_update_types(),  # Get only registered updates
         )
     finally:

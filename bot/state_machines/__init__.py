@@ -1,7 +1,7 @@
 from .apply_eq import CreateByApplyEquipment
+from .inventory import ViewInventory
 from .refund import CreateRefundApply
 from .templates import CreateByTemplate
-from .inventory import ViewInventory
 
 __all__ = [
     "CreateByApplyEquipment",

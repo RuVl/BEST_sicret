@@ -7,13 +7,14 @@ from aiogram_dialog.widgets.kbd import Button, ScrollingGroup, Select, SwitchTo
 from aiogram_dialog.widgets.text import Format, Multi
 from fluent.runtime import FluentLocalization
 
-from env import TelegramKeys
+from database.main import async_session
 from includes import load_schema, validate_data
 from includes.templates import create_context
 from includes.templates.contexts import BaseContext, PrimitiveContext
 from middlewares import L10N_FORMAT_KEY
 from state_machines import CreateByApplyEquipment, ViewInventory
-from utils import escape_mdv2, L10nFormat
+from utils import L10nFormat, escape_mdv2
+from utils.board import get_treasurer_id
 
 DIALOG_SCHEMA = "equipments/apply_equipment.json"
 
@@ -38,10 +39,7 @@ async def get_main_data(dialog_manager: DialogManager, **kwargs) -> dict[str, An
             }
 
     custom_items = dialog_manager.dialog_data.get("custom_items", {})
-    added_items = [
-        (name, f"❌ {name}: {data['quantity']} {data['unit']}")
-        for name, data in custom_items.items()
-    ]
+    added_items = [(name, f"❌ {name}: {data['quantity']} {data['unit']}") for name, data in custom_items.items()]
 
     custom_items_view = ""
     if custom_items:
@@ -49,9 +47,7 @@ async def get_main_data(dialog_manager: DialogManager, **kwargs) -> dict[str, An
             f"\\- {escape_mdv2(name)}: {item_data['quantity']} {escape_mdv2(item_data['unit'])}"
             for name, item_data in custom_items.items()
         ]
-        custom_items_view = (
-            "\n\n" + l10n.format_value("chose-category") + "\n" + "\n".join(rows)
-        )
+        custom_items_view = "\n\n" + l10n.format_value("chose-category") + "\n" + "\n".join(rows)
 
     return {
         "view": context.render_view(l10n) + custom_items_view,
@@ -242,15 +238,17 @@ async def on_submit(clb: CallbackQuery, widget: Button, dialog_manager: DialogMa
         await clb.answer(error_msg, show_alert=True)
         return
 
-    if TelegramKeys.TREASURER_ID:
+    async with async_session() as session:
+        treasurer_id = await get_treasurer_id(session)
+    if treasurer_id:
         await clb.bot.send_message(
-            TelegramKeys.TREASURER_ID,
+            treasurer_id,
             l10n.format_value(
                 "equipment-chosen",
                 args={"by_username": escape_mdv2(clb.from_user.username)},
             ),
         )
-        await clb.message.forward(TelegramKeys.TREASURER_ID)
+        await clb.message.forward(treasurer_id)
         await clb.answer(l10n.format_value("application-saved"), show_alert=True)
     else:
         await clb.answer(l10n.format_value("application-error"), show_alert=True)

@@ -1,7 +1,28 @@
+# секреты и шаблоны env (приходят из env_file в рантайме)
 .env
 .env.dist
 
+# venv и кэши
+.venv/
 venv/
 .python-version
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
 
+# git / IDE
+.git/
+.gitignore
+.idea/
+.vscode/
+
+# локальные данные / служебное
+logs/
+*.log
+*.session
+*.session-journal
 aiogram_dialog.png
+.dockerignore
+Dockerfile

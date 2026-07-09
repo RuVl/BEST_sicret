@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" serverName="best_sicret" remoteFilesAllowedToDisappearOnAutoupload="false" confirmBeforeUploading="false">
+    <option name="confirmBeforeUploading" value="false" />
+    <serverData>
+      <paths name="best_sicret">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/" local="$PROJECT_DIR$" web="" />
+          </mappings>
+          <excludedPaths>
+            <excludedPath local="true" path="$PROJECT_DIR$/bot/.venv" />
+            <excludedPath local="true" path="$PROJECT_DIR$/bot/dev.env" />
+            <excludedPath local="true" path="$PROJECT_DIR$/bot/.env" />
+            <excludedPath local="true" path="$PROJECT_DIR$/members_sync/.env" />
+            <excludedPath local="true" path="$PROJECT_DIR$/postgres/.env" />
+            <excludedPath local="true" path="$PROJECT_DIR$/redis/.env" />
+            <excludedPath local="true" path="$PROJECT_DIR$/.idea" />
+            <excludedPath local="true" path="$PROJECT_DIR$/.ruff_cache" />
+            <excludedPath local="true" path="$PROJECT_DIR$/.mypy_cache" />
+            <excludedPath local="true" path="**/__pycache__" />
+          </excludedPaths>
+        </serverdata>
+      </paths>
+    </serverData>
+  </component>
+</project>

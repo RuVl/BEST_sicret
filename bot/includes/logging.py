@@ -4,7 +4,7 @@ from pathlib import Path
 
 import structlog
 
-from env import LoggerKeys, ProjectKeys
+from env import settings
 
 
 class StructlogOnlyFilter(logging.Filter):
@@ -24,7 +24,7 @@ def setup_logging():
     """
     Настраивает structlog для вывода в консоль (цветной) и файл (без цвета).
     """
-    min_level = logging.DEBUG if LoggerKeys.SHOW_DEBUG_LOGS else logging.INFO
+    min_level = logging.DEBUG if settings.logger.SHOW_DEBUG_LOGS else logging.INFO
 
     # --- Шаг 1: Определяем ОБЩИЕ процессоры (без финального рендеринга) ---
     shared_processors = get_shared_processors()
@@ -33,7 +33,8 @@ def setup_logging():
     structlog.configure(
         processors=[
             *shared_processors,
-            # Этот процессор ВАЖЕН для интеграции: он подготавливает event_dict для форматтеров logging. Он должен быть ПОСЛЕДНИМ в этой цепочке.
+            # Этот процессор ВАЖЕН для интеграции: он подготавливает event_dict для форматтеров logging.
+            # Он должен быть ПОСЛЕДНИМ в этой цепочке.
             structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
         ],
         logger_factory=structlog.stdlib.LoggerFactory(),
@@ -43,18 +44,14 @@ def setup_logging():
 
     # --- Шаг 3: Создаем форматтеры logging с разными финальными процессорами structlog ---
     console_formatter = structlog.stdlib.ProcessorFormatter(
-        processor=structlog.dev.ConsoleRenderer(
-            colors=LoggerKeys.USE_COLORS_IN_CONSOLE,
-            pad_level=True
-        ),
+        processor=structlog.dev.ConsoleRenderer(colors=settings.logger.USE_COLORS_IN_CONSOLE, pad_level=True),
         # foreign_pre_chain=shared_processors,
     )
 
-    if not ProjectKeys.DEBUG:
+    if not settings.project.DEBUG:
         file_formatter = structlog.stdlib.ProcessorFormatter(
             processor=structlog.processors.KeyValueRenderer(
-                key_order=['timestamp', 'level', 'logger', 'event'],
-                sort_keys=True
+                key_order=["timestamp", "level", "logger", "event"], sort_keys=True
             ),
             # foreign_pre_chain=shared_processors,
         )
@@ -64,14 +61,14 @@ def setup_logging():
 
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(console_formatter)
-    if not ProjectKeys.DEBUG:
+    if not settings.project.DEBUG:
         console_handler.addFilter(structlog_filter)
 
-    if not ProjectKeys.DEBUG:
-        logger_file = Path(LoggerKeys.LOG_FILE_PATH)
+    if not settings.project.DEBUG:
+        logger_file = Path(settings.logger.LOG_FILE_PATH)
         logger_file.parent.mkdir(parents=True, exist_ok=True)
 
-        file_handler = logging.FileHandler(logger_file, mode='a', encoding='utf-8')
+        file_handler = logging.FileHandler(logger_file, mode="a", encoding="utf-8")
         file_handler.setFormatter(file_formatter)
 
     # --- Шаг 5: Настройка корневого логгера ---
@@ -79,10 +76,18 @@ def setup_logging():
     root_logger.handlers.clear()
     root_logger.addHandler(console_handler)
 
-    if not ProjectKeys.DEBUG:
+    if not settings.project.DEBUG:
         root_logger.addHandler(file_handler)
 
     root_logger.setLevel(min_level)
+
+    # --- Шаг 6: Приглушаем "шумные" сторонние логгеры ---
+    # aiogram/aiogram_dialog на каждый апдейт пишут кучу DEBUG-логов
+    # ("Dialog start", "Show window", "send_text to chat ..." и т.п.).
+    # Показываем их только когда явно включён режим отладки логов.
+    noisy_loggers_level = logging.DEBUG if settings.logger.SHOW_DEBUG_LOGS else logging.WARNING
+    for logger_name in ("aiogram", "aiogram_dialog"):
+        logging.getLogger(logger_name).setLevel(noisy_loggers_level)
 
 
 # noinspection SpellCheckingInspection
@@ -99,18 +104,23 @@ def get_shared_processors() -> list:
         structlog.stdlib.ExtraAdder(),
     ]
 
-    if LoggerKeys.SHOW_DATETIME:
-        processors.append(structlog.processors.TimeStamper(
-            fmt=LoggerKeys.DATETIME_FORMAT if LoggerKeys.DATETIME_FORMAT != "iso" else None,  # None использует ISO 8601 по умолчанию
-            utc=LoggerKeys.TIME_IN_UTC,
-            key="timestamp"  # Явно указываем ключ, полезно для рендереров
-        ))
+    if settings.logger.SHOW_DATETIME:
+        processors.append(
+            structlog.processors.TimeStamper(
+                fmt=settings.logger.DATETIME_FORMAT,  # None использует ISO 8601 по умолчанию
+                utc=settings.logger.TIME_IN_UTC,
+                key="timestamp",  # Явно указываем ключ, полезно для рендереров
+            )
+        )
 
-    # Нет add_log_level, т.к. structlog.stdlib.add_log_level добавляется автоматически при интеграции с logging (в structlog.configure)
+    # Нет add_log_level, т.к. structlog.stdlib.add_log_level добавляется автоматически
+    # при интеграции с logging (в structlog.configure)
 
-    processors.extend([
-        structlog.processors.StackInfoRenderer(),
-        structlog.processors.format_exc_info,
-    ])
+    processors.extend(
+        [
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+        ]
+    )
 
     return processors

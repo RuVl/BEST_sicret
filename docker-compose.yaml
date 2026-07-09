@@ -3,6 +3,8 @@ services:
     build:
       context: ./bot
       dockerfile: Dockerfile
+      additional_contexts:
+        database: ./packages/db
     restart: unless-stopped
     env_file:
       - bot/.env
@@ -15,8 +17,47 @@ services:
     depends_on:
       - postgres
 
+  members_sync:
+    build:
+      context: ./members_sync
+      dockerfile: Dockerfile
+      additional_contexts:
+        database: ./packages/db
+    restart: unless-stopped
+    env_file:
+      - members_sync/.env
+      - postgres/.env
+    environment:
+      # Контейнер живёт постоянно и сам запускает синхронизацию по расписанию.
+      RUN_MODE: cron
+      TZ: Europe/Moscow
+      SYNC_REPORT_PATH: logs/last_sync_report.md
+      DUMP_JSON_PATH: output/members.json
+    networks:
+      - backend
+    depends_on:
+      - postgres
+    volumes:
+      - ./members_sync/service_account.json:/app/service_account.json:ro
+
+  # Разовый прогон миграций единого alembic (packages/db). Не стартует с `up`
+  # (профиль migrate); запускать явно: docker compose run --rm db_migrate
+  db_migrate:
+    build:
+      context: ./packages/db
+      dockerfile: Dockerfile
+    restart: "no"
+    profiles:
+      - migrate
+    env_file:
+      - postgres/.env
+    networks:
+      - backend
+    depends_on:
+      - postgres
+
   redis:
-    image: redis:8.2.2
+    image: docker.io/library/redis:8.2.2
     restart: unless-stopped
     env_file: redis/.env
     expose:
@@ -27,7 +68,7 @@ services:
       - redis_volume:/data
 
   postgres:
-    image: postgres:17.6
+    image: docker.io/library/postgres:17.6
     restart: unless-stopped
     env_file: postgres/.env
     expose:

@@ -1,8 +1,8 @@
 from aiogram import Router
 
 from dialogs.user.apply_eq import apply_equipment_dialog
-from dialogs.user.refund import refund_dialog
 from dialogs.user.inventory import inventory_dialog
+from dialogs.user.refund import refund_dialog
 from dialogs.user.templates import template_dialog
 
 user_dialog_router = Router()
