@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Добавление имущества в базу",
+  "description": "Для добавления имущества заполните следующие поля:",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Название имущества",
+      "question": "Введите название имущества:"
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Количество",
+      "question": "Введите количество:"
+    },
+    "unit": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Единица измерения",
+      "question": "Введите единицу измерения:"
+    }
+  },
+  "required": [
+    "name",
+    "count",
+    "unit"
+  ]
+}
