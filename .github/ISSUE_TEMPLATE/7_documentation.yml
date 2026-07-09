@@ -1,0 +1,25 @@
+name: 📚 Документация
+description: Доработка или исправление документации
+title: "[Docs]: "
+labels: [documentation]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Что не так / чего не хватает
+      description: Какой документации не хватает или что устарело/неверно?
+    validations:
+      required: true
+
+  - type: input
+    id: location
+    attributes:
+      label: Где
+      description: Файл или раздел документации.
+      placeholder: например, CLAUDE.md, members_sync/README.md, packages/db/README.md
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Предложение
+      description: Что и как стоит добавить или исправить.

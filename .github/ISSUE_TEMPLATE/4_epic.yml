@@ -1,0 +1,43 @@
+name: 🏛 Epic
+description: Крупная инициатива — родитель для историй и задач
+title: "[Epic]: "
+labels: [epic]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Цель эпика
+      description: Какую крупную задачу/ценность решает этот эпик?
+      placeholder: Кратко опишите цель и итоговый результат.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Объём и контекст
+      description: Что входит и что НЕ входит в эпик, ограничения, зависимости.
+      placeholder: |
+        Входит: ...
+        Не входит: ...
+
+  - type: textarea
+    id: stories
+    attributes:
+      label: Истории и задачи
+      description: Список входящих историй/задач. Пункты можно конвертировать в sub-issues.
+      value: |
+        - [ ] #
+        - [ ] #
+        - [ ] #
+    validations:
+      required: true
+
+  - type: textarea
+    id: done
+    attributes:
+      label: Критерии готовности эпика
+      description: Когда эпик можно закрыть?
+      value: |
+        - [ ]
+        - [ ]

@@ -1,0 +1,39 @@
+name: 🔬 Spike / Research
+description: Исследование или прототип с таймбоксом
+title: "[Spike]: "
+labels: [spike]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Вопрос / гипотеза
+      description: Что нужно выяснить или проверить?
+      placeholder: Можем ли мы..., какой подход лучше для...?
+    validations:
+      required: true
+
+  - type: input
+    id: timebox
+    attributes:
+      label: Таймбокс
+      description: Сколько времени отводим на исследование.
+      placeholder: например, 2 дня
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Ожидаемый результат
+      description: Что считаем результатом и какие решения принимаем по итогам?
+      placeholder: |
+        - Выбран подход X / Y
+        - Готов прототип / сравнение / оценка
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Заметки и ссылки
+      description: Полезные материалы, документация, наработки.
