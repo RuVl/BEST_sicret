@@ -118,6 +118,8 @@ A **pipeline**: `sheets/` (Google Sheets I/O, fuzzy column mapping, record readi
 
 ## Code Style & Conventions
 
+> **Read [CLEAN_CODE.md](CLEAN_CODE.md) before writing bot code.** It holds this repo's binding rules — layering, aiogram-dialog do's and don'ts (self-sufficient getters, no per-dialog access middleware, where middleware data is and isn't injected), repository/session rules, Fluent + MarkdownV2 pitfalls, and the pre-PR checklist.
+
 The codebase is small, async-first, and intentionally pattern-driven. Match the surrounding style; reuse existing utilities and helpers before writing new code.
 
 **Design patterns already in use** (name and follow them):
@@ -125,7 +127,7 @@ The codebase is small, async-first, and intentionally pattern-driven. Match the 
 - **Composite + Factory** — the templates engine (`bot/includes/templates/`). `create_context()` builds a polymorphic `BaseContext` tree (`PrimitiveContext` leaves, `ObjectContext`/`ArrayContext` composites); `get_formatter`/`get_validator` are `@lru_cache` factories.
 - **Strategy** — `formatters.py` / `validators.py` define abstract `Formatter`/`Validator` bases, resolved at runtime by JSON Schema `type`/`format`.
 - **Repository** — `bot/database/methods/<entity>/` and `members_sync/database/methods/`: small single-purpose `async` functions that take an `AsyncSession` and contain the queries. **The caller owns the commit** (`async with async_session() as session: … await session.commit()`), keep it that way.
-- **Dependency injection via middlewares** — `l10n` and `log` are injected into `middleware_data` and pulled out by handlers/dialog getters; don't construct them ad hoc.
+- **Dependency injection via middlewares** — `l10n` and `log` are injected into `middleware_data` and pulled out by handlers/dialog getters; don't construct them ad hoc. Middlewares are cross-cutting and registered once in `bot/middlewares/main.py` — never add one just to gate a single dialog (see CLEAN_CODE.md §2.2).
 - **Pipeline + pure functions** — `members_sync` normalizers are pure and **never raise**: they return `(value, error)` tuples and an `IssueCollector` aggregates problems while the row still gets ingested (raw values are always preserved). Keep this resilience: don't lose raw input.
 
 **Clean code:**
