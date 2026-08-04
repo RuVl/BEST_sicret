@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from best_db.models.lbg_member import LbgMember
     from best_db.models.place import Place
     from best_db.models.refund import Refund
+    from best_db.models.vpn_subscription import VpnSubscription
 
 
 class Person(Base):
@@ -47,6 +48,13 @@ class Person(Base):
     lbg_member: Mapped["LbgMember | None"] = relationship(
         "LbgMember",
         back_populates="person",
+    )
+
+    # VPN-подписка, выданная ботом (не более одной на человека)
+    vpn_subscription: Mapped["VpnSubscription | None"] = relationship(
+        "VpnSubscription",
+        back_populates="person",
+        uselist=False,
     )
 
     # Закрепленное место
