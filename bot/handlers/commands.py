@@ -11,6 +11,7 @@ from database.methods.member import find_member_by_username
 from database.methods.person import get_or_create_person, set_lbg_member
 from state_machines import CreateByApplyEquipment
 from state_machines.inventory import ViewInventory
+from state_machines.profile import ViewProfile
 from state_machines.refund import CreateRefundApply
 from state_machines.templates import CreateByTemplate
 
@@ -42,6 +43,15 @@ async def start(msg: Message, l10n: FluentLocalization, dialog_manager: DialogMa
             await session.commit()
 
     await dialog_manager.reset_stack()
+
+
+@router.message(Command("profile"))
+async def view_profile(msg: Message, dialog_manager: DialogManager):
+    await dialog_manager.start(
+        ViewProfile.VIEW,
+        mode=StartMode.RESET_STACK,
+        show_mode=ShowMode.DELETE_AND_SEND,
+    )
 
 
 @router.message(Command("create_document"))
