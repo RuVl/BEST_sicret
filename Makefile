@@ -57,7 +57,7 @@ check-deps: ## Проверить наличие uv и docker compose
 
 .PHONY: env
 env: ## Создать .env (docker) и dev.env (локальный запуск) из *.dist, где их нет
-	@$(PY) -c "import os, shutil; [(shutil.copyfile(t+'.dist', t), print('created', t)) for t in ('bot/.env','members_sync/.env','postgres/.env','redis/.env','bot/dev.env','members_sync/dev.env') if os.path.isfile(t+'.dist') and not os.path.isfile(t)]"
+	@$(PY) -c "import os, shutil; [(shutil.copyfile(t+'.dist', t), print('created', t)) for t in ('bot/.env','members_sync/.env','postgres/.env','redis/.env','bot/dev.env','members_sync/dev.env','packages/db/dev.env') if os.path.isfile(t+'.dist') and not os.path.isfile(t)]"
 	@echo "Заполните .env (docker/podman) и dev.env (локальный запуск)!"
 
 # --- Установка зависимостей (все venv) -------------------------------------
@@ -118,23 +118,26 @@ ps: ## Статус контейнеров
 	$(COMPOSE) ps
 
 # --- Миграции (единый alembic в packages/db) -------------------------------
-# uv сам читает postgres/.env (--env-file), POSTGRES_HOST там не задан → localhost.
+# Креды берём из postgres/.env, а хост/порт переопределяем локальным dev.env
+# (в postgres/.env хост = имя сервиса compose): последний --env-file приоритетнее.
+DB_ENV ?= --env-file ../../postgres/.env --env-file dev.env
 
 .PHONY: migration
 migration: ## Новая ревизия: make migration m="описание"
-	cd packages/db && $(UV) run --env-file ../../postgres/.env alembic revision --autogenerate -m "$(m)"
+	cd packages/db && $(UV) run $(DB_ENV) alembic revision --autogenerate -m "$(m)"
 
 .PHONY: migrate
 migrate: ## Применить миграции к локальной бд
-	cd packages/db && $(UV) run --env-file ../../postgres/.env alembic upgrade head
+	cd packages/db && $(UV) run $(DB_ENV) alembic upgrade head
 
 .PHONY: downgrade
 downgrade: ## Откатить миграции: make downgrade [rev=-1]
-	cd packages/db && $(UV) run --env-file ../../postgres/.env alembic downgrade $(rev)
+	cd packages/db && $(UV) run $(DB_ENV) alembic downgrade $(rev)
 
 .PHONY: migrate-docker
 migrate-docker: ## Применить миграции бд в докере
-	$(COMPOSE) run --rm db_migrate
+	# --build обязателен: без него compose run берёт старый образ и новые ревизии не попадут внутрь.
+	$(COMPOSE) run --rm --build db_migrate
 
 # --- Логи -------------------------------------------------------------------
 
