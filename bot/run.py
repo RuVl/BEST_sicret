@@ -6,12 +6,37 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand, BotCommandScopeDefault
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from structlog.typing import FilteringBoundLogger
 
 from env import settings
 from handlers import register_handlers
-from includes import PickleRedisStorage, get_redis_storage, setup_logging
+from includes import PickleRedisStorage, get_fluent_localization, get_redis_storage, setup_logging
+from includes.vpn import close_xui_client
+from jobs import revoke_inactive_subscriptions
 from middlewares import register_middlewares
+
+
+def _create_scheduler(bot: Bot) -> AsyncIOScheduler | None:
+    """Планировщик фоновых задач. ``None``, если секция XUI не настроена."""
+    if not settings.xui.ENABLED:
+        return None
+
+    l10n = get_fluent_localization()
+    scheduler = AsyncIOScheduler(timezone=settings.xui.REVOKE_CRON_TIMEZONE)
+    scheduler.add_job(
+        revoke_inactive_subscriptions,
+        CronTrigger(
+            hour=settings.xui.REVOKE_CRON_HOUR,
+            minute=settings.xui.REVOKE_CRON_MINUTE,
+            timezone=settings.xui.REVOKE_CRON_TIMEZONE,
+        ),
+        args=(bot, l10n),
+        id="revoke_inactive_vpn",
+        replace_existing=True,
+    )
+    return scheduler
 
 
 async def main():
@@ -31,6 +56,7 @@ async def main():
             BotCommand(command="create_equipment_apply", description="Создать заявку по стаффу"),
             BotCommand(command="refund", description="Создать заявку на рефанд"),
             BotCommand(command="inventory", description="Просмотр имущества"),
+            BotCommand(command="profile", description="Мой профиль"),
         ],
         scope=BotCommandScopeDefault(),
     )
@@ -50,6 +76,14 @@ async def main():
     register_middlewares(dp)
     register_handlers(dp)
 
+    # Автоотзыв VPN-подписок у выбывших мемберов (без него ключи живут вечно)
+    scheduler = _create_scheduler(bot)
+    if scheduler is not None:
+        scheduler.start()
+        await logger.ainfo("VPN revoke job scheduled.")
+    else:
+        await logger.awarning("XUI settings are incomplete, VPN revoke job is disabled.")
+
     # Start bot
     await logger.ainfo(f"Starting the bot (id={bot.id})...")
 
@@ -60,6 +94,9 @@ async def main():
             allowed_updates=dp.resolve_used_update_types(),  # Get only registered updates
         )
     finally:
+        if scheduler is not None:
+            scheduler.shutdown(wait=False)
+        await close_xui_client()
         await bot.session.close()
         await logger.ainfo("Bot stopped.")
 
