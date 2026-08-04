@@ -19,3 +19,11 @@ async def get_president_id(session: AsyncSession) -> int:
 async def get_treasurer_id(session: AsyncSession) -> int:
     person = await resolve_board_role(session, "treasurer")
     return person.telegram_id if person else settings.telegram.TREASURER_ID
+
+
+async def get_hr_id(session: AsyncSession) -> int:
+    """VP4HR — ответственный за HR-ресурсы. Если роль не опознана, пишем президенту."""
+    person = await resolve_board_role(session, "hr")
+    if person is not None:
+        return person.telegram_id
+    return await get_president_id(session)
