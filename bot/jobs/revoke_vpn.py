@@ -3,8 +3,8 @@
 Клиента в панели не удаляем, а выключаем (``enable=false``): статистика сохраняется,
 а вернувшемуся мемберу подписка оживает по той же ссылке.
 
-Ошибки панели не роняют прогон целиком — они собираются и уходят в сводку VP4HR.
-Сводка обязательна: без ``expiryTime`` на ключах этот джоб — единственный ограничитель
+Ошибки панели не роняют прогон целиком - они собираются и уходят в сводку VP4HR.
+Сводка обязательна: без ``expiryTime`` на ключах этот джоб - единственный ограничитель
 доступа, поэтому его молчаливая смерть должна быть заметна.
 """
 
@@ -46,7 +46,7 @@ async def revoke_inactive_subscriptions(bot: Bot, l10n: FluentLocalization) -> N
             try:
                 await client.set_enabled(subscription.xui_email, False)
             except XuiClientNotFoundError:
-                # Клиента уже снесли в админке — отзывать нечего, просто чиним запись.
+                # Клиента уже снесли в админке - отзывать нечего, просто чиним запись.
                 await mark_revoked(session, subscription)
                 await logger.ainfo("vpn-revoke-client-missing", email=subscription.xui_email)
                 continue

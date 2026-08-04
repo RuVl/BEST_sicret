@@ -1,6 +1,6 @@
 """Диалог ``/profile``: карточка мембера и вход в VPN-подписку.
 
-Данные о человеке — readonly-слепок из гугл-таблицы (``LbgMember``, синхронизируется
+Данные о человеке - readonly-слепок из гугл-таблицы (``LbgMember``, синхронизируется
 members_sync). Не опознанным пользователям показываем приветствие с приглашением вступить.
 """
 
@@ -22,17 +22,13 @@ FIELD_TRUNCATE_LEN = 200
 
 # Человекочитаемые названия категорий членства (значения проставляет members_sync).
 _CATEGORY_NAMES = {
-    "board": "Борда",
-    "full_member": "Full member",
-    "baby_member": "Baby member",
+    "board": "BOARD",
+    "full_member": "Full",
+    "baby_member": "Baby",
     "observer": "Observer",
     "alumni": "Alumni",
-    "inactive": "Неактивен",
+    "inactive": "Inactive",
 }
-
-
-def _format_date(value: Any) -> str:
-    return value.strftime("%d.%m.%Y") if value else "—"
 
 
 def _optional(value: str | None) -> str:
@@ -60,7 +56,7 @@ async def get_profile_data(
             "text": l10n.format_value("profile-not-member", args={"name": escape_mdv2(person.full_name)}),
         }
 
-    category = _CATEGORY_NAMES.get(member.membership_category or "", member.membership_category or "—")
+    category = _CATEGORY_NAMES.get(member.membership_category, member.membership_category or r"\-")
     text = l10n.format_value(
         "profile-card",
         args={
@@ -84,8 +80,6 @@ async def get_profile_data(
 profile_dialog = Dialog(
     Window(
         Format("{text}"),
-        # Start сам открывает поддиалог поверх профиля — свой on_click не нужен.
-        # Кнопка — подсказка, а не гейт: доступ vpn-диалог перепроверяет сам.
         Start(
             L10nFormat("profile-vpn-btn"),
             id="open_vpn",
@@ -96,6 +90,6 @@ profile_dialog = Dialog(
         getter=get_profile_data,
         state=ViewProfile.VIEW,
     ),
-    # Профиль — точка входа: не копится в стеке при повторном /profile.
+    # Профиль - точка входа: не копится в стеке при повторном /profile.
     launch_mode=LaunchMode.ROOT,
 )

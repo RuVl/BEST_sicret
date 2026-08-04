@@ -1,9 +1,9 @@
 """Поддиалог VPN-подписки: статус, выпуск, ссылка и трафик.
 
-Источник правды по состоянию ключа — панель 3x-ui; в БД бота лежат только идентификаторы.
+Источник правды по состоянию ключа - панель 3x-ui; в БД бота лежат только идентификаторы.
 
 Окно самодостаточно: пользователь берётся из ``dialog_manager.event.from_user``, все данные
-грузит геттер. Диалог не полагается ни на middleware, ни на ``start_data`` — его можно открыть
+грузит геттер. Диалог не полагается ни на middleware, ни на ``start_data`` - его можно открыть
 из любого места, а доступ перепроверяется на каждой отрисовке (клавиатура у пользователя
 могла устареть).
 """
@@ -27,18 +27,17 @@ from middlewares import L10N_FORMAT_KEY, LOGGING_KEY
 from state_machines.vpn import ViewVpnSubscription
 from utils import L10nFormat, escape_mdv2
 
-_GB = 1024**3
-
 
 def _format_traffic(used_bytes: int) -> str:
-    """Байты в читаемый вид: до гигабайта — мегабайты, дальше гигабайты."""
+    """Байты в читаемый вид: до гигабайта - мегабайты, дальше гигабайты."""
+    _GB = 1024**3
     if used_bytes < _GB:
         return f"{used_bytes / 1024**2:.1f} МБ"
     return f"{used_bytes / _GB:.2f} ГБ"
 
 
 def _active_member(person: Person | None) -> LbgMember | None:
-    """Активное членство или ``None`` — единственное условие доступа к VPN."""
+    """Активное членство или ``None`` - единственное условие доступа к VPN."""
     if person is None or person.lbg_member is None or not person.lbg_member.is_active:
         return None
     return person.lbg_member
@@ -79,8 +78,8 @@ async def get_vpn_data(
         return {"is_allowed": True, "has_subscription": True, "text": l10n.format_value("vpn-error")}
 
     if traffic is None:
-        # Панель на удалённого клиента отвечает success=true с пустым obj. Запись в БД
-        # осиротела: показываем это честно и предлагаем выпустить ключ заново.
+        # Панель на удалённого клиента отвечает success=true с пустым obj.
+        # Запись в БД осиротела: показываем это честно и предлагаем выпустить ключ заново.
         await log.awarning("vpn-client-missing", person_id=person.id, email=subscription.xui_email)
         return {
             "is_allowed": True,
@@ -119,7 +118,7 @@ async def on_issue(
                 await clb.answer(l10n.format_value("vpn-access-denied"), show_alert=True)
                 return
 
-            # Всё сведение расхождений с панелью — внутри ensure_subscription.
+            # Всё сведение расхождений с панелью - внутри ensure_subscription.
             await ensure_subscription(session, client, person, member)
             await session.commit()
     except XuiError as exc:
@@ -141,7 +140,7 @@ vpn_dialog = Dialog(
             when=F["is_allowed"] & ~F["has_subscription"],
         ),
         # Обработанный клик в приватном чате сам вызывает перерисовку окна,
-        # а геттер на каждой отрисовке ходит в панель — своего on_click кнопке не нужно.
+        # а геттер на каждой отрисовке ходит в панель - своего on_click кнопке не нужно.
         Button(
             L10nFormat("vpn-refresh-btn"),
             id="refresh_vpn",

@@ -12,8 +12,6 @@ ARGS = {
     "name": "Иванов Иван",
     "category": "Борда",
     "status": "активный мембер",
-    "active_since": "01\\.09\\.2024",
-    "active_till": "—",
     "roles": "VP4HR of X Board",
     "local_involvement": "l",
     "international_involvement": "i",

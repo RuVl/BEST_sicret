@@ -1,6 +1,6 @@
 """Привилегированные Telegram-ID, выведенные из текущего Board.
 
-Приоритет — носитель роли в синхронизированных данных (LbgMember board + status_field),
+Приоритет - носитель роли в синхронизированных данных (LbgMember board + status_field),
 связанный с ботом Person. Если такого нет (роль не опознана / человек не заходил в бота),
 откатываемся на статический ID из env.
 """
@@ -22,7 +22,7 @@ async def get_treasurer_id(session: AsyncSession) -> int:
 
 
 async def get_hr_id(session: AsyncSession) -> int:
-    """VP4HR — ответственный за HR-ресурсы. Если роль не опознана, пишем президенту."""
+    """VP4HR - ответственный за HR-ресурсы. Если роль не опознана, пишем президенту."""
     person = await resolve_board_role(session, "hr")
     if person is not None:
         return person.telegram_id

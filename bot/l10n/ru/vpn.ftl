@@ -42,8 +42,7 @@ vpn-revoke-report = *Автоотзыв VPN\-подписок*
 vpn-issue-btn = Выпустить
 vpn-refresh-btn = Обновить
 vpn-handbook-btn = Как подключиться
-# TODO: заменить на реальную ссылку хэндбука перед мержем
-vpn-handbook-url = https://best-spbpu.ru/
+vpn-handbook-url = https://docs.google.com/document/d/1gcmkXYgEY308JLwmrzNfeBirzJZDPrPx/edit
 
 # Notifications and errors
 vpn-issued = Подписка выпущена

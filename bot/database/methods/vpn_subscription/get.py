@@ -10,5 +10,5 @@ async def get_subscription_by_person(session: AsyncSession, person_id: int) -> V
 
 
 async def get_subscription_by_email(session: AsyncSession, xui_email: str) -> VpnSubscription | None:
-    """Подписка по идентификатору клиента в панели — для сверки с чужими (ручными) клиентами."""
+    """Подписка по идентификатору клиента в панели - для сверки с чужими (ручными) клиентами."""
     return await session.scalar(select(VpnSubscription).where(VpnSubscription.xui_email == xui_email))

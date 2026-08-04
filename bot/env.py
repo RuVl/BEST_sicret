@@ -1,7 +1,7 @@
-"""Конфигурация бота через pydantic-settings (nested-паттерн, эталон — members_sync/env.py).
+"""Конфигурация бота через pydantic-settings (nested-паттерн, эталон - members_sync/env.py).
 
 Настройки сгруппированы в подмодели-секции (``TelegramConfig``/``PostgresConfig``/...), собранные
-на едином ``GlobalSettings``. Каждая секция — самостоятельный ``BaseSettings``: pydantic не наполняет
+на едином ``GlobalSettings``. Каждая секция - самостоятельный ``BaseSettings``: pydantic не наполняет
 вложенные ``BaseModel`` из плоских env по alias (нужен ``env_nested_delimiter`` или JSON), поэтому
 секции читают ``.env`` сами.
 
@@ -66,7 +66,7 @@ class ProjectConfig(_Section):
     TEMPLATES_DIR: Path = Field(Path("resources/templates/"), alias="TEMPLATES_DIR")
     REFUND_BILLS_DIR: Path = Field(Path("resources/refund_bills/"), alias="REFUND_BILLS_DIR")
     LOCALE_DIR: Path = Field(Path("l10n/"), alias="LOCALE_DIR")
-    # NoDecode: значение в .env — строка через запятую (``ru,en``), а не JSON-список
+    # NoDecode: значение в .env - строка через запятую (``ru,en``), а не JSON-список
     AVAILABLE_LOCALES: Annotated[list[str], NoDecode] = Field(["ru"], alias="AVAILABLE_LOCALES")
 
     @field_validator("AVAILABLE_LOCALES", mode="before")
@@ -97,13 +97,13 @@ class XuiConfig(_Section):
     BASE_URL: str = Field("", alias="XUI_BASE_URL")
     API_TOKEN: str = Field("", alias="XUI_API_TOKEN")
     SUB_BASE_URL: str = Field("", alias="XUI_SUB_BASE_URL")
-    # NoDecode: значение в .env — строка через запятую (``1,2``), а не JSON-список
+    # NoDecode: значение в .env - строка через запятую (``1,2``), а не JSON-список
     INBOUND_IDS: Annotated[list[int], NoDecode] = Field([], alias="XUI_INBOUND_IDS")
     GROUP: str = Field("SPb LBG members", alias="XUI_GROUP")
     CLIENT_IP_LIMIT: int = Field(3, alias="XUI_CLIENT_IP_LIMIT")
     TRAFFIC_RESET_DAYS: int = Field(30, alias="XUI_TRAFFIC_RESET_DAYS")
 
-    # Отзыв подписок у выбывших мемберов — через час после синхронизации members_sync (03:00).
+    # Отзыв подписок у выбывших мемберов - через час после синхронизации members_sync (03:00).
     REVOKE_CRON_HOUR: int = Field(4, alias="VPN_REVOKE_CRON_HOUR")
     REVOKE_CRON_MINUTE: int = Field(0, alias="VPN_REVOKE_CRON_MINUTE")
     REVOKE_CRON_TIMEZONE: str = Field("Europe/Moscow", alias="VPN_REVOKE_CRON_TIMEZONE")

@@ -10,8 +10,7 @@ from database.models import LbgMember, Person
 _ROLE_PATTERNS: dict[str, re.Pattern[str]] = {
     "president": re.compile(r"president|президент", re.IGNORECASE),
     "treasurer": re.compile(r"treasurer|казначей", re.IGNORECASE),
-    # В таблице роль пишут как «VP4HR of … Board».
-    "hr": re.compile(r"vp\s*4\s*hr|vp\s*for\s*hr", re.IGNORECASE),
+    "hr": re.compile(r"vp4hr", re.IGNORECASE),
 }
 
 

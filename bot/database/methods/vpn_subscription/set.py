@@ -6,7 +6,7 @@ from database.models import VpnSubscription
 
 
 async def mark_revoked(session: AsyncSession, subscription: VpnSubscription) -> None:
-    """Пометить подписку отозванной. Коммит — на вызывающей стороне."""
+    """Пометить подписку отозванной. Коммит - на вызывающей стороне."""
     subscription.status = "revoked"
     subscription.revoked_at = datetime.now(UTC)
 

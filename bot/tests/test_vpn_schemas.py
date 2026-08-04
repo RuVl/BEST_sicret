@@ -70,11 +70,11 @@ class TestXuiClientPayload:
         payload = XuiClientPayload(
             id="uuid-1",
             email="lbg-7",
-            sub_id="sub-1",
-            tg_id=1,
-            limit_ip=3,
-            total_bytes=0,
-            expiry_time=0,
+            subId="sub-1",
+            tgId=1,
+            limitIp=3,
+            totalGB=0,
+            expiryTime=0,
             reset=30,
         )
         dumped = payload.model_dump(by_alias=True)

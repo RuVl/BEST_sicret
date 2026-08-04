@@ -3,7 +3,7 @@
 Порядок всегда один: сначала панель, потом БД бота. Если запись в БД не доехала, повторный
 вход находит уже созданного клиента по email и досоздаёт строку, а не плодит второго клиента.
 
-Панель — источник правды: клиента могли удалить или выключить в её админке, и бот обязан
+Панель - источник правды: клиента могли удалить или выключить в её админке, и бот обязан
 починиться сам, а не показывать выдуманное состояние.
 """
 
@@ -32,7 +32,7 @@ logger: FilteringBoundLogger = structlog.get_logger("vpn")
 async def _resolve_email(session: AsyncSession, client: XuiClient, person: Person, best_email: str | None) -> str:
     """Выбрать свободный идентификатор клиента.
 
-    Best-почта может оказаться занята клиентом, заведённым в панели руками, — такого клиента
+    Best-почта может оказаться занята клиентом, заведённым в панели руками, - такого клиента
     не трогаем и уходим на собственный ``lbg-<person_id>``.
     """
     email = build_client_email(person.id, best_email)
@@ -45,7 +45,7 @@ async def _resolve_email(session: AsyncSession, client: XuiClient, person: Perso
     if record is None:
         return email
 
-    # Клиент есть: наш (запись в БД) — переиспользуем, чужой — берём собственный идентификатор.
+    # Клиент есть: наш (запись в БД) - переиспользуем, чужой - берём собственный идентификатор.
     known = await get_subscription_by_email(session, email)
     return email if known is not None else fallback
 
@@ -55,14 +55,14 @@ def _build_payload(person: Person, member: LbgMember, email: str) -> XuiClientPa
     return XuiClientPayload(
         id=str(uuid4()),
         email=email,
-        sub_id=uuid4().hex,
+        subId=uuid4().hex,
         enable=True,
-        tg_id=person.telegram_id,
+        tgId=person.telegram_id,
         comment=member.full_name_ru or person.full_name,
         group=settings.xui.GROUP,
-        limit_ip=settings.xui.CLIENT_IP_LIMIT,
-        total_bytes=0,
-        expiry_time=0,
+        limitIp=settings.xui.CLIENT_IP_LIMIT,
+        totalGB=0,
+        expiryTime=0,
         reset=settings.xui.TRAFFIC_RESET_DAYS,
     )
 
@@ -73,7 +73,7 @@ async def ensure_subscription(
     person: Person,
     member: LbgMember,
 ) -> VpnSubscription:
-    """Привести подписку человека в рабочее состояние. Коммит — на вызывающей стороне.
+    """Привести подписку человека в рабочее состояние. Коммит - на вызывающей стороне.
 
     Разбирает все расхождения между БД бота и панелью: подписки нет, клиента удалили руками,
     подписку отозвал джоб, клиент просто выключен.
@@ -86,7 +86,7 @@ async def ensure_subscription(
     record = await client.get_client(subscription.xui_email)
 
     if record is None:
-        # Клиента снесли в админке — выпускаем нового и переписываем идентификаторы в той же строке.
+        # Клиента снесли в админке - выпускаем нового и переписываем идентификаторы в той же строке.
         return await reissue_subscription(session, client, person, member, subscription)
 
     if not record.enable or subscription.status != "active":
@@ -137,7 +137,7 @@ async def reissue_subscription(
 ) -> VpnSubscription:
     """Клиента удалили в панели: создаём нового и обновляем существующую строку.
 
-    Новая строка не подойдёт — на ``person_id`` стоит уникальный индекс. Ссылка у человека
+    Новая строка не подойдёт - на ``person_id`` стоит уникальный индекс. Ссылка у человека
     меняется: старый ``subId`` вместе с клиентом уже уничтожен.
     """
     email = await _resolve_email(session, client, person, member.best_email)

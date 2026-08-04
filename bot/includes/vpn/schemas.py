@@ -1,7 +1,7 @@
 """Схемы обмена с панелью 3x-ui (v3).
 
 Поля повторяют Go-структуры панели: ``model.Client`` и ``xray.ClientTraffic``.
-Панель отдаёт всё в конверте ``{success, msg, obj}`` — его разбирает ``client.py``.
+Панель отдаёт всё в конверте ``{success, msg, obj}`` - его разбирает ``client.py``.
 """
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -10,7 +10,6 @@ from pydantic import BaseModel, ConfigDict, Field
 class XuiClientPayload(BaseModel):
     """Тело клиента для ``POST /panel/api/clients/add`` и ``/update/:email``."""
 
-    # Панель ждёт camelCase, а нам удобнее читаемые имена — маппим через alias.
     model_config = ConfigDict(populate_by_name=True)
 
     id: str = Field(description="UUID клиента")
@@ -22,9 +21,9 @@ class XuiClientPayload(BaseModel):
     group: str = ""
     limit_ip: int = Field(0, alias="limitIp")
     # Вопреки имени, панель хранит в totalGB именно БАЙТЫ (в её примерах 53687091200 = 50 ГиБ).
-    # 0 — без лимита трафика.
+    # 0 - без лимита трафика.
     total_bytes: int = Field(0, alias="totalGB")
-    # Метка времени в миллисекундах; 0 — без срока действия.
+    # Метка времени в миллисекундах; 0 - без срока действия.
     expiry_time: int = Field(0, alias="expiryTime")
     reset: int = Field(0, description="Период сброса счётчика трафика в днях")
 
@@ -32,7 +31,7 @@ class XuiClientPayload(BaseModel):
 class ClientRecord(BaseModel):
     """Клиент, как его отдаёт панель в ``GET /panel/api/clients/get/:email``.
 
-    Важно: ``id`` здесь — числовой ID строки в БД панели, а UUID лежит в ``uuid``.
+    Важно: ``id`` здесь - числовой ID строки в БД панели, а UUID лежит в ``uuid``.
     В теле на запись (``XuiClientPayload``) UUID наоборот называется ``id``.
     """
 
@@ -55,14 +54,14 @@ class ClientRecord(BaseModel):
         return XuiClientPayload(
             id=self.uuid,
             email=self.email,
-            sub_id=self.sub_id,
+            subId=self.sub_id,
             enable=self.enable,
-            tg_id=self.tg_id,
+            tgId=self.tg_id,
             comment=self.comment,
             group=self.group,
-            limit_ip=self.limit_ip,
-            total_bytes=self.total_bytes,
-            expiry_time=self.expiry_time,
+            limitIp=self.limit_ip,
+            totalGB=self.total_bytes,
+            expiryTime=self.expiry_time,
             reset=self.reset,
         )
 

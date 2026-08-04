@@ -9,7 +9,7 @@ async def list_subscriptions_to_revoke(session: AsyncSession) -> list[VpnSubscri
     """Активные подписки людей, которые больше не активные мемберы LBG.
 
     Ловим два случая: привязку к участнику сняли совсем и участник перестал быть активным.
-    ``Person`` подгружается сразу — джобу нужен ``telegram_id`` для уведомления.
+    ``Person`` подгружается сразу - джобу нужен ``telegram_id`` для уведомления.
     """
     query = (
         select(VpnSubscription)

@@ -1,6 +1,6 @@
 """Асинхронный клиент панели 3x-ui (v3).
 
-Авторизация — API-токен: ``Authorization: Bearer <token>``. При валидном токене панель
+Авторизация - API-токен: ``Authorization: Bearer <token>``. При валидном токене панель
 помечает запрос как ``api_authed`` и пропускает его мимо CSRF-мидлвари, поэтому ни логин,
 ни cookie-сессия не нужны.
 
@@ -70,7 +70,7 @@ class XuiClient:
                 if response.status == 404:
                     raise XuiClientNotFoundError(f"Панель вернула 404 на {path}")
 
-                # Панель на неавторизованный HTML-запрос отвечает не-JSON — не даём упасть в парсере.
+                # Панель на неавторизованный HTML-запрос отвечает не-JSON - не даём упасть в парсере.
                 try:
                     payload = await response.json(content_type=None)
                 except ValueError as exc:
@@ -135,7 +135,7 @@ class XuiClient:
         await logger.ainfo("xui-client-set-enabled", email=email, enabled=enabled)
 
     async def list_group_emails(self, group: str) -> list[str]:
-        """Все email клиентов в группе — для сверки «БД бота ↔ панель»."""
+        """Все email клиентов в группе - для сверки «БД бота ↔ панель»."""
         obj = await self._request("GET", f"/clients/groups/{quote(group, safe='')}/emails")
         return list(obj or [])
 

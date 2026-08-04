@@ -13,7 +13,7 @@ async def get_or_create_person(
 ) -> Person:
     """Найти Person по ``telegram_id`` или создать нового.
 
-    Имя и username обновляются на каждом заходе — в Telegram они могут меняться.
+    Имя и username обновляются на каждом заходе - в Telegram они могут меняться.
     Коммит остаётся на вызывающей стороне.
     """
     person = await session.scalar(select(Person).where(Person.telegram_id == telegram_id))

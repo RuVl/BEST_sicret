@@ -11,7 +11,7 @@ async def create_subscription(
     sub_id: str,
     xui_client_uuid: str,
 ) -> VpnSubscription:
-    """Создать запись о выданной подписке. Коммит — на вызывающей стороне."""
+    """Создать запись о выданной подписке. Коммит - на вызывающей стороне."""
     subscription = VpnSubscription(
         person_id=person_id,
         xui_email=xui_email,
