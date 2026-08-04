@@ -8,7 +8,7 @@ from typing import Any
 
 from aiogram import F
 from aiogram_dialog import Dialog, DialogManager, LaunchMode, Window
-from aiogram_dialog.widgets.kbd import Cancel, Start
+from aiogram_dialog.widgets.kbd import Start
 from aiogram_dialog.widgets.text import Format
 from fluent.runtime import FluentLocalization
 
@@ -86,7 +86,6 @@ profile_dialog = Dialog(
             state=ViewVpnSubscription.VIEW,
             when=F["is_lbg_active"],
         ),
-        Cancel(L10nFormat("close")),
         getter=get_profile_data,
         state=ViewProfile.VIEW,
     ),
