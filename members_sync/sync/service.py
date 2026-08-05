@@ -49,6 +49,16 @@ def _fetch_sheet_values(spreadsheet) -> list[tuple[str, SheetSpec, list[list[str
     return result
 
 
+def _precedence(member: ParsedMember) -> int:
+    """Вес записи при дедупе: у ParsedMember членство уже разложено по флагам."""
+    membership = F.Membership(
+        member.membership_category or "",
+        is_active=member.is_active,
+        is_excluded=member.is_excluded,
+    )
+    return F.membership_precedence(membership)
+
+
 def _parse_sheets(
     sheet_values: list[tuple[str, SheetSpec, list[list[str]]]],
     issues: IssueCollector,
@@ -72,7 +82,7 @@ def _parse_sheets(
             existing = parsed.get(member.identity_key)
             if existing is None:
                 parsed[member.identity_key] = member
-            elif F.status_precedence(member.membership_status) > F.status_precedence(existing.membership_status):
+            elif _precedence(member) > _precedence(existing):
                 parsed[member.identity_key] = member
                 report.duplicates += 1
                 issues.add(
@@ -120,8 +130,9 @@ async def run_sync(dry_run: bool = False) -> RunReport:
         members = list(parsed.values())
         report.total_parsed = len(members)
         for member in members:
-            report.by_status[member.membership_status or "—"] += 1
             report.by_category[member.membership_category or "—"] += 1
+            report.active += member.is_active
+            report.excluded += member.is_excluded
 
         # Запись в БД (в dry-run пропускаем — только дамп в JSON).
         if dry_run:

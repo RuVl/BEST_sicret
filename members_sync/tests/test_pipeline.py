@@ -74,8 +74,8 @@ def test_synthetic_two_row_member():
     assert m.active_since == date(2024, 3, 1)
     assert m.gender == "female"
     assert m.membership_category == "board"
-    assert m.membership_status == "active"
     assert m.is_active is True
+    assert m.is_excluded is False
     assert m.source_row_start == 3 and m.source_row_end == 4
     # raw snapshot не теряет данные
     assert m.raw["cells"]["name"]["p"] == "Иванова Анна Сергеевна"
@@ -258,5 +258,5 @@ def test_synthetic_ex_members_status():
 
     assert len(members) == 2
     assert all(m.membership_category == "ex_member" for m in members)
-    assert all(m.membership_status == "ex" for m in members)
+    assert all(m.is_excluded for m in members)
     assert all(not m.is_active for m in members)

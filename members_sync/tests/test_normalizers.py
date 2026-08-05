@@ -146,15 +146,36 @@ def test_normalize_identity_name():
     assert normalize_identity_name("  Фёдор   Иванов ") == "федор иванов"
 
 
+_DEFAULT = F.Membership("full_member", is_active=True)
+
+
 @pytest.mark.parametrize(
     ("section", "expected"),
     [
-        ("BOARD", ("board", "active")),
-        ("FULL MEMBERS", ("full_member", "active")),
-        ("ALUMNI", ("alumni", "alumni")),
-        ("EX-BABY MEMBERS", ("ex_baby_member", "ex")),
-        ("EX-something-new", ("ex_member", "ex")),  # эвристика
+        ("BOARD", F.Membership("board", is_active=True)),
+        ("FULL MEMBERS", F.Membership("full_member", is_active=True)),
+        ("ALUMNI", F.Membership("alumni")),
+        ("FORMER", F.Membership("former")),
+        ("EX-BABY MEMBERS", F.Membership("ex_baby_member", is_excluded=True)),
+        ("EX-something-new", F.Membership("ex_member", is_excluded=True)),  # эвристика
     ],
 )
 def test_classify_section(section, expected):
-    assert F.classify_section(section, ("full_member", "active")) == expected
+    assert F.classify_section(section, _DEFAULT) == expected
+
+
+def test_classify_section_falls_back_to_sheet_default():
+    assert F.classify_section(None, _DEFAULT) == _DEFAULT
+
+
+@pytest.mark.parametrize(
+    ("weaker", "stronger"),
+    [
+        (F.Membership("ex_member", is_excluded=True), F.Membership("alumni")),
+        (F.Membership("inactive"), F.Membership("alumni")),
+        (F.Membership("alumni"), F.Membership("board", is_active=True)),
+    ],
+)
+def test_membership_precedence_order(weaker, stronger):
+    # При дедупе одного человека между листами побеждает более весомая запись.
+    assert F.membership_precedence(weaker) < F.membership_precedence(stronger)
