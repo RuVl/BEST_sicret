@@ -12,9 +12,6 @@ services:
       - postgres/.env
     networks:
       - backend
-    # Панель 3x-ui живёт в host-сети, поэтому из bridge-сети ходим к ней через шлюз хоста.
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
       - media_volume:/app/resources
     depends_on:
