@@ -24,4 +24,8 @@ profile-not-member = Привет, { $name }\!
     Если ты уже мембер — проверь, что в таблице участников указан твой Telegram\-username, и нажми /start
 
 # Buttons
+menu-document-btn = Создать приказ
+menu-equipment-apply-btn = Заявка по стаффу
+menu-refund-btn = Заявка на рефанд
+menu-inventory-btn = Имущество
 profile-vpn-btn = VPN-подписка

@@ -49,15 +49,9 @@ async def main():
         token=settings.telegram.API_TOKEN,
         default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN_V2),
     )
+    # Единственная команда: остальное - кнопки меню, доступные только мемберам.
     await bot.set_my_commands(
-        [
-            BotCommand(command="start", description="Запуск бота"),
-            BotCommand(command="create_document", description="Создать приказ"),
-            BotCommand(command="create_equipment_apply", description="Создать заявку по стаффу"),
-            BotCommand(command="refund", description="Создать заявку на рефанд"),
-            BotCommand(command="inventory", description="Просмотр имущества"),
-            BotCommand(command="profile", description="Мой профиль"),
-        ],
+        [BotCommand(command="start", description="Профиль и меню")],
         scope=BotCommandScopeDefault(),
     )
 

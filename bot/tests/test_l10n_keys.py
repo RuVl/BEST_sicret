@@ -32,6 +32,10 @@ PROFILE_KEYS = [
     "profile-card",
     "profile-not-member",
     "profile-vpn-btn",
+    "menu-document-btn",
+    "menu-equipment-apply-btn",
+    "menu-refund-btn",
+    "menu-inventory-btn",
 ]
 
 VPN_KEYS = [
@@ -66,6 +70,10 @@ MESSAGE_KEYS = [
 # Подписи кнопок и текст алертов Telegram показывает как есть, разметки там нет.
 PLAIN_KEYS = [
     "profile-vpn-btn",
+    "menu-document-btn",
+    "menu-equipment-apply-btn",
+    "menu-refund-btn",
+    "menu-inventory-btn",
     "vpn-issue-btn",
     "vpn-refresh-btn",
     "vpn-handbook-btn",

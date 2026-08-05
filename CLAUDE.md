@@ -88,7 +88,7 @@ make nuke          # stop stack AND erase data (postgres/redis volumes)
 
 **Layer flow:** `handlers/` (command entrypoints) → start an aiogram-dialog state machine → `dialogs/` (windows + widgets) → `includes/templates/` (domain logic) → `database/` or `.docx` generation.
 
-- **`handlers/`** — `register_handlers` wires `commands.router` and a dialogs router; `debug.router` is added only when `DEBUG`. `commands.py` maps `/start`, `/create_document`, `/refund`, `/create_equipment_apply`, `/inventory`, `/add_equipment` to dialog starts. Each command starts a state machine with `StartMode.RESET_STACK`.
+- **`handlers/`** — `register_handlers` wires `commands.router` and a dialogs router; `debug.router` is added only when `DEBUG`. `commands.py` holds the bot's **only** command, `/start`: it get-or-creates the `Person`, links it to an `LbgMember` by Telegram username, and starts the main-menu dialog (`ViewProfile.VIEW`, `StartMode.RESET_STACK`). Everything else — приказы, заявки, рефанды, имущество, VPN — opens from menu buttons that are shown only to LBG members (`utils.access.current_member`), so there is no command that bypasses the check.
 
 - **`state_machines/`** — `StatesGroup` definitions (one per flow: templates, refund, apply_eq, add_eq, inventory). Imported by both handlers and dialogs.
 
@@ -106,7 +106,7 @@ make nuke          # stop stack AND erase data (postgres/redis volumes)
 
 - **`includes/fluent.py` + `l10n/`** — Fluent localization. `.ftl` files under `l10n/<locale>/` (currently only `ru`) are auto-discovered. Use `l10n.format_value(key, args=...)` for all user text.
 
-- **`env.py`** — config via **`pydantic-settings`**: nested `BaseModel` groups (`TelegramConfig`, `PostgresConfig`, `RedisConfig`, `ProjectConfig`, `LoggerConfig`) aggregated on a `GlobalSettings(BaseSettings)` singleton. Field names map to env vars via `alias=` (e.g. token is `TG_API_TOKEN`). Two privileged Telegram user IDs gate behavior: `PRESIDENT_ID` (receives notifications) and `TREASURER_ID` (allowed to run `/add_equipment`).
+- **`env.py`** — config via **`pydantic-settings`**: nested `BaseModel` groups (`TelegramConfig`, `PostgresConfig`, `RedisConfig`, `ProjectConfig`, `LoggerConfig`) aggregated on a `GlobalSettings(BaseSettings)` singleton. Field names map to env vars via `alias=` (e.g. token is `TG_API_TOKEN`). Two privileged Telegram user IDs are notification fallbacks when the board role can't be resolved from the members table (`utils/board.py`): `PRESIDENT_ID` and `TREASURER_ID`.
 
 ### `members_sync/`
 

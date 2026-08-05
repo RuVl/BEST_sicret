@@ -21,11 +21,10 @@ from structlog.typing import FilteringBoundLogger
 from database.main import async_session
 from database.methods.person import get_person_with_member
 from database.methods.vpn_subscription import get_subscription_by_person
-from database.models import LbgMember, Person
 from includes.vpn import XuiError, ensure_subscription, get_xui_client
 from middlewares import L10N_FORMAT_KEY, LOGGING_KEY
 from state_machines.vpn import ViewVpnSubscription
-from utils import L10nFormat, escape_mdv2
+from utils import L10nFormat, current_member, escape_mdv2
 
 
 def _format_traffic(used_bytes: int) -> str:
@@ -34,13 +33,6 @@ def _format_traffic(used_bytes: int) -> str:
     if used_bytes < _GB:
         return f"{used_bytes / 1024**2:.1f} МБ"
     return f"{used_bytes / _GB:.2f} ГБ"
-
-
-def _active_member(person: Person | None) -> LbgMember | None:
-    """Активное членство или ``None`` - единственное условие доступа к VPN."""
-    if person is None or person.lbg_member is None or not person.lbg_member.is_active:
-        return None
-    return person.lbg_member
 
 
 # ========== Геттер: статус подписки ==========
@@ -56,7 +48,7 @@ async def get_vpn_data(
         person = await get_person_with_member(session, user.id)
         subscription = await get_subscription_by_person(session, person.id) if person else None
 
-    if _active_member(person) is None:
+    if current_member(person) is None:
         return {
             "is_allowed": False,
             "has_subscription": False,
@@ -113,7 +105,7 @@ async def on_issue(
     try:
         async with async_session() as session:
             person = await get_person_with_member(session, clb.from_user.id)
-            member = _active_member(person)
+            member = current_member(person)
 
             if member is None:
                 await clb.answer(l10n.format_value("vpn-access-denied"), show_alert=True)

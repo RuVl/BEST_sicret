@@ -31,8 +31,9 @@ make infra
 
 Все настройки читаются через `pydantic-settings` в `bot/env.py` (группы
 `TelegramConfig`/`PostgresConfig`/`RedisConfig`/`ProjectConfig`/`LoggerConfig`,
-агрегированы в `GlobalSettings`). Шаблон — `bot/.env.dist`. Привилегированные ID:
-`PRESIDENT_ID` (получает уведомления) и `TREASURER_ID` (доступ к `/add_equipment`).
+агрегированы в `GlobalSettings`). Шаблон — `bot/.env.dist`. Привилегированные ID —
+запасные получатели уведомлений, если роль не нашлась в таблице участников:
+`PRESIDENT_ID` и `TREASURER_ID`.
 
 ## Линт и форматирование
 
