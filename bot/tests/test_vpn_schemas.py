@@ -2,7 +2,7 @@ import pytest
 
 from includes.vpn.client import unwrap_envelope
 from includes.vpn.exceptions import XuiError
-from includes.vpn.schemas import ClientRecord, ClientTraffic, XuiClientPayload
+from includes.vpn.schemas import DEFAULT_FLOW, ClientRecord, ClientTraffic, XuiClientPayload
 
 # Ответ панели на GET /panel/api/clients/get/:email (поле obj.client)
 CLIENT_RECORD_FIXTURE = {
@@ -60,9 +60,18 @@ class TestClientRecord:
         assert dumped["comment"] == "Иванов Иван"
 
     def test_extra_panel_fields_are_ignored(self):
-        record = ClientRecord.model_validate(CLIENT_RECORD_FIXTURE | {"flow": "xtls-rprx-vision"})
+        record = ClientRecord.model_validate(CLIENT_RECORD_FIXTURE | {"createdAt": 1735680000000})
 
         assert record.email == "ivan@best-eu.org"
+
+    def test_to_payload_keeps_flow_set_in_panel(self):
+        # Панель на update заменяет строку целиком, поэтому flow обязан доехать обратно.
+        record = ClientRecord.model_validate(CLIENT_RECORD_FIXTURE | {"flow": "xtls-rprx-vision"})
+
+        assert record.to_payload().flow == "xtls-rprx-vision"
+
+    def test_to_payload_fills_flow_when_panel_left_it_empty(self):
+        assert ClientRecord.model_validate(CLIENT_RECORD_FIXTURE).to_payload().flow == DEFAULT_FLOW
 
 
 class TestXuiClientPayload:
@@ -84,6 +93,11 @@ class TestXuiClientPayload:
         assert dumped["limitIp"] == 3
         assert dumped["totalGB"] == 0
         assert dumped["expiryTime"] == 0
+
+    def test_flow_defaults_to_vision(self):
+        payload = XuiClientPayload(id="uuid-1", email="lbg-7", subId="sub-1")
+
+        assert payload.model_dump(by_alias=True)["flow"] == "xtls-rprx-vision"
 
 
 class TestClientTraffic:

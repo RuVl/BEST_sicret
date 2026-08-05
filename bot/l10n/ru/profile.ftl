@@ -13,9 +13,6 @@ profile-card = *{ $name }*
     { "*Международная вовлечённость:*" } { $international_involvement }
     { "*Мероприятия BEST:*" } { $best_events }
 
-profile-active = активный мембер
-profile-inactive = неактивен
-
 profile-not-member = Привет, { $name }\!
     { "" }
     Тебя пока нет в базе участников BEST SPb\. Этот бот — для мемберов локальной группы\.
@@ -28,4 +25,3 @@ profile-not-member = Привет, { $name }\!
 
 # Buttons
 profile-vpn-btn = VPN-подписка
-close = Закрыть

@@ -116,22 +116,26 @@ class XuiClient:
         )
         await logger.ainfo("xui-client-add", email=client.email, inbound_ids=inbound_ids)
 
-    async def set_enabled(self, email: str, enabled: bool) -> None:
-        """Включить/выключить клиента.
+    async def update_client(self, email: str, client: XuiClientPayload) -> None:
+        """Перезаписать клиента.
 
-        Панель принимает только полное тело ``model.Client``, поэтому сначала читаем
-        текущего клиента: иначе перезатрём настройки, выставленные в панели руками.
+        Панель не патчит строку, а заменяет её телом запроса, поэтому передавать нужно
+        полного клиента - обычно ``ClientRecord.to_payload()`` с точечными правками.
         """
+        await self._request(
+            "POST",
+            f"/clients/update/{quote(email, safe='')}",
+            json=client.model_dump(by_alias=True),
+        )
+        await logger.ainfo("xui-client-update", email=email)
+
+    async def set_enabled(self, email: str, enabled: bool) -> None:
+        """Включить/выключить клиента, не тронув остальные его настройки."""
         record = await self.get_client(email)
         if record is None:
             raise XuiClientNotFoundError(f"Клиента {email} нет в панели")
 
-        payload = record.to_payload().model_copy(update={"enable": enabled})
-        await self._request(
-            "POST",
-            f"/clients/update/{quote(email, safe='')}",
-            json=payload.model_dump(by_alias=True),
-        )
+        await self.update_client(email, record.to_payload().model_copy(update={"enable": enabled}))
         await logger.ainfo("xui-client-set-enabled", email=email, enabled=enabled)
 
     async def list_group_emails(self, group: str) -> list[str]:

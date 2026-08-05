@@ -27,7 +27,6 @@ def upgrade() -> None:
     sa.Column('xui_email', sa.String(length=255), nullable=False, comment='Идентификатор клиента в панели (best-почта или lbg-<person_id>)'),
     sa.Column('sub_id', sa.String(length=64), nullable=False, comment='subId клиента — ключ ссылки-подписки'),
     sa.Column('xui_client_uuid', sa.String(length=64), nullable=False, comment='UUID клиента в панели (поле id)'),
-    sa.Column('protocol', sa.String(length=16), server_default='xui', nullable=False, comment='Тип подписки: xui (задел под awg)'),
     sa.Column('status', sa.String(length=16), server_default='active', nullable=False, comment='active/revoked'),
     sa.Column('issued_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False, comment='Когда подписка выдана'),
     sa.Column('revoked_at', sa.DateTime(timezone=True), nullable=True, comment='Когда подписка отключена'),

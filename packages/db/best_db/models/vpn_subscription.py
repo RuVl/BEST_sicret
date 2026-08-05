@@ -52,13 +52,6 @@ class VpnSubscription(Base):
         comment="UUID клиента в панели (поле id)",
     )
 
-    protocol: Mapped[str] = mapped_column(
-        String(16),
-        default="xui",
-        server_default="xui",
-        nullable=False,
-        comment="Тип подписки: xui (задел под awg)",
-    )
     status: Mapped[str] = mapped_column(
         String(16),
         default="active",

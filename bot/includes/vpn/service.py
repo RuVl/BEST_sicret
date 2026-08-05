@@ -23,31 +23,48 @@ from database.methods.vpn_subscription import (
 from database.models import LbgMember, Person, VpnSubscription
 from env import settings
 from includes.vpn.client import XuiClient
-from includes.vpn.identity import build_client_email, fallback_client_email
-from includes.vpn.schemas import XuiClientPayload
+from includes.vpn.identity import belongs_to_person, build_client_email, fallback_client_email
+from includes.vpn.schemas import DEFAULT_FLOW, ClientRecord, XuiClientPayload
 
 logger: FilteringBoundLogger = structlog.get_logger("vpn")
 
 
-async def _resolve_email(session: AsyncSession, client: XuiClient, person: Person, best_email: str | None) -> str:
-    """Выбрать свободный идентификатор клиента.
+def _person_names(person: Person, member: LbgMember) -> tuple[str, ...]:
+    """ФИО, под которыми человек может быть записан в панели."""
+    return tuple(name for name in (member.full_name_ru, person.full_name) if name)
 
-    Best-почта может оказаться занята клиентом, заведённым в панели руками, - такого клиента
-    не трогаем и уходим на собственный ``lbg-<person_id>``.
+
+async def _resolve_target(
+    session: AsyncSession,
+    client: XuiClient,
+    person: Person,
+    member: LbgMember,
+) -> tuple[str, ClientRecord | None]:
+    """Выбрать идентификатор клиента и подобрать уже существующего клиента панели.
+
+    Возвращаем ``(email, record)``: ``record`` - клиент, которого можно взять себе, а не
+    создавать заново. Своим считаем клиента из ``vpn_subscriptions`` и заведённого руками,
+    у которого сходятся почта, tg-id и ФИО. Чужого не трогаем и уходим на ``lbg-<person_id>``.
     """
-    email = build_client_email(person.id, best_email)
+    email = build_client_email(person.id, member.best_email)
     fallback = fallback_client_email(person.id)
 
-    if email == fallback:
-        return fallback
-
     record = await client.get_client(email)
-    if record is None:
-        return email
+    if record is None or email == fallback:
+        # На fallback-идентификаторе клиент может остаться от попытки, у которой не доехал коммит.
+        return email, record
 
-    # Клиент есть: наш (запись в БД) - переиспользуем, чужой - берём собственный идентификатор.
     known = await get_subscription_by_email(session, email)
-    return email if known is not None else fallback
+    if known is not None or belongs_to_person(
+        client_tg_id=record.tg_id,
+        client_comment=record.comment,
+        telegram_id=person.telegram_id,
+        full_names=_person_names(person, member),
+    ):
+        return email, record
+
+    await logger.awarning("vpn-email-taken", person_id=person.id, email=email)
+    return fallback, await client.get_client(fallback)
 
 
 def _build_payload(person: Person, member: LbgMember, email: str) -> XuiClientPayload:
@@ -65,6 +82,47 @@ def _build_payload(person: Person, member: LbgMember, email: str) -> XuiClientPa
         expiryTime=0,
         reset=settings.xui.TRAFFIC_RESET_DAYS,
     )
+
+
+async def _adopt_client(client: XuiClient, record: ClientRecord, person: Person, member: LbgMember) -> None:
+    """Взять существующего клиента панели под управление бота.
+
+    Лимиты, выставленные руками, не трогаем - дописываем только принадлежность
+    (tg-id, ФИО, группу), выставляем свой flow и включаем клиента, если он был выключен.
+    """
+    payload = record.to_payload().model_copy(
+        update={
+            "enable": True,
+            "flow": DEFAULT_FLOW,
+            "tg_id": person.telegram_id,
+            "comment": member.full_name_ru or person.full_name,
+            "group": settings.xui.GROUP,
+        }
+    )
+    await client.update_client(record.email, payload)
+
+
+async def _acquire_client(
+    session: AsyncSession,
+    client: XuiClient,
+    person: Person,
+    member: LbgMember,
+) -> tuple[str, str, str]:
+    """Получить готового клиента панели: ``(email, sub_id, uuid)``.
+
+    Сначала панель, потом БД бота: если запись в БД не доедет, следующий заход подберёт
+    того же клиента, а не создаст второго.
+    """
+    email, record = await _resolve_target(session, client, person, member)
+
+    if record is not None:
+        await _adopt_client(client, record, person, member)
+        await logger.ainfo("vpn-client-adopted", person_id=person.id, email=email)
+        return email, record.sub_id, record.uuid
+
+    payload = _build_payload(person, member, email)
+    await client.add_client(payload, settings.xui.INBOUND_IDS)
+    return payload.email, payload.sub_id, payload.id
 
 
 async def ensure_subscription(
@@ -101,30 +159,15 @@ async def issue_subscription(
     person: Person,
     member: LbgMember,
 ) -> VpnSubscription:
-    """Первая выдача: создать клиента в панели и запись в БД."""
-    email = await _resolve_email(session, client, person, member.best_email)
-
-    # Клиент мог остаться от прошлой попытки, у которой не доехал коммит.
-    existing = await client.get_client(email)
-    if existing is not None:
-        await logger.awarning("vpn-adopt-orphan-client", person_id=person.id, email=email)
-        return await create_subscription(
-            session,
-            person_id=person.id,
-            xui_email=email,
-            sub_id=existing.sub_id,
-            xui_client_uuid=existing.uuid,
-        )
-
-    payload = _build_payload(person, member, email)
-    await client.add_client(payload, settings.xui.INBOUND_IDS)
+    """Первая выдача: завести клиента в панели (или подхватить готового) и записать в БД."""
+    email, sub_id, uuid = await _acquire_client(session, client, person, member)
 
     return await create_subscription(
         session,
         person_id=person.id,
-        xui_email=payload.email,
-        sub_id=payload.sub_id,
-        xui_client_uuid=payload.id,
+        xui_email=email,
+        sub_id=sub_id,
+        xui_client_uuid=uuid,
     )
 
 
@@ -135,23 +178,21 @@ async def reissue_subscription(
     member: LbgMember,
     subscription: VpnSubscription,
 ) -> VpnSubscription:
-    """Клиента удалили в панели: создаём нового и обновляем существующую строку.
+    """Клиента удалили в панели: заводим нового и обновляем существующую строку.
 
     Новая строка не подойдёт - на ``person_id`` стоит уникальный индекс. Ссылка у человека
     меняется: старый ``subId`` вместе с клиентом уже уничтожен.
     """
-    email = await _resolve_email(session, client, person, member.best_email)
-    payload = _build_payload(person, member, email)
-    await client.add_client(payload, settings.xui.INBOUND_IDS)
+    email, sub_id, uuid = await _acquire_client(session, client, person, member)
 
     await set_client_identity(
         session,
         subscription,
-        xui_email=payload.email,
-        sub_id=payload.sub_id,
-        xui_client_uuid=payload.id,
+        xui_email=email,
+        sub_id=sub_id,
+        xui_client_uuid=uuid,
     )
-    await logger.awarning("vpn-subscription-reissued", person_id=person.id, email=payload.email)
+    await logger.awarning("vpn-subscription-reissued", person_id=person.id, email=email)
     return subscription
 
 

@@ -46,5 +46,5 @@ vpn-handbook-url = https://docs.google.com/document/d/1gcmkXYgEY308JLwmrzNfeBirz
 
 # Notifications and errors
 vpn-issued = Подписка выпущена
-vpn-error = Панель VPN недоступна\. Попробуйте позже или напишите VP4HR\.
-vpn-access-denied = Доступ к VPN только для активных мемберов LBG\.
+vpn-error = Панель VPN недоступна. Попробуйте позже или напишите VP4HR.
+vpn-access-denied = Доступ к VPN только для активных мемберов LBG

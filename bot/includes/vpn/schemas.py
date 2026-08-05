@@ -6,6 +6,10 @@
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# XTLS-Vision - единственный flow, который мы выдаём: панель на update перезаписывает поле
+# тем, что пришло в теле, поэтому пустой flow молча снёс бы настройку клиента.
+DEFAULT_FLOW = "xtls-rprx-vision"
+
 
 class XuiClientPayload(BaseModel):
     """Тело клиента для ``POST /panel/api/clients/add`` и ``/update/:email``."""
@@ -15,6 +19,7 @@ class XuiClientPayload(BaseModel):
     id: str = Field(description="UUID клиента")
     email: str
     sub_id: str = Field(alias="subId")
+    flow: str = DEFAULT_FLOW
     enable: bool = True
     tg_id: int = Field(0, alias="tgId")
     comment: str = ""
@@ -40,6 +45,7 @@ class ClientRecord(BaseModel):
     email: str
     uuid: str = ""
     sub_id: str = Field("", alias="subId")
+    flow: str = ""
     enable: bool = True
     tg_id: int = Field(0, alias="tgId")
     comment: str = ""
@@ -55,6 +61,7 @@ class ClientRecord(BaseModel):
             id=self.uuid,
             email=self.email,
             subId=self.sub_id,
+            flow=self.flow or DEFAULT_FLOW,
             enable=self.enable,
             tgId=self.tg_id,
             comment=self.comment,
