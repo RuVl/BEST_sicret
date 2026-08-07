@@ -9,10 +9,10 @@ from dialogs.user.vpn import vpn_dialog
 
 user_dialog_router = Router()
 user_dialog_router.include_routers(
+    profile_dialog,
     template_dialog,
     refund_dialog,
     apply_equipment_dialog,
     inventory_dialog,
-    profile_dialog,
     vpn_dialog,
 )

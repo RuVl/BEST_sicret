@@ -147,5 +147,6 @@ vpn_dialog = Dialog(
         Cancel(L10nFormat("back")),
         getter=get_vpn_data,
         state=ViewVpnSubscription.VIEW,
+        protect_content=True,
     ),
 )
