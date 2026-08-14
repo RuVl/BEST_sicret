@@ -24,8 +24,9 @@ class RunReport:
     sheets: list[SheetStat] = field(default_factory=list)
     total_parsed: int = 0
     duplicates: int = 0
-    by_status: Counter = field(default_factory=Counter)
     by_category: Counter = field(default_factory=Counter)
+    active: int = 0
+    excluded: int = 0
     inserted: int = 0
     updated: int = 0
     deactivated: int = 0
@@ -93,11 +94,11 @@ def write_report(report: RunReport, path: Path) -> None:
     )
     lines.append("")
 
-    lines.append("## По статусам\n")
+    lines.append("## Состав\n")
     lines.append(
         _md_table(
-            ["Статус", "Кол-во"],
-            [[k, v] for k, v in sorted(report.by_status.items())] or [["—", 0]],
+            ["Активных", "Состоит в группе", "Исключено"],
+            [[report.active, report.total_parsed - report.excluded, report.excluded]],
         )
     )
     lines.append("")

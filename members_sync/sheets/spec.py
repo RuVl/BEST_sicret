@@ -26,7 +26,7 @@ class SheetSpec:
     header_row: int
     number_col: int  # колонка с № участника (признак основной строки)
     columns: tuple[ColumnDef, ...]
-    default_category: tuple[str, str]  # (category, status), если секции нет
+    default_membership: F.Membership  # членство, если секции в листе нет
 
 
 _NAME = ("фио", "name", "ф.и.о")
@@ -50,7 +50,7 @@ LAYOUT_A = SheetSpec(
     layout="A",
     header_row=0,
     number_col=0,
-    default_category=("full_member", "active"),
+    default_membership=F.Membership("full_member", is_active=True),
     columns=(
         ColumnDef(F.NAME, _NAME, 1, required=True),
         ColumnDef(F.PHONE, _PHONE, 2),
@@ -75,7 +75,7 @@ LAYOUT_B = SheetSpec(
     layout="B",
     header_row=0,
     number_col=0,
-    default_category=("alumni", "alumni"),
+    default_membership=F.Membership("alumni"),
     columns=(
         ColumnDef(F.NAME, _NAME, 1, required=True),
         ColumnDef(F.PHONE, _PHONE, 2),
@@ -107,7 +107,7 @@ def spec_for_title(title: str) -> SheetSpec | None:
             header_row=LAYOUT_B.header_row,
             number_col=LAYOUT_B.number_col,
             columns=LAYOUT_B.columns,
-            default_category=("ex_member", "ex"),
+            default_membership=F.Membership("ex_member", is_excluded=True),
         )
     if any(k in low for k in ("alumni", "former", "abroad", "guest", "inactive")):
         return LAYOUT_B

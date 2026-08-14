@@ -69,8 +69,8 @@ class ParsedMember:
     best_events: str | None = None
     workplace: str | None = None
     membership_category: str | None = None
-    membership_status: str | None = None
     is_active: bool = False
+    is_excluded: bool = False
     source_sheet: str | None = None
     source_section: str | None = None
     source_row_start: int | None = None
@@ -156,8 +156,8 @@ def build(record: "RawRecord", spec: "SheetSpec", issues: IssueCollector) -> Par
     addr = _combine(*pair(F.HOME_ADDRESS))
     dormitory = extract_dormitory(addr)
 
-    # Категория/статус по секции.
-    category, status = F.classify_section(record.section, spec.default_category)
+    # Членство по секции листа.
+    membership = F.classify_section(record.section, spec.default_membership)
 
     member = ParsedMember(
         identity_key=identity,
@@ -188,9 +188,9 @@ def build(record: "RawRecord", spec: "SheetSpec", issues: IssueCollector) -> Par
         international_involvement=_combine(*pair(F.INTERNATIONAL_INVOLVEMENT)),
         best_events=_combine(*pair(F.BEST_EVENTS)),
         workplace=_combine(*pair(F.WORKPLACE)),
-        membership_category=category,
-        membership_status=status,
-        is_active=(status == "active"),
+        membership_category=membership.category,
+        is_active=membership.is_active,
+        is_excluded=membership.is_excluded,
         source_sheet=sheet,
         source_section=record.section,
         source_row_start=record.primary_row,

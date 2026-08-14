@@ -10,6 +10,7 @@ from database.models import LbgMember, Person
 _ROLE_PATTERNS: dict[str, re.Pattern[str]] = {
     "president": re.compile(r"president|президент", re.IGNORECASE),
     "treasurer": re.compile(r"treasurer|казначей", re.IGNORECASE),
+    "hr": re.compile(r"vp4hr", re.IGNORECASE),
 }
 
 
@@ -31,7 +32,7 @@ async def find_member_by_username(session: AsyncSession, username: str | None) -
 
 
 async def resolve_board_role(session: AsyncSession, role: str) -> Person | None:
-    """Найти Person текущего носителя board-роли (president/treasurer).
+    """Найти Person текущего носителя board-роли (president/treasurer/hr).
 
     «Текущий» = состоит в board-листе (``membership_category == 'board'``) и его роль
     угадывается по ``status_field``. Возвращает только уже связанного с ботом Person

@@ -67,12 +67,13 @@ class LbgMember(Base):
         index=True,
         comment="board/full_member/baby_member/observer/alumni/ex_*/inactive",
     )
-    membership_status: Mapped[str | None] = mapped_column(
-        String(32),
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False, comment="Может брать таски группы")
+    is_excluded: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
         index=True,
-        comment="Грубый статус: active/alumni/ex/inactive",
+        comment="Исключён из группы (лист Ex-members)",
     )
-    is_active: Mapped[bool] = mapped_column(Boolean, default=False, comment="Активный член")
 
     # --- Источник ---
     source_sheet: Mapped[str | None] = mapped_column(String(255), comment="Имя листа-источника")

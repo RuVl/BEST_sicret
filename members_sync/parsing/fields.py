@@ -1,4 +1,6 @@
-"""Канонические имена колонок и классификация секций → статус членства."""
+"""Канонические имена колонок и классификация секций → членство."""
+
+from dataclasses import dataclass
 
 # Канонические колонки (то, что мы ищем в заголовках листа).
 NAME = "name"
@@ -19,28 +21,49 @@ GENDER = "gender"
 WORKPLACE = "workplace"
 
 
-# Известные секции → (membership_category, membership_status).
-_SECTION_MAP: dict[str, tuple[str, str]] = {
-    "board": ("board", "active"),
-    "full members": ("full_member", "active"),
-    "baby members": ("baby_member", "active"),
-    "observers": ("observer", "active"),
-    "alumni": ("alumni", "alumni"),
-    "former": ("former", "inactive"),
-    "abroad": ("abroad", "active"),
-    "guests": ("guest", "active"),
-    "guest": ("guest", "active"),
-    "inactive": ("inactive", "inactive"),
-    "ex-full members": ("ex_full_member", "ex"),
-    "ex full members": ("ex_full_member", "ex"),
-    "ex-baby members": ("ex_baby_member", "ex"),
-    "ex baby members": ("ex_baby_member", "ex"),
-    "ex-members": ("ex_member", "ex"),
+@dataclass(frozen=True)
+class Membership:
+    """Членство, выведенное из секции листа.
+
+    ``is_active`` - может брать таски группы, ``is_excluded`` - больше в ней не состоит.
+    Alumni и former не активны, но и не исключены: доступ к ресурсам у них остаётся.
+    """
+
+    category: str
+    is_active: bool = False
+    is_excluded: bool = False
+
+
+def _active(category: str) -> Membership:
+    return Membership(category, is_active=True)
+
+
+def _excluded(category: str) -> Membership:
+    return Membership(category, is_excluded=True)
+
+
+# Известные секции → членство.
+_SECTION_MAP: dict[str, Membership] = {
+    "board": _active("board"),
+    "full members": _active("full_member"),
+    "baby members": _active("baby_member"),
+    "observers": _active("observer"),
+    "alumni": Membership("alumni"),
+    "former": Membership("former"),
+    "abroad": _active("abroad"),
+    "guests": _active("guest"),
+    "guest": _active("guest"),
+    "inactive": Membership("inactive"),
+    "ex-full members": _excluded("ex_full_member"),
+    "ex full members": _excluded("ex_full_member"),
+    "ex-baby members": _excluded("ex_baby_member"),
+    "ex baby members": _excluded("ex_baby_member"),
+    "ex-members": _excluded("ex_member"),
 }
 
 
-def classify_section(section: str | None, default: tuple[str, str]) -> tuple[str, str]:
-    """Секция → (category, status). Неизвестную секцию определяем эвристикой."""
+def classify_section(section: str | None, default: Membership) -> Membership:
+    """Секция → членство. Неизвестную секцию определяем эвристикой."""
     if not section:
         return default
 
@@ -50,25 +73,31 @@ def classify_section(section: str | None, default: tuple[str, str]) -> tuple[str
 
     # Эвристика для новых/изменённых секций.
     if key.startswith("ex"):
-        return "ex_member", "ex"
+        return _excluded("ex_member")
     if "alumni" in key:
-        return "alumni", "alumni"
+        return Membership("alumni")
     if "board" in key:
-        return "board", "active"
+        return _active("board")
     if "full" in key:
-        return "full_member", "active"
+        return _active("full_member")
     if "baby" in key:
-        return "baby_member", "active"
+        return _active("baby_member")
     if "observer" in key:
-        return "observer", "active"
+        return _active("observer")
     if "inactive" in key or "former" in key:
-        return key.split()[0], "inactive"
+        return Membership(key.split()[0])
     return default
 
 
-# Приоритет статусов при дедупе одного человека между листами (больше = важнее).
-_STATUS_PRECEDENCE = {"active": 3, "alumni": 2, "ex": 1, "inactive": 0}
+# Приоритет при дедупе одного человека между листами (больше = важнее).
+# Alumni важнее former/inactive: у него больше шансов быть свежей записью.
+_CATEGORY_PRECEDENCE = {"alumni": 2}
 
 
-def status_precedence(status: str | None) -> int:
-    return _STATUS_PRECEDENCE.get(status or "", -1)
+def membership_precedence(membership: Membership) -> int:
+    """Чем весомее запись, тем выше число. Исключение перебивается любой другой секцией."""
+    if membership.is_excluded:
+        return 0
+    if membership.is_active:
+        return 3
+    return _CATEGORY_PRECEDENCE.get(membership.category, 1)

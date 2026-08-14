@@ -13,9 +13,12 @@ async def deactivate_missing(
 ) -> int:
     """Пометить неактивными участников, которых не было в текущем прогоне.
 
-    Данные не удаляются: ставится ``membership_status='inactive'``,
-    ``is_active=False`` и ``removed_from_sheet_at``. Затрагивает только тех, кто
-    ещё считается присутствующим (``removed_from_sheet_at IS NULL``).
+    Данные не удаляются: ставится ``is_active=False`` и ``removed_from_sheet_at``.
+    Затрагивает только тех, кто ещё считается присутствующим
+    (``removed_from_sheet_at IS NULL``).
+
+    ``is_excluded`` не трогаем: пропажа из таблицы и исключение из группы - разные
+    события, второе видно только по листу Ex-members.
     """
     seen = set(seen_identity_keys)
 
@@ -26,7 +29,6 @@ async def deactivate_missing(
             LbgMember.identity_key.notin_(seen) if seen else LbgMember.identity_key.isnot(None),
         )
         .values(
-            membership_status="inactive",
             is_active=False,
             removed_from_sheet_at=now,
             last_synced_at=now,

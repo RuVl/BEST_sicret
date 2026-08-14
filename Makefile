@@ -24,9 +24,11 @@ PRECOMMIT   ?= uvx pre-commit
 # Проекты для ruff (каждый со своим [tool.ruff]); корневые scratch-файлы не трогаем.
 RUFF_PATHS  ?= bot members_sync packages/db
 
-# Параметры БД для локальных команд (можно переопределить: make db-dump PG_USER=…)
-PG_USER ?= user
-PG_DB   ?= database
+# Параметры БД для локальных команд: по умолчанию берём POSTGRES_USER/POSTGRES_DB
+# из postgres/.env (единый источник истины), можно переопределить: make db-dump PG_USER=…
+# Читаем через Python (splitlines корректно срезает CRLF), лениво — только когда переменная нужна.
+PG_USER ?= $(shell $(PY) -c "import pathlib; p=pathlib.Path('postgres/.env'); vals=[l.split('=',1)[1].strip() for l in (p.read_text(encoding='utf-8').splitlines() if p.exists() else []) if l.startswith('POSTGRES_USER=')]; print(vals[0] if vals else 'user')")
+PG_DB   ?= $(shell $(PY) -c "import pathlib; p=pathlib.Path('postgres/.env'); vals=[l.split('=',1)[1].strip() for l in (p.read_text(encoding='utf-8').splitlines() if p.exists() else []) if l.startswith('POSTGRES_DB=')]; print(vals[0] if vals else 'database')")
 DUMP    ?= backups/dump.sql
 rev     ?= -1
 
@@ -55,7 +57,7 @@ check-deps: ## Проверить наличие uv и docker compose
 
 .PHONY: env
 env: ## Создать .env (docker) и dev.env (локальный запуск) из *.dist, где их нет
-	@$(PY) -c "import os, shutil; [(shutil.copyfile(t+'.dist', t), print('created', t)) for t in ('bot/.env','members_sync/.env','postgres/.env','redis/.env','bot/dev.env','members_sync/dev.env') if os.path.isfile(t+'.dist') and not os.path.isfile(t)]"
+	@$(PY) -c "import os, shutil; [(shutil.copyfile(t+'.dist', t), print('created', t)) for t in ('bot/.env','members_sync/.env','postgres/.env','redis/.env','bot/dev.env','members_sync/dev.env','packages/db/dev.env') if os.path.isfile(t+'.dist') and not os.path.isfile(t)]"
 	@echo "Заполните .env (docker/podman) и dev.env (локальный запуск)!"
 
 # --- Установка зависимостей (все venv) -------------------------------------
@@ -116,23 +118,26 @@ ps: ## Статус контейнеров
 	$(COMPOSE) ps
 
 # --- Миграции (единый alembic в packages/db) -------------------------------
-# uv сам читает postgres/.env (--env-file), POSTGRES_HOST там не задан → localhost.
+# Креды берём из postgres/.env, а хост/порт переопределяем локальным dev.env
+# (в postgres/.env хост = имя сервиса compose): последний --env-file приоритетнее.
+DB_ENV ?= --env-file ../../postgres/.env --env-file dev.env
 
 .PHONY: migration
 migration: ## Новая ревизия: make migration m="описание"
-	cd packages/db && $(UV) run --env-file ../../postgres/.env alembic revision --autogenerate -m "$(m)"
+	cd packages/db && $(UV) run $(DB_ENV) alembic revision --autogenerate -m "$(m)"
 
 .PHONY: migrate
 migrate: ## Применить миграции к локальной бд
-	cd packages/db && $(UV) run --env-file ../../postgres/.env alembic upgrade head
+	cd packages/db && $(UV) run $(DB_ENV) alembic upgrade head
 
 .PHONY: downgrade
 downgrade: ## Откатить миграции: make downgrade [rev=-1]
-	cd packages/db && $(UV) run --env-file ../../postgres/.env alembic downgrade $(rev)
+	cd packages/db && $(UV) run $(DB_ENV) alembic downgrade $(rev)
 
 .PHONY: migrate-docker
 migrate-docker: ## Применить миграции бд в докере
-	$(COMPOSE) run --rm db_migrate
+	# --build обязателен: без него compose run берёт старый образ и новые ревизии не попадут внутрь.
+	$(COMPOSE) run --rm --build db_migrate
 
 # --- Логи -------------------------------------------------------------------
 
@@ -199,8 +204,15 @@ format: ## ruff format + автофиксы
 	$(RUFF) format $(RUFF_PATHS)
 
 .PHONY: test
-test: ## Юнит-тесты members_sync
+test: test-sync test-bot ## Юнит-тесты (members_sync + bot)
+
+.PHONY: test-sync
+test-sync: ## Юнит-тесты members_sync
 	cd members_sync && $(UV) run pytest
+
+.PHONY: test-bot
+test-bot: ## Юнит-тесты бота
+	cd bot && $(UV) run pytest
 
 # --- Очистка ----------------------------------------------------------------
 

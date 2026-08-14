@@ -15,6 +15,7 @@ from best_db.models import (
     Place,
     Refund,
     Requisites,
+    VpnSubscription,
 )
 
 __all__ = [
@@ -27,4 +28,5 @@ __all__ = [
     "Place",
     "Refund",
     "Requisites",
+    "VpnSubscription",
 ]

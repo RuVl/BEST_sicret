@@ -7,6 +7,7 @@ from .person import Person
 from .place import Place
 from .refund import Refund
 from .requisites import Requisites
+from .vpn_subscription import VpnSubscription
 
 __all__ = [
     "Base",
@@ -18,4 +19,5 @@ __all__ = [
     "Place",
     "Refund",
     "Requisites",
+    "VpnSubscription",
 ]

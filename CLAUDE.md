@@ -88,7 +88,7 @@ make nuke          # stop stack AND erase data (postgres/redis volumes)
 
 **Layer flow:** `handlers/` (command entrypoints) → start an aiogram-dialog state machine → `dialogs/` (windows + widgets) → `includes/templates/` (domain logic) → `database/` or `.docx` generation.
 
-- **`handlers/`** — `register_handlers` wires `commands.router` and a dialogs router; `debug.router` is added only when `DEBUG`. `commands.py` maps `/start`, `/create_document`, `/refund`, `/create_equipment_apply`, `/inventory`, `/add_equipment` to dialog starts. Each command starts a state machine with `StartMode.RESET_STACK`.
+- **`handlers/`** — `register_handlers` wires `commands.router` and a dialogs router; `debug.router` is added only when `DEBUG`. `commands.py` holds the bot's **only** command, `/start`: it get-or-creates the `Person`, links it to an `LbgMember` by Telegram username, and starts the main-menu dialog (`ViewProfile.VIEW`, `StartMode.RESET_STACK`). Everything else — приказы, заявки, рефанды, имущество, VPN — opens from menu buttons that are shown only to LBG members (`utils.access.current_member`), so there is no command that bypasses the check.
 
 - **`state_machines/`** — `StatesGroup` definitions (one per flow: templates, refund, apply_eq, add_eq, inventory). Imported by both handlers and dialogs.
 
@@ -106,7 +106,7 @@ make nuke          # stop stack AND erase data (postgres/redis volumes)
 
 - **`includes/fluent.py` + `l10n/`** — Fluent localization. `.ftl` files under `l10n/<locale>/` (currently only `ru`) are auto-discovered. Use `l10n.format_value(key, args=...)` for all user text.
 
-- **`env.py`** — config via **`pydantic-settings`**: nested `BaseModel` groups (`TelegramConfig`, `PostgresConfig`, `RedisConfig`, `ProjectConfig`, `LoggerConfig`) aggregated on a `GlobalSettings(BaseSettings)` singleton. Field names map to env vars via `alias=` (e.g. token is `TG_API_TOKEN`). Two privileged Telegram user IDs gate behavior: `PRESIDENT_ID` (receives notifications) and `TREASURER_ID` (allowed to run `/add_equipment`).
+- **`env.py`** — config via **`pydantic-settings`**: nested `BaseModel` groups (`TelegramConfig`, `PostgresConfig`, `RedisConfig`, `ProjectConfig`, `LoggerConfig`) aggregated on a `GlobalSettings(BaseSettings)` singleton. Field names map to env vars via `alias=` (e.g. token is `TG_API_TOKEN`). Two privileged Telegram user IDs are notification fallbacks when the board role can't be resolved from the members table (`utils/board.py`): `PRESIDENT_ID` and `TREASURER_ID`.
 
 ### `members_sync/`
 
@@ -118,6 +118,8 @@ A **pipeline**: `sheets/` (Google Sheets I/O, fuzzy column mapping, record readi
 
 ## Code Style & Conventions
 
+> **Read [CLEAN_CODE.md](CLEAN_CODE.md) before writing bot code.** It holds this repo's binding rules — layering, aiogram-dialog do's and don'ts (self-sufficient getters, no per-dialog access middleware, where middleware data is and isn't injected), repository/session rules, Fluent + MarkdownV2 pitfalls, and the pre-PR checklist.
+
 The codebase is small, async-first, and intentionally pattern-driven. Match the surrounding style; reuse existing utilities and helpers before writing new code.
 
 **Design patterns already in use** (name and follow them):
@@ -125,7 +127,7 @@ The codebase is small, async-first, and intentionally pattern-driven. Match the 
 - **Composite + Factory** — the templates engine (`bot/includes/templates/`). `create_context()` builds a polymorphic `BaseContext` tree (`PrimitiveContext` leaves, `ObjectContext`/`ArrayContext` composites); `get_formatter`/`get_validator` are `@lru_cache` factories.
 - **Strategy** — `formatters.py` / `validators.py` define abstract `Formatter`/`Validator` bases, resolved at runtime by JSON Schema `type`/`format`.
 - **Repository** — `bot/database/methods/<entity>/` and `members_sync/database/methods/`: small single-purpose `async` functions that take an `AsyncSession` and contain the queries. **The caller owns the commit** (`async with async_session() as session: … await session.commit()`), keep it that way.
-- **Dependency injection via middlewares** — `l10n` and `log` are injected into `middleware_data` and pulled out by handlers/dialog getters; don't construct them ad hoc.
+- **Dependency injection via middlewares** — `l10n` and `log` are injected into `middleware_data` and pulled out by handlers/dialog getters; don't construct them ad hoc. Middlewares are cross-cutting and registered once in `bot/middlewares/main.py` — never add one just to gate a single dialog (see CLEAN_CODE.md §2.2).
 - **Pipeline + pure functions** — `members_sync` normalizers are pure and **never raise**: they return `(value, error)` tuples and an `IssueCollector` aggregates problems while the row still gets ingested (raw values are always preserved). Keep this resilience: don't lose raw input.
 
 **Clean code:**
