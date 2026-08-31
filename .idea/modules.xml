@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/.idea/BEST_sicret.iml" filepath="$PROJECT_DIR$/.idea/BEST_sicret.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/BEST_sicret_bot.iml" filepath="$PROJECT_DIR$/.idea/BEST_sicret_bot.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/best-db.iml" filepath="$PROJECT_DIR$/.idea/best-db.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/members-sync.iml" filepath="$PROJECT_DIR$/.idea/members-sync.iml" />
+    </modules>
+  </component>
+</project>

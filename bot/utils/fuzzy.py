@@ -1,5 +1,5 @@
+from collections.abc import Callable
 from functools import partial
-from typing import Callable
 
 from fuzzywuzzy import process
 
@@ -24,7 +24,5 @@ def fuzzy_search_bests[T](
     extractor: Callable[[T], str] = str,
 ) -> list[T]:
     choices = map(partial(FuzzyItem, extractor=extractor), data)
-    search_results = process.extractBests(
-        query, choices, score_cutoff=threshold, limit=limit
-    )
+    search_results = process.extractBests(query, choices, score_cutoff=threshold, limit=limit)
     return [fuzzy_item.obj for fuzzy_item, score in search_results]

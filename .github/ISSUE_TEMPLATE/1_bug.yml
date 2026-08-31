@@ -1,0 +1,73 @@
+name: 🐛 Баг-репорт
+description: Сообщить об ошибке или некорректном поведении
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Спасибо за репорт! Пожалуйста, заполните поля ниже — это ускорит разбор.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Описание проблемы
+      description: Что пошло не так?
+      placeholder: Кратко опишите суть бага.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Шаги воспроизведения
+      description: Как повторить ошибку?
+      placeholder: |
+        1. Открыть...
+        2. Нажать...
+        3. Ввести...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-actual
+    attributes:
+      label: Ожидаемое и фактическое поведение
+      description: Что должно было произойти и что произошло на самом деле.
+      placeholder: |
+        Ожидаемое: ...
+        Фактическое: ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: service
+    attributes:
+      label: Сервис
+      description: В каком сервисе монорепо проявляется баг?
+      options:
+        - bot
+        - members_sync
+        - packages/db
+        - инфраструктура (Docker / CI / Makefile)
+        - другое / не уверен
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Окружение и логи
+      description: Версия / окружение (dev/docker), трейсбек, скриншоты, логи.
+      placeholder: |
+        Окружение: dev.env / docker
+        Логи / traceback:
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Проверки
+      options:
+        - label: Я поискал и не нашёл похожего открытого issue.
+          required: true

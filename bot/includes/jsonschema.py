@@ -5,7 +5,7 @@ from docxtpl import DocxTemplate
 from jsonschema import validate
 from jsonschema.exceptions import ValidationError
 
-from env import ProjectKeys
+from env import settings
 
 
 def get_available_templates() -> list[str]:
@@ -13,8 +13,8 @@ def get_available_templates() -> list[str]:
 
     template_names = [
         f.stem
-        for f in ProjectKeys.TEMPLATES_DIR.glob("*.docx")
-        if (ProjectKeys.TEMPLATES_DIR / f"{f.stem}.json").exists()
+        for f in settings.project.TEMPLATES_DIR.glob("*.docx")
+        if (settings.project.TEMPLATES_DIR / f"{f.stem}.json").exists()
     ]
 
     return template_names
@@ -23,11 +23,11 @@ def get_available_templates() -> list[str]:
 def load_template_schema(template_name: str) -> dict:
     """Load schema from JSON file"""
 
-    template_path = ProjectKeys.TEMPLATES_DIR / f"{template_name}.json"
+    template_path = settings.project.TEMPLATES_DIR / f"{template_name}.json"
     if not template_path.exists():
         raise FileNotFoundError(f"Schema file {template_path} not found")
 
-    with open(template_path, "r", encoding="utf-8") as template:
+    with open(template_path, encoding="utf-8") as template:
         return json.load(template)
 
 
@@ -36,13 +36,13 @@ def load_schema(resource_path: Path | str) -> dict:
 
     schema_path = Path(resource_path)
 
-    if not schema_path.is_relative_to(ProjectKeys.RESOURCE_DIR):
-        schema_path = ProjectKeys.RESOURCE_DIR / schema_path
+    if not schema_path.is_relative_to(settings.project.RESOURCE_DIR):
+        schema_path = settings.project.RESOURCE_DIR / schema_path
 
     if not schema_path.exists():
         raise FileNotFoundError(f"Schema file {schema_path} not found")
 
-    with open(schema_path, "r", encoding="utf-8") as schema:
+    with open(schema_path, encoding="utf-8") as schema:
         return json.load(schema)
 
 
@@ -59,7 +59,7 @@ def validate_data(schema: dict, data: dict) -> tuple[bool, str | None]:
 def generate_document(template_name: str, data: dict) -> DocxTemplate:
     """Render the document from template with data"""
 
-    template_path = ProjectKeys.TEMPLATES_DIR / f"{template_name}.docx"
+    template_path = settings.project.TEMPLATES_DIR / f"{template_name}.docx"
     if not template_path.exists():
         raise FileNotFoundError(f"Template file {template_path} not found")
 

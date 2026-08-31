@@ -13,7 +13,9 @@ from database.main import async_session
 from database.methods.category import get_categories
 from database.methods.item import get_item_with_place, get_items_by_category_id
 from state_machines.inventory import ViewInventory
-from utils import escape_mdv2, fuzzy_search_bests, L10nFormat, truncate
+from utils import L10nFormat, escape_mdv2, fuzzy_search_bests, truncate
+
+BTN_TRUNCATE_LEN = 25
 
 
 # ========== Геттер: список категорий ==========
@@ -30,11 +32,7 @@ async def get_categories_data(
         categories_map = {c.id: c.name for c in categories}
         dialog_manager.dialog_data["categories_map"] = categories_map
 
-    is_selection_mode = (
-        dialog_manager.start_data.get("selection_mode", False)
-        if dialog_manager.start_data
-        else False
-    )
+    is_selection_mode = dialog_manager.start_data.get("selection_mode", False) if dialog_manager.start_data else False
 
     return {
         "categories": categories_map.items(),
@@ -77,8 +75,7 @@ async def get_items_data(
         args={"category_name": category_name},
     )
     items_list = [
-        (item.id, f"{truncate(item.name)} | {item.count} {item.unit}")
-        for item in matched_items
+        (item.id, f"{truncate(item.name, BTN_TRUNCATE_LEN)} | {item.count} {item.unit}") for item in matched_items
     ]
 
     return {
@@ -118,11 +115,7 @@ async def get_item_detail(
         },
     )
 
-    is_selection_mode = (
-        dialog_manager.start_data.get("selection_mode", False)
-        if dialog_manager.start_data
-        else False
-    )
+    is_selection_mode = dialog_manager.start_data.get("selection_mode", False) if dialog_manager.start_data else False
 
     return {
         "item_text": item_text,

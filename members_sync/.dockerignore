@@ -1,0 +1,26 @@
+# venv и кэши
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# git / IDE
+.git/
+.gitignore
+.idea/
+.vscode/
+
+# секреты и локальные данные (монтируются volume / env_file в рантайме)
+.env
+service_account.json
+logs/
+output/
+*.log
+
+# тесты и служебное — не нужны в образе
+tests/
+.dockerignore
+Dockerfile

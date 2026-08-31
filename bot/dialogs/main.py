@@ -2,7 +2,7 @@ from aiogram import Dispatcher, Router
 from aiogram.enums import ParseMode
 from aiogram.filters import ExceptionTypeFilter
 from aiogram.types import ErrorEvent
-from aiogram_dialog import setup_dialogs, DialogManager
+from aiogram_dialog import DialogManager, setup_dialogs
 from aiogram_dialog.api.exceptions import UnknownIntent, UnknownState
 from structlog import getLogger
 from structlog.typing import FilteringBoundLogger

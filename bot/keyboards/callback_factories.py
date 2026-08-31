@@ -4,24 +4,24 @@ from aiogram import F
 from aiogram.filters.callback_data import CallbackData
 
 
-class PaginatorFactory(CallbackData, prefix='paginator'):
+class PaginatorFactory(CallbackData, prefix="paginator"):
     menu: str
-    action: Literal['change_page', None]
+    action: Literal["change_page", None]
     page: int
 
     @classmethod
     def page_changed(cls):
-        return cls.filter(F.action == 'change_page')
+        return cls.filter(F.action == "change_page")
 
 
-class TemplateFactory(CallbackData, prefix='template'):
+class TemplateFactory(CallbackData, prefix="template"):
     name: str
 
 
-class AskDataFactory(CallbackData, prefix='ask_data'):
-    parent_type: Literal['object', 'array']
+class AskDataFactory(CallbackData, prefix="ask_data"):
+    parent_type: Literal["object", "array"]
     key: str | int
 
 
-class ActionDataFactory(CallbackData, prefix='action'):
+class ActionDataFactory(CallbackData, prefix="action"):
     action: str

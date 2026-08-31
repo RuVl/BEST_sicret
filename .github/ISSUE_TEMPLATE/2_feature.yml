@@ -1,0 +1,74 @@
+name: ✨ Feature / задача
+description: Предложить новую функциональность или техническую задачу
+title: "[Feature]: "
+labels: [feature]
+body:
+  - type: textarea
+    id: value
+    attributes:
+      label: Ценность / проблема
+      description: Какую проблему решаем и зачем это нужно?
+      placeholder: Сейчас..., из-за этого...; хотим...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Описание решения
+      description: Что предлагается сделать?
+      placeholder: Кратко опишите предлагаемое решение.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: service
+    attributes:
+      label: Сервис
+      description: Какого сервиса монорепо касается задача?
+      options:
+        - bot
+        - members_sync
+        - packages/db
+        - инфраструктура (Docker / CI / Makefile)
+        - несколько / не уверен
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Детали реализации
+      description: Технические подробности, ограничения, ссылки.
+      placeholder: |
+        - ...
+        - ...
+
+  - type: textarea
+    id: subtasks
+    attributes:
+      label: Подзадачи
+      description: Разбейте работу на пункты. Любой пункт можно конвертировать в отдельный sub-issue.
+      value: |
+        - [ ]
+        - [ ]
+        - [ ]
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Критерии приёмки (DoD)
+      description: Когда задачу можно считать выполненной?
+      value: |
+        - [ ]
+        - [ ]
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Проверки
+      options:
+        - label: Я поискал и не нашёл похожего открытого issue.
+          required: true

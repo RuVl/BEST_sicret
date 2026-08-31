@@ -8,9 +8,7 @@ from middlewares import L10N_FORMAT_KEY
 
 
 class L10nFormat(Text):
-    def __init__(
-        self, key: str, args: dict[str, Any] | None = None, when: WhenCondition = None
-    ):
+    def __init__(self, key: str, args: dict[str, Any] | None = None, when: WhenCondition = None):
         super().__init__(when)
         self.key = key
         self.args = args or {}
