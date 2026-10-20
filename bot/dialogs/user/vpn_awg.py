@@ -6,7 +6,8 @@
 
 Конфиг - это приватный ключ, поэтому он не уходит отдельными сообщениями: он показывается
 окном диалога (файл или QR-код с кнопками) и исчезает из чата, когда человек уходит из окна,
-жмёт «Готово» или истекает ``AWG_CONFIG_TTL_SECONDS``.
+жмёт «Готово» или истекает ``AWG_CONFIG_TTL_SECONDS``. Байты файла и QR лежат только в памяти
+бота (``includes.memory_media``) и удаляются оттуда вместе с окном.
 
 Как и окно VLESS, окна самодостаточны: членство и разрешение перепроверяются на каждой
 отрисовке и каждом клике - клавиатура у пользователя могла устареть.
@@ -21,9 +22,9 @@ from zoneinfo import ZoneInfo
 import structlog
 from aiogram import Bot, F
 from aiogram.exceptions import TelegramAPIError
-from aiogram.types import BufferedInputFile, CallbackQuery, ContentType, Message
+from aiogram.types import CallbackQuery, ContentType, Message
 from aiogram_dialog import BaseDialogManager, DialogManager, ShowMode, Window
-from aiogram_dialog.api.entities import MediaAttachment, MediaId
+from aiogram_dialog.api.entities import MediaAttachment
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
 from aiogram_dialog.widgets.kbd import Button, Column, Select, SwitchTo
 from aiogram_dialog.widgets.media import DynamicMedia
@@ -56,6 +57,7 @@ from includes.awg import (
     render_config_qr,
     restore_access,
 )
+from includes.memory_media import memory_media
 from middlewares import L10N_FORMAT_KEY, LOGGING_KEY
 from state_machines.vpn import ViewVpnSubscription
 from utils import L10nFormat, current_member, escape_mdv2, format_traffic
@@ -69,7 +71,7 @@ _DISPLAY_TZ = ZoneInfo("Europe/Moscow")
 _DEVICE = "awg_device"  # номер открытого устройства
 _NAME_TARGET = "awg_name_target"  # None - новое устройство, число - переименование
 _NAME_ERROR = "awg_name_error"  # готовый текст ошибки под вопросом о названии
-_CONFIG = "awg_config"  # file_id файла и QR открытого конфига
+_CONFIG = "awg_config"  # memory://-ссылки на файл и QR открытого конфига
 _SHOW_QR = "awg_show_qr"
 _HIDDEN = "awg_hidden"  # токен конфига, который убрал таймер
 
@@ -148,33 +150,16 @@ async def _delete_quietly(bot: Bot, chat_id: int, message_id: int) -> None:
         await logger.awarning("awg-message-delete-failed", chat_id=chat_id, error=str(exc))
 
 
-# ========== Конфиг: загрузка в Telegram и автоскрытие ==========
-async def _upload(bot: Bot, chat_id: int, config: str, filename: str) -> tuple[str, str | None]:
-    """Получить ``file_id`` файла и QR, чтобы показать их окном диалога.
-
-    aiogram-dialog умеет показывать медиа только по ``file_id``/пути/URL, а конфиг не должен
-    ложиться на диск. Поэтому отправляем файл беззвучно и сразу удаляем это сообщение -
-    ``file_id`` остаётся рабочим.
-    """
-    sent = await bot.send_document(
-        chat_id, BufferedInputFile(config.encode(), filename=filename), disable_notification=True
-    )
-    await _delete_quietly(bot, chat_id, sent.message_id)
-    document_id = sent.document.file_id
-
-    try:
-        qr = render_config_qr(config)
-    except ValueError as exc:
-        # Конфиг с длинными I1-I5 может не влезть в QR - файла достаточно.
-        await logger.awarning("awg-qr-failed", chat_id=chat_id, error=str(exc))
-        return document_id, None
-
-    sent = await bot.send_photo(chat_id, BufferedInputFile(qr, filename="amneziawg-qr.png"), disable_notification=True)
-    await _delete_quietly(bot, chat_id, sent.message_id)
-    return document_id, sent.photo[-1].file_id
+# ========== Конфиг: показ из памяти и автоскрытие ==========
+def _forget_config(dialog_manager: DialogManager) -> None:
+    """Убрать конфиг из окна и из памяти бота."""
+    config = dialog_manager.dialog_data.pop(_CONFIG, None)
+    dialog_manager.dialog_data.pop(_SHOW_QR, None)
+    if config is not None:
+        memory_media.drop(config["file"], config["qr"])
 
 
-async def _hide_later(bg: BaseDialogManager, token: str) -> None:
+async def _hide_later(bg: BaseDialogManager, token: str, urls: tuple[str | None, ...]) -> None:
     await asyncio.sleep(settings.awg.CONFIG_TTL_SECONDS)
     try:
         # Окно конфига по этому токену поймёт, что пора убрать файл; другие окна ключ проигнорируют.
@@ -182,23 +167,30 @@ async def _hide_later(bg: BaseDialogManager, token: str) -> None:
     except Exception as exc:
         # Фоновая задача: исключение некому поймать, поэтому только пишем в лог.
         await logger.awarning("awg-config-hide-failed", error=str(exc))
+    finally:
+        # Что бы ни случилось с окном, ключ в памяти бота дольше срока не живёт.
+        memory_media.drop(*urls)
 
 
 async def _open_config(dialog_manager: DialogManager, device: AwgDevice, name: str, config: str) -> None:
-    """Показать конфиг окном и завести таймер, который уберёт его из чата."""
-    event = dialog_manager.event
-    file_id, qr_id = await _upload(
-        event.bot, event.from_user.id, config, f"{settings.awg.TUNNEL_NAME}-{device.number}.conf"
-    )
+    """Показать конфиг окном (файл и QR - из памяти, без лишних сообщений) и завести таймер скрытия."""
+    file_url = memory_media.put(config.encode(), f"{settings.awg.TUNNEL_NAME}-{device.number}.conf")
+    try:
+        qr_url = memory_media.put(render_config_qr(config), "amneziawg-qr.png")
+    except ValueError as exc:
+        # Конфиг с длинными I1-I5 может не влезть в QR - файла достаточно.
+        await logger.awarning("awg-qr-failed", number=device.number, error=str(exc))
+        qr_url = None
 
+    _forget_config(dialog_manager)  # прежний конфиг, если окно открывали повторно
     token = uuid4().hex
-    dialog_manager.dialog_data[_CONFIG] = {"token": token, "file": file_id, "qr": qr_id, "name": name}
+    dialog_manager.dialog_data[_CONFIG] = {"token": token, "file": file_url, "qr": qr_url, "name": name}
     dialog_manager.dialog_data[_SHOW_QR] = False
 
     # Привязка к стеку, а не к окну: если человек к тому времени закрыл диалог, обновление
     # не упадёт с UnknownIntent (а его хэндлер сбросил бы человеку меню).
     bg = dialog_manager.bg(stack_id=dialog_manager.current_stack().id)
-    task = asyncio.create_task(_hide_later(bg, token))
+    task = asyncio.create_task(_hide_later(bg, token, (file_url, qr_url)))
     _hide_tasks.add(task)
     task.add_done_callback(_hide_tasks.discard)
 
@@ -332,9 +324,12 @@ async def get_name_data(dialog_manager: DialogManager, l10n: FluentLocalization,
 
 async def get_config_data(dialog_manager: DialogManager, l10n: FluentLocalization, **kwargs) -> dict[str, Any]:
     config = dialog_manager.dialog_data.get(_CONFIG)
-    if config is not None and dialog_manager.dialog_data.get(_HIDDEN) == config["token"]:
-        # Сработал таймер: забываем file_id, окно без медиа - aiogram-dialog удалит сообщение с файлом.
-        dialog_manager.dialog_data.pop(_CONFIG, None)
+    # Сработал таймер (или бот перезапускался и файла в памяти уже нет): окно без медиа -
+    # aiogram-dialog удалит сообщение с файлом и пришлёт текст.
+    if config is not None and (
+        dialog_manager.dialog_data.get(_HIDDEN) == config["token"] or not memory_media.has(config["file"])
+    ):
+        _forget_config(dialog_manager)
         config = None
 
     if config is None:
@@ -348,7 +343,7 @@ async def get_config_data(dialog_manager: DialogManager, l10n: FluentLocalizatio
     show_qr = bool(dialog_manager.dialog_data.get(_SHOW_QR)) and config["qr"] is not None
     media = MediaAttachment(
         ContentType.PHOTO if show_qr else ContentType.DOCUMENT,
-        file_id=MediaId(config["qr"] if show_qr else config["file"]),
+        url=config["qr"] if show_qr else config["file"],
     )
     args = {"name": escape_mdv2(config["name"]), "minutes": max(1, settings.awg.CONFIG_TTL_SECONDS // 60)}
     return {
@@ -535,8 +530,7 @@ async def on_toggle_qr(clb: CallbackQuery, widget: Button, dialog_manager: Dialo
 
 async def on_config_done(clb: CallbackQuery, widget: Button, dialog_manager: DialogManager) -> None:
     # Без медиа окно не отредактировать - aiogram-dialog удалит сообщение с файлом и пришлёт карточку.
-    dialog_manager.dialog_data.pop(_CONFIG, None)
-    dialog_manager.dialog_data.pop(_SHOW_QR, None)
+    _forget_config(dialog_manager)
     await dialog_manager.switch_to(ViewVpnSubscription.AWG_DEVICE)
 
 
