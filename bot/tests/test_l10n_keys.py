@@ -26,6 +26,11 @@ ARGS = {
     "revoked": 1,
     "failed": 0,
     "details": r"ivan@best\-eu\.org",
+    "number": 2,
+    "used": 1,
+    "limit": 3,
+    "status": "в сети",
+    "devices": r"Устройство 1: в сети",
 }
 
 PROFILE_KEYS = [
@@ -52,6 +57,36 @@ VPN_KEYS = [
     "vpn-access-denied",
     "vpn-revoked-notice",
     "vpn-revoke-report",
+    "vpn-awg-hint",
+    "vpn-awg-devices",
+    "vpn-awg-suspended-hint",
+    "vpn-awg-panel-error-hint",
+    "vpn-awg-delete-confirm",
+    "vpn-awg-config-caption",
+    "vpn-awg-qr-caption",
+    "vpn-awg-granted-notice",
+    "vpn-awg-suspended-notice",
+    "vpn-awg-suspend-report",
+    "vpn-awg-device-line",
+    "vpn-awg-devices-empty",
+    "vpn-awg-status-online",
+    "vpn-awg-status-inactive",
+    "vpn-awg-status-never",
+    "vpn-awg-status-disabled",
+    "vpn-awg-status-missing",
+    "vpn-awg-status-unknown",
+    "vpn-awg-btn",
+    "vpn-awg-add-btn",
+    "vpn-awg-config-btn",
+    "vpn-awg-delete-btn",
+    "vpn-awg-delete-yes-btn",
+    "vpn-awg-restore-btn",
+    "vpn-awg-sent",
+    "vpn-awg-deleted",
+    "vpn-awg-restored",
+    "vpn-awg-limit",
+    "vpn-awg-denied",
+    "vpn-awg-error",
 ]
 
 
@@ -65,6 +100,16 @@ MESSAGE_KEYS = [
     "vpn-orphaned",
     "vpn-revoked-notice",
     "vpn-revoke-report",
+    "vpn-awg-hint",
+    "vpn-awg-devices",
+    "vpn-awg-suspended-hint",
+    "vpn-awg-panel-error-hint",
+    "vpn-awg-delete-confirm",
+    "vpn-awg-config-caption",
+    "vpn-awg-qr-caption",
+    "vpn-awg-granted-notice",
+    "vpn-awg-suspended-notice",
+    "vpn-awg-suspend-report",
 ]
 
 # Подписи кнопок и текст алертов Telegram показывает как есть, разметки там нет.
@@ -81,6 +126,26 @@ PLAIN_KEYS = [
     "vpn-issued",
     "vpn-error",
     "vpn-access-denied",
+    "vpn-awg-device-line",
+    "vpn-awg-devices-empty",
+    "vpn-awg-status-online",
+    "vpn-awg-status-inactive",
+    "vpn-awg-status-never",
+    "vpn-awg-status-disabled",
+    "vpn-awg-status-missing",
+    "vpn-awg-status-unknown",
+    "vpn-awg-btn",
+    "vpn-awg-add-btn",
+    "vpn-awg-config-btn",
+    "vpn-awg-delete-btn",
+    "vpn-awg-delete-yes-btn",
+    "vpn-awg-restore-btn",
+    "vpn-awg-sent",
+    "vpn-awg-deleted",
+    "vpn-awg-restored",
+    "vpn-awg-limit",
+    "vpn-awg-denied",
+    "vpn-awg-error",
 ]
 
 # Внутри кода и URL ссылки MarkdownV2 точку экранировать не требует - вырезаем такие куски.
@@ -98,7 +163,20 @@ def test_key_resolves(l10n, key):
     assert l10n.format_value(key, args=ARGS) != key
 
 
-@pytest.mark.parametrize("key", ["profile-card", "vpn-active", "vpn-orphaned", "vpn-revoke-report"])
+@pytest.mark.parametrize(
+    "key",
+    [
+        "profile-card",
+        "vpn-active",
+        "vpn-orphaned",
+        "vpn-revoke-report",
+        "vpn-awg-devices",
+        "vpn-awg-delete-confirm",
+        "vpn-awg-config-caption",
+        "vpn-awg-granted-notice",
+        "vpn-awg-suspend-report",
+    ],
+)
 def test_multiline_message_is_not_truncated(l10n, key):
     """Обрыв шаблона проявляется как потеря хвоста, а не как ошибка."""
     assert "\n\n" in l10n.format_value(key, args=ARGS)

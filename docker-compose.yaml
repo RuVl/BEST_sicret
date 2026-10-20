@@ -12,6 +12,9 @@ services:
       - postgres/.env
     networks:
       - backend
+    # Веб-панель AmneziaWG крутится на хосте: host-gateway - адрес бриджа docker0.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - media_volume:/app/resources
     depends_on:

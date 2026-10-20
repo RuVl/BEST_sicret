@@ -13,29 +13,41 @@ from structlog.typing import FilteringBoundLogger
 from env import settings
 from handlers import register_handlers
 from includes import PickleRedisStorage, get_fluent_localization, get_redis_storage, setup_logging
+from includes.awg import close_awg_client
 from includes.vpn import close_xui_client
-from jobs import revoke_inactive_subscriptions
+from jobs import revoke_inactive_subscriptions, suspend_inactive_awg_access
 from middlewares import register_middlewares
 
 
 def _create_scheduler(bot: Bot) -> AsyncIOScheduler | None:
-    """Планировщик фоновых задач. ``None``, если секция XUI не настроена."""
-    if not settings.xui.ENABLED:
+    """Планировщик фоновых задач. ``None``, если не настроены ни XUI, ни AmneziaWG."""
+    if not settings.xui.ENABLED and not settings.awg.ENABLED:
         return None
 
     l10n = get_fluent_localization()
-    scheduler = AsyncIOScheduler(timezone=settings.xui.REVOKE_CRON_TIMEZONE)
-    scheduler.add_job(
-        revoke_inactive_subscriptions,
-        CronTrigger(
-            hour=settings.xui.REVOKE_CRON_HOUR,
-            minute=settings.xui.REVOKE_CRON_MINUTE,
-            timezone=settings.xui.REVOKE_CRON_TIMEZONE,
-        ),
-        args=(bot, l10n),
-        id="revoke_inactive_vpn",
-        replace_existing=True,
+    # Оба отзыва - в одно время: сразу после синка членства.
+    trigger = CronTrigger(
+        hour=settings.xui.REVOKE_CRON_HOUR,
+        minute=settings.xui.REVOKE_CRON_MINUTE,
+        timezone=settings.xui.REVOKE_CRON_TIMEZONE,
     )
+    scheduler = AsyncIOScheduler(timezone=settings.xui.REVOKE_CRON_TIMEZONE)
+    if settings.xui.ENABLED:
+        scheduler.add_job(
+            revoke_inactive_subscriptions,
+            trigger,
+            args=(bot, l10n),
+            id="revoke_inactive_vpn",
+            replace_existing=True,
+        )
+    if settings.awg.ENABLED:
+        scheduler.add_job(
+            suspend_inactive_awg_access,
+            trigger,
+            args=(bot, l10n),
+            id="suspend_inactive_awg",
+            replace_existing=True,
+        )
     return scheduler
 
 
@@ -74,9 +86,9 @@ async def main():
     scheduler = _create_scheduler(bot)
     if scheduler is not None:
         scheduler.start()
-        await logger.ainfo("VPN revoke job scheduled.")
+        await logger.ainfo("VPN revoke jobs scheduled.", xui=settings.xui.ENABLED, awg=settings.awg.ENABLED)
     else:
-        await logger.awarning("XUI settings are incomplete, VPN revoke job is disabled.")
+        await logger.awarning("XUI and AWG settings are incomplete, VPN revoke jobs are disabled.")
 
     # Start bot
     await logger.ainfo(f"Starting the bot (id={bot.id})...")
@@ -91,6 +103,7 @@ async def main():
         if scheduler is not None:
             scheduler.shutdown(wait=False)
         await close_xui_client()
+        await close_awg_client()
         await bot.session.close()
         await logger.ainfo("Bot stopped.")
 
