@@ -6,6 +6,7 @@ members_sync). Этот модуль сохраняет привычный пу�
 """
 
 from best_db.models import (
+    AwgAccess,
     Base,
     Category,
     Item,
@@ -19,6 +20,7 @@ from best_db.models import (
 )
 
 __all__ = [
+    "AwgAccess",
     "Base",
     "Category",
     "Item",

@@ -121,6 +121,20 @@ class XuiConfig(_Section):
         return bool(self.BASE_URL and self.API_TOKEN and self.SUB_BASE_URL and self.INBOUND_IDS)
 
 
+class AwgConfig(_Section):
+    """Веб-панель AmneziaWG (amneziawg-web): доступ по API-токену, выдача ключей по разрешению админа."""
+
+    # С хоста панель слушает 127.0.0.1, из контейнера до неё идём через адрес бриджа docker.
+    BASE_URL: str = Field("", alias="AWG_WEB_BASE_URL")
+    API_TOKEN: str = Field("", alias="AWG_WEB_API_TOKEN")
+    # Имя файла конфига: приложения AmneziaWG берут его как имя туннеля (до 15 символов).
+    TUNNEL_NAME: str = Field("BEST-AWG", alias="AWG_TUNNEL_NAME")
+
+    @property
+    def ENABLED(self) -> bool:
+        return bool(self.BASE_URL and self.API_TOKEN)
+
+
 class LoggerConfig(_Section):
     SHOW_DEBUG_LOGS: bool = Field(False, alias="SHOW_DEBUG_LOGS")
     SHOW_DATETIME: bool = Field(False, alias="SHOW_DATETIME")
@@ -141,6 +155,7 @@ class GlobalSettings(_Section):
     redis: RedisConfig = Field(default_factory=RedisConfig)
     project: ProjectConfig = Field(default_factory=ProjectConfig)
     xui: XuiConfig = Field(default_factory=XuiConfig)
+    awg: AwgConfig = Field(default_factory=AwgConfig)
     logger: LoggerConfig = Field(default_factory=LoggerConfig)
 
 

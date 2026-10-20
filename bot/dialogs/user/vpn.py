@@ -2,6 +2,9 @@
 
 Источник правды по состоянию ключа - панель 3x-ui; в БД бота лежат только идентификаторы.
 
+Тем, кому админ выдал AmneziaWG (``make awg-grant``), окно дополнительно показывает кнопку
+конфига: бот присылает ``.conf`` файлом и QR-кодом. Ключ AWG живёт в веб-панели AmneziaWG.
+
 Окно самодостаточно: пользователь берётся из ``dialog_manager.event.from_user``, все данные
 грузит геттер. Диалог не полагается ни на middleware, ни на ``start_data`` - его можно открыть
 из любого места, а доступ перепроверяется на каждой отрисовке (клавиатура у пользователя
@@ -11,16 +14,20 @@
 from typing import Any
 
 from aiogram import F
-from aiogram.types import CallbackQuery
-from aiogram_dialog import Dialog, DialogManager, Window
+from aiogram.types import BufferedInputFile, CallbackQuery
+from aiogram_dialog import Dialog, DialogManager, ShowMode, Window
 from aiogram_dialog.widgets.kbd import Button, Cancel, Url
 from aiogram_dialog.widgets.text import Format
 from fluent.runtime import FluentLocalization
 from structlog.typing import FilteringBoundLogger
 
 from database.main import async_session
+from database.methods.awg_access import get_access_by_person
 from database.methods.person import get_person_with_member
 from database.methods.vpn_subscription import get_subscription_by_person
+from database.models import AwgAccess, VpnSubscription
+from env import settings
+from includes.awg import AwgError, get_awg_client, issue_config, render_config_qr
 from includes.vpn import XuiError, ensure_subscription, get_xui_client
 from middlewares import L10N_FORMAT_KEY, LOGGING_KEY
 from state_machines.vpn import ViewVpnSubscription
@@ -35,6 +42,11 @@ def _format_traffic(used_bytes: int) -> str:
     return f"{used_bytes / _GB:.2f} ГБ"
 
 
+def _awg_allowed(access: AwgAccess | None) -> bool:
+    """Кнопка AmneziaWG: разрешение есть и не отозвано админом (``suspended`` оживёт на выдаче)."""
+    return settings.awg.ENABLED and access is not None and access.status != "revoked"
+
+
 # ========== Геттер: статус подписки ==========
 async def get_vpn_data(
     dialog_manager: DialogManager,
@@ -47,15 +59,32 @@ async def get_vpn_data(
     async with async_session() as session:
         person = await get_person_with_member(session, user.id)
         subscription = await get_subscription_by_person(session, person.id) if person else None
+        access = await get_access_by_person(session, person.id) if person else None
 
     if current_member(person) is None:
         return {
             "is_allowed": False,
             "has_subscription": False,
+            "awg_allowed": False,
             # Ключ живёт и в алерте (там разметки нет), поэтому в ftl он без экранирования.
             "text": escape_mdv2(l10n.format_value("vpn-access-denied")),
         }
 
+    data = await _get_subscription_data(subscription, person.id, l10n, log)
+
+    data["awg_allowed"] = _awg_allowed(access)
+    if data["awg_allowed"]:
+        data["text"] += "\n\n" + l10n.format_value("vpn-awg-hint")
+    return data
+
+
+async def _get_subscription_data(
+    subscription: VpnSubscription | None,
+    person_id: int,
+    l10n: FluentLocalization,
+    log: FilteringBoundLogger,
+) -> dict[str, Any]:
+    """Состояние VLESS-подписки мембера: текст окна и признаки для кнопок."""
     if subscription is None:
         return {
             "is_allowed": True,
@@ -67,13 +96,13 @@ async def get_vpn_data(
     try:
         traffic = await client.get_traffic(subscription.xui_email)
     except XuiError as exc:
-        await log.aerror("vpn-status-failed", person_id=person.id, error=str(exc))
+        await log.aerror("vpn-status-failed", person_id=person_id, error=str(exc))
         return {"is_allowed": True, "has_subscription": True, "text": escape_mdv2(l10n.format_value("vpn-error"))}
 
     if traffic is None:
         # Панель на удалённого клиента отвечает success=true с пустым obj.
         # Запись в БД осиротела: показываем это честно и предлагаем выпустить ключ заново.
-        await log.awarning("vpn-client-missing", person_id=person.id, email=subscription.xui_email)
+        await log.awarning("vpn-client-missing", person_id=person_id, email=subscription.xui_email)
         return {
             "is_allowed": True,
             "has_subscription": False,
@@ -122,6 +151,54 @@ async def on_issue(
     await clb.answer(l10n.format_value("vpn-issued"))
 
 
+# ========== Хэндлер: конфиг AmneziaWG ==========
+async def on_awg_config(
+    clb: CallbackQuery,
+    widget: Button,
+    dialog_manager: DialogManager,
+) -> None:
+    l10n: FluentLocalization = dialog_manager.middleware_data[L10N_FORMAT_KEY]
+    log: FilteringBoundLogger = dialog_manager.middleware_data[LOGGING_KEY]
+
+    try:
+        async with async_session() as session:
+            person = await get_person_with_member(session, clb.from_user.id)
+            access = await get_access_by_person(session, person.id) if person else None
+
+            # Клавиатура могла устареть: членство и разрешение перепроверяем на каждом клике.
+            if current_member(person) is None or not _awg_allowed(access):
+                await clb.answer(l10n.format_value("vpn-awg-denied"), show_alert=True)
+                return
+
+            config = await issue_config(session, get_awg_client(), access, person)
+            await session.commit()
+    except AwgError as exc:
+        await log.aerror("vpn-awg-issue-failed", telegram_id=clb.from_user.id, error=str(exc))
+        await clb.answer(l10n.format_value("vpn-awg-error"), show_alert=True)
+        return
+
+    await clb.bot.send_document(
+        clb.from_user.id,
+        BufferedInputFile(config.encode(), filename=f"{settings.awg.TUNNEL_NAME}.conf"),
+        caption=l10n.format_value("vpn-awg-config-caption"),
+    )
+    try:
+        qr = render_config_qr(config)
+    except ValueError as exc:
+        # Конфиг с длинными I1-I5 может не влезть в QR - файла достаточно.
+        await log.awarning("vpn-awg-qr-failed", telegram_id=clb.from_user.id, error=str(exc))
+    else:
+        await clb.bot.send_photo(
+            clb.from_user.id,
+            BufferedInputFile(qr, filename="amneziawg-qr.png"),
+            caption=l10n.format_value("vpn-awg-qr-caption"),
+        )
+
+    await clb.answer(l10n.format_value("vpn-awg-sent"))
+    # Окно переезжает под присланные файлы, чтобы меню не осталось выше конфига.
+    dialog_manager.show_mode = ShowMode.DELETE_AND_SEND
+
+
 # ========== Диалог ==========
 vpn_dialog = Dialog(
     Window(
@@ -138,6 +215,12 @@ vpn_dialog = Dialog(
             L10nFormat("vpn-refresh-btn"),
             id="refresh_vpn",
             when=F["is_allowed"] & F["has_subscription"],
+        ),
+        Button(
+            L10nFormat("vpn-awg-btn"),
+            id="awg_config",
+            on_click=on_awg_config,
+            when=F["is_allowed"] & F["awg_allowed"],
         ),
         Url(
             L10nFormat("vpn-handbook-btn"),

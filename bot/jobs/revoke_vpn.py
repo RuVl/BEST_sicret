@@ -23,7 +23,7 @@ from utils.board import get_hr_id
 logger: FilteringBoundLogger = structlog.get_logger("vpn-revoke")
 
 
-async def _notify(bot: Bot, chat_id: int, text: str) -> None:
+async def notify(bot: Bot, chat_id: int, text: str) -> None:
     """Уведомление не должно ронять джоб: человек мог заблокировать бота."""
     if not chat_id:
         return
@@ -57,7 +57,7 @@ async def revoke_inactive_subscriptions(bot: Bot, l10n: FluentLocalization) -> N
 
             await mark_revoked(session, subscription)
             revoked.append(subscription.xui_email)
-            await _notify(bot, person.telegram_id, l10n.format_value("vpn-revoked-notice"))
+            await notify(bot, person.telegram_id, l10n.format_value("vpn-revoked-notice"))
 
         await session.commit()
 
@@ -77,4 +77,4 @@ async def revoke_inactive_subscriptions(bot: Bot, l10n: FluentLocalization) -> N
             "details": escape_mdv2(details),
         },
     )
-    await _notify(bot, hr_id, report)
+    await notify(bot, hr_id, report)

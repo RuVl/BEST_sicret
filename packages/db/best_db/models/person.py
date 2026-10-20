@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from best_db.models.base import Base
 
 if TYPE_CHECKING:
+    from best_db.models.awg_access import AwgAccess
     from best_db.models.lbg_member import LbgMember
     from best_db.models.place import Place
     from best_db.models.refund import Refund
@@ -53,6 +54,13 @@ class Person(Base):
     # VPN-подписка, выданная ботом (не более одной на человека)
     vpn_subscription: Mapped["VpnSubscription | None"] = relationship(
         "VpnSubscription",
+        back_populates="person",
+        uselist=False,
+    )
+
+    # Доступ к AmneziaWG поверх подписки (выдаёт админ, не более одного на человека)
+    awg_access: Mapped["AwgAccess | None"] = relationship(
+        "AwgAccess",
         back_populates="person",
         uselist=False,
     )

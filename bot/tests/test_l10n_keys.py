@@ -52,6 +52,16 @@ VPN_KEYS = [
     "vpn-access-denied",
     "vpn-revoked-notice",
     "vpn-revoke-report",
+    "vpn-awg-hint",
+    "vpn-awg-config-caption",
+    "vpn-awg-qr-caption",
+    "vpn-awg-granted-notice",
+    "vpn-awg-suspended-notice",
+    "vpn-awg-suspend-report",
+    "vpn-awg-btn",
+    "vpn-awg-sent",
+    "vpn-awg-denied",
+    "vpn-awg-error",
 ]
 
 
@@ -65,6 +75,12 @@ MESSAGE_KEYS = [
     "vpn-orphaned",
     "vpn-revoked-notice",
     "vpn-revoke-report",
+    "vpn-awg-hint",
+    "vpn-awg-config-caption",
+    "vpn-awg-qr-caption",
+    "vpn-awg-granted-notice",
+    "vpn-awg-suspended-notice",
+    "vpn-awg-suspend-report",
 ]
 
 # Подписи кнопок и текст алертов Telegram показывает как есть, разметки там нет.
@@ -81,6 +97,10 @@ PLAIN_KEYS = [
     "vpn-issued",
     "vpn-error",
     "vpn-access-denied",
+    "vpn-awg-btn",
+    "vpn-awg-sent",
+    "vpn-awg-denied",
+    "vpn-awg-error",
 ]
 
 # Внутри кода и URL ссылки MarkdownV2 точку экранировать не требует - вырезаем такие куски.
@@ -98,7 +118,18 @@ def test_key_resolves(l10n, key):
     assert l10n.format_value(key, args=ARGS) != key
 
 
-@pytest.mark.parametrize("key", ["profile-card", "vpn-active", "vpn-orphaned", "vpn-revoke-report"])
+@pytest.mark.parametrize(
+    "key",
+    [
+        "profile-card",
+        "vpn-active",
+        "vpn-orphaned",
+        "vpn-revoke-report",
+        "vpn-awg-config-caption",
+        "vpn-awg-granted-notice",
+        "vpn-awg-suspend-report",
+    ],
+)
 def test_multiline_message_is_not_truncated(l10n, key):
     """Обрыв шаблона проявляется как потеря хвоста, а не как ошибка."""
     assert "\n\n" in l10n.format_value(key, args=ARGS)

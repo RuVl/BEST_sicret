@@ -1,3 +1,4 @@
+from .awg_access import AwgAccess
 from .base import Base
 from .category import Category
 from .item import Item
@@ -10,6 +11,7 @@ from .requisites import Requisites
 from .vpn_subscription import VpnSubscription
 
 __all__ = [
+    "AwgAccess",
     "Base",
     "Category",
     "Item",
