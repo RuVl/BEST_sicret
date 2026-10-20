@@ -127,8 +127,11 @@ class AwgConfig(_Section):
     # С хоста панель слушает 127.0.0.1, из контейнера до неё идём через адрес бриджа docker.
     BASE_URL: str = Field("", alias="AWG_WEB_BASE_URL")
     API_TOKEN: str = Field("", alias="AWG_WEB_API_TOKEN")
-    # Имя файла конфига: приложения AmneziaWG берут его как имя туннеля (до 15 символов).
+    # Имя файла конфига: приложения AmneziaWG берут его как имя туннеля (до 15 символов),
+    # а к нему дописывается номер устройства - оставляем запас.
     TUNNEL_NAME: str = Field("BEST-AWG", alias="AWG_TUNNEL_NAME")
+    # Один ключ - одно устройство; админ может поменять лимит человеку (make awg-grant devices=N).
+    DEVICE_LIMIT: int = Field(3, alias="AWG_DEVICE_LIMIT")
 
     @property
     def ENABLED(self) -> bool:

@@ -6,13 +6,8 @@ from database.models import AwgAccess, Person
 
 
 async def get_access_by_person(session: AsyncSession, person_id: int) -> AwgAccess | None:
-    """Разрешение человека на AmneziaWG (не более одного) или ``None``."""
+    """Разрешение человека на AmneziaWG (не более одного) вместе с устройствами или ``None``."""
     return await session.scalar(select(AwgAccess).where(AwgAccess.person_id == person_id))
-
-
-async def get_access_by_client_name(session: AsyncSession, client_name: str) -> AwgAccess | None:
-    """Разрешение по имени клиента - чтобы не выдать одно имя двоим."""
-    return await session.scalar(select(AwgAccess).where(AwgAccess.client_name == client_name))
 
 
 async def list_accesses(session: AsyncSession) -> list[AwgAccess]:

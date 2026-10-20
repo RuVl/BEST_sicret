@@ -1,6 +1,13 @@
 import pytest
 
-from includes.awg import AwgPeer, build_peer_comment, default_client_name, is_valid_client_name, render_config_qr
+from includes.awg import (
+    AwgPeer,
+    build_peer_comment,
+    device_client_name,
+    free_device_number,
+    is_valid_client_name,
+    render_config_qr,
+)
 
 # Конфиг AWG 2.0 в том виде, в каком его отдаёт установщик (ключи ненастоящие).
 CONFIG = """[Interface]
@@ -27,9 +34,10 @@ AllowedIPs = 0.0.0.0/0,::/0"""
 
 
 class TestClientName:
-    def test_default_name_fits_installer_rules(self):
-        assert default_client_name(42) == "lbg42"
-        assert is_valid_client_name(default_client_name(10**9))
+    def test_device_name_fits_installer_rules(self):
+        assert device_client_name(42, 1) == "lbg42-1"
+        # С запасом: семизначный person_id и двузначный номер устройства укладываются в 15 символов.
+        assert is_valid_client_name(device_client_name(10**7 - 1, 99))
 
     @pytest.mark.parametrize("name", ["ivan_pc", "lbg-7", "A1", "x" * 15])
     def test_valid(self, name):
@@ -40,12 +48,25 @@ class TestClientName:
         assert not is_valid_client_name(name)
 
 
+class TestFreeDeviceNumber:
+    def test_first_device(self):
+        assert free_device_number([]) == 1
+
+    def test_next_after_taken(self):
+        assert free_device_number([1, 2]) == 3
+
+    def test_reuses_number_of_deleted_device(self):
+        assert free_device_number([1, 3]) == 2
+
+
 class TestPeerComment:
     def test_with_username(self):
-        assert build_peer_comment("Иванов Иван", "ivan", 7) == "Иванов Иван (@ivan, tg 7) - выдан ботом"
+        assert (
+            build_peer_comment("Иванов Иван", "ivan", 7, 2) == "Иванов Иван (@ivan, tg 7), устройство 2 - выдан ботом"
+        )
 
     def test_without_username(self):
-        assert "без username" in build_peer_comment("Иванов Иван", None, 7)
+        assert "без username" in build_peer_comment("Иванов Иван", None, 7, 1)
 
 
 class TestAwgPeer:

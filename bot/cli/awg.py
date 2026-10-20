@@ -3,12 +3,12 @@
 Запуск внутри контейнера бота (обёртки - ``make awg-list`` / ``awg-grant`` / ``awg-revoke``)::
 
     python3 -m cli.awg list
-    python3 -m cli.awg grant @username [--name ivan_pc] [--no-notify]
+    python3 -m cli.awg grant @username [--devices 3] [--no-notify]
     python3 -m cli.awg revoke @username [--delete]
 
 Человек указывается Telegram-username'ом (``@ivan``) или числовым Telegram ID и должен хоть раз
-нажать /start в боте. ``grant`` только записывает разрешение: ключ в панели AmneziaWG появится,
-когда человек сам запросит конфиг кнопкой - так бот не плодит ключи, которыми никто не пользуется.
+нажать /start в боте. ``grant`` только записывает разрешение с лимитом устройств: ключи в панели
+AmneziaWG появятся, когда человек сам заведёт устройства в боте - один ключ на устройство.
 """
 
 import argparse
@@ -25,16 +25,23 @@ from sqlalchemy.orm import joinedload
 from database.main import async_session, engine
 from database.methods.awg_access import (
     create_access,
-    get_access_by_client_name,
     get_access_by_person,
     list_accesses,
-    mark_granted,
     mark_revoked,
+    set_device_limit,
 )
-from database.models import Person
+from database.models import AwgAccess, Person
 from env import settings
 from includes import get_fluent_localization
-from includes.awg import AwgError, close_awg_client, default_client_name, get_awg_client, is_valid_client_name
+from includes.awg import (
+    AwgError,
+    close_awg_client,
+    device_limit,
+    disable_peers,
+    get_awg_client,
+    remove_peers,
+    restore_access,
+)
 from jobs.revoke_vpn import notify
 from utils.access import current_member
 
@@ -63,10 +70,15 @@ def _describe(person: Person) -> str:
     return f"{person.full_name} ({handle}, tg {person.telegram_id})"
 
 
-async def _send_granted_notice(telegram_id: int) -> None:
+def _devices(access: AwgAccess) -> str:
+    return f"устройств {len(access.devices)}/{device_limit(access)}"
+
+
+async def _send_granted_notice(telegram_id: int, limit: int) -> None:
+    text = get_fluent_localization().format_value("vpn-awg-granted-notice", args={"limit": limit})
     bot = Bot(token=settings.telegram.API_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN_V2))
     try:
-        await notify(bot, telegram_id, get_fluent_localization().format_value("vpn-awg-granted-notice"))
+        await notify(bot, telegram_id, text)
     finally:
         await bot.session.close()
 
@@ -82,38 +94,47 @@ async def cmd_list(_: argparse.Namespace) -> None:
     for access in accesses:
         person = access.person
         member = "мембер" if current_member(person) else "НЕ мембер"
-        issued = access.issued_at.strftime("%Y-%m-%d") if access.issued_at else "конфиг не запрашивал"
-        print(f"{access.client_name:<15}  {access.status:<9}  {member:<9}  {issued:<20}  {_describe(person)}")
+        names = ", ".join(device.client_name for device in access.devices) or "-"
+        print(f"{access.status:<9}  {member:<9}  {_devices(access):<14}  {_describe(person)}  [{names}]")
 
 
 async def cmd_grant(args: argparse.Namespace) -> None:
+    if args.devices is not None and args.devices < 1:
+        raise CliError("--devices: нужно хотя бы одно устройство")
+
     async with async_session() as session:
         person = await _find_person(session, args.who)
         if current_member(person) is None:
             raise CliError(f"{_describe(person)} не состоит в LBG - бот всё равно не покажет ему VPN")
 
         access = await get_access_by_person(session, person.id)
-        if access is not None:
-            if access.status != "revoked":
-                print(f"У {_describe(person)} уже есть доступ: {access.client_name} ({access.status})")
-                return
-            await mark_granted(session, access)
-            action = "возвращён"
-        else:
-            name = args.name or default_client_name(person.id)
-            if not is_valid_client_name(name):
-                raise CliError(f"{name}: имя клиента - латиница, цифры, _ и -, до 15 символов")
-            if await get_access_by_client_name(session, name) is not None:
-                raise CliError(f"{name}: имя клиента уже занято")
-            access = await create_access(session, person_id=person.id, client_name=name)
+        if access is None:
+            access = await create_access(session, person_id=person.id, device_limit=args.devices)
             action = "выдан"
+        elif access.status == "revoked":
+            # Выключенные при отзыве ключи включаем все сразу - человеку не нужно перезапрашивать конфиги.
+            await restore_access(session, get_awg_client(), access)
+            if args.devices is not None:
+                await set_device_limit(session, access, args.devices)
+            action = "возвращён"
+        elif args.devices is not None:
+            await set_device_limit(session, access, args.devices)
+            action = "обновлён"
+        else:
+            print(f"У {_describe(person)} уже есть доступ ({access.status}, {_devices(access)})")
+            return
 
         await session.commit()
-        print(f"Доступ {action}: {access.client_name} -> {_describe(person)}")
+        print(f"Доступ {action}: {_describe(person)}, {_devices(access)}")
+        if len(access.devices) > device_limit(access):
+            # Лишние ключи не удаляем молча: человек сам решит, какое устройство убрать.
+            print("Внимание: устройств больше лимита - новые завести нельзя, пока лишние не удалят.")
         telegram_id = person.telegram_id
+        limit = device_limit(access)
+        notify_person = action != "обновлён"
 
-    if args.notify:
-        await _send_granted_notice(telegram_id)
+    if args.notify and notify_person:
+        await _send_granted_notice(telegram_id, limit)
         print("Уведомление отправлено.")
 
 
@@ -126,16 +147,12 @@ async def cmd_revoke(args: argparse.Namespace) -> None:
             raise CliError(f"У {_describe(person)} нет доступа к AmneziaWG")
 
         # Сначала панель, потом БД: если панель недоступна, разрешение остаётся как было.
-        peer = await client.find_peer(access.client_name)
-        if peer is None:
-            print("Ключа в панели нет - конфиг не запрашивали или его удалили руками.")
-        elif args.delete:
-            await client.remove_peer(peer.id)
-            print(f"Ключ {access.client_name} удалён из панели.")
+        if args.delete:
+            removed = await remove_peers(session, client, access)
+            print(f"Удалено устройств вместе с ключами: {removed}")
         else:
-            if not peer.disabled:
-                await client.set_disabled(peer.id, True)
-            print(f"Ключ {access.client_name} выключен в панели (вернётся при повторном grant).")
+            found = await disable_peers(client, access)
+            print(f"Выключено ключей в панели: {found} (вернутся при повторном grant)")
 
         await mark_revoked(session, access)
         await session.commit()
@@ -148,15 +165,19 @@ def _parser() -> argparse.ArgumentParser:
 
     commands.add_parser("list", help="все разрешения").set_defaults(handler=cmd_list)
 
-    grant = commands.add_parser("grant", help="открыть AmneziaWG мемберу")
+    grant = commands.add_parser("grant", help="открыть AmneziaWG мемберу или сменить ему лимит устройств")
     grant.add_argument("who", help="@username или Telegram ID")
-    grant.add_argument("--name", help="имя клиента в AmneziaWG (по умолчанию lbg<person_id>)")
+    grant.add_argument(
+        "--devices",
+        type=int,
+        help=f"личный лимит устройств (по умолчанию AWG_DEVICE_LIMIT={settings.awg.DEVICE_LIMIT})",
+    )
     grant.add_argument("--no-notify", dest="notify", action="store_false", help="не писать человеку в Telegram")
     grant.set_defaults(handler=cmd_grant)
 
     revoke = commands.add_parser("revoke", help="забрать AmneziaWG")
     revoke.add_argument("who", help="@username или Telegram ID")
-    revoke.add_argument("--delete", action="store_true", help="удалить ключ из панели, а не выключить")
+    revoke.add_argument("--delete", action="store_true", help="удалить устройства и ключи, а не выключить")
     revoke.set_defaults(handler=cmd_revoke)
 
     return parser

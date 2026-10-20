@@ -147,8 +147,8 @@ awg-list: ## Кому выдан AmneziaWG
 	$(COMPOSE) exec telegram_bot python3 -m cli.awg list
 
 .PHONY: awg-grant
-awg-grant: ## Открыть AmneziaWG: make awg-grant who=@username [name=ivan_pc] [notify=0]
-	$(COMPOSE) exec telegram_bot python3 -m cli.awg grant "$(who)" $(if $(name),--name "$(name)") $(if $(filter 0,$(notify)),--no-notify)
+awg-grant: ## Открыть AmneziaWG или сменить лимит: make awg-grant who=@username [devices=3] [notify=0]
+	$(COMPOSE) exec telegram_bot python3 -m cli.awg grant "$(who)" $(if $(devices),--devices "$(devices)") $(if $(filter 0,$(notify)),--no-notify)
 
 .PHONY: awg-revoke
 awg-revoke: ## Забрать AmneziaWG: make awg-revoke who=@username [delete=1]

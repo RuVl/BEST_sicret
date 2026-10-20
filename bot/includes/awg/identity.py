@@ -5,6 +5,7 @@
 """
 
 import re
+from collections.abc import Iterable
 
 MAX_CLIENT_NAME_LEN = 15
 
@@ -15,12 +16,21 @@ def is_valid_client_name(value: str) -> bool:
     return _CLIENT_NAME.fullmatch(value) is not None
 
 
-def default_client_name(person_id: int) -> str:
-    """Стабильное имя по ``person_id``: не зависит от смены ФИО или username."""
-    return f"lbg{person_id}"
+def device_client_name(person_id: int, number: int) -> str:
+    """Стабильное имя по ``person_id`` и номеру устройства: не зависит от смены ФИО или username."""
+    return f"lbg{person_id}-{number}"
 
 
-def build_peer_comment(full_name: str, username: str | None, telegram_id: int) -> str:
+def free_device_number(used: Iterable[int]) -> int:
+    """Наименьший свободный номер: удалённое устройство освобождает свой номер."""
+    taken = set(used)
+    number = 1
+    while number in taken:
+        number += 1
+    return number
+
+
+def build_peer_comment(full_name: str, username: str | None, telegram_id: int, number: int) -> str:
     """Подпись пира в панели - чтобы в админке было видно, чей это ключ."""
     handle = f"@{username}" if username else "без username"
-    return f"{full_name} ({handle}, tg {telegram_id}) - выдан ботом"
+    return f"{full_name} ({handle}, tg {telegram_id}), устройство {number} - выдан ботом"

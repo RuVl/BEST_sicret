@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database.models import AwgAccess
+from database.models import AwgAccess, AwgDevice
 
 
 async def mark_granted(session: AsyncSession, access: AwgAccess) -> None:
@@ -14,17 +14,28 @@ async def mark_granted(session: AsyncSession, access: AwgAccess) -> None:
 
 
 async def mark_suspended(session: AsyncSession, access: AwgAccess) -> None:
-    """Человек выбыл из LBG: ключ выключен, но вернётся сам вместе с членством."""
+    """Человек выбыл из LBG: ключи выключены, но вернутся сами вместе с членством."""
     access.status = "suspended"
     access.disabled_at = datetime.now(UTC)
 
 
 async def mark_revoked(session: AsyncSession, access: AwgAccess) -> None:
-    """Админ забрал доступ: кнопка пропадает, ключ выключен до повторной выдачи."""
+    """Админ забрал доступ: окно AmneziaWG пропадает, ключи выключены до повторной выдачи."""
     access.status = "revoked"
     access.disabled_at = datetime.now(UTC)
 
 
-async def mark_issued(session: AsyncSession, access: AwgAccess) -> None:
-    """Конфиг отправлен человеку."""
-    access.issued_at = datetime.now(UTC)
+async def set_device_limit(session: AsyncSession, access: AwgAccess, device_limit: int | None) -> None:
+    """Личный лимит устройств; ``None`` - лимит по умолчанию из настроек."""
+    access.device_limit = device_limit
+
+
+async def mark_issued(session: AsyncSession, device: AwgDevice) -> None:
+    """Конфиг устройства отправлен человеку."""
+    device.issued_at = datetime.now(UTC)
+
+
+async def delete_device(session: AsyncSession, access: AwgAccess, device: AwgDevice) -> None:
+    """Убрать устройство (пир в панели удаляет вызывающая сторона): номер освобождается."""
+    access.devices.remove(device)
+    await session.flush()
