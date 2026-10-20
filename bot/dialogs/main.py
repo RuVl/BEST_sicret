@@ -8,6 +8,7 @@ from structlog import getLogger
 from structlog.typing import FilteringBoundLogger
 
 from dialogs.user import user_dialog_router
+from middlewares.main import register_dialog_update_middlewares
 
 logger: FilteringBoundLogger = getLogger("dialogs")
 
@@ -23,6 +24,7 @@ def register_dialogs(dp: Dispatcher, router: Router):
     )
 
     setup_dialogs(dp)  # Register on dispatcher for using anywhere
+    register_dialog_update_middlewares(dp)
 
 
 async def on_unknown_state_or_intent(event: ErrorEvent, dialog_manager: DialogManager):

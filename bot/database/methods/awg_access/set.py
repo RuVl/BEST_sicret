@@ -30,6 +30,11 @@ async def set_device_limit(session: AsyncSession, access: AwgAccess, device_limi
     access.device_limit = device_limit
 
 
+async def set_device_label(session: AsyncSession, device: AwgDevice, label: str | None) -> None:
+    """Название устройства от владельца; ``None`` - «Устройство <number>»."""
+    device.label = label
+
+
 async def mark_issued(session: AsyncSession, device: AwgDevice) -> None:
     """Конфиг устройства отправлен человеку."""
     device.issued_at = datetime.now(UTC)

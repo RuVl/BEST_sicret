@@ -62,18 +62,48 @@ vpn-awg-devices = *AmneziaWG*
     Устройств: { $used } из { $limit }
     { $devices }
 
-vpn-awg-suspended-hint = Ключи выключены, пока вы не состояли в LBG\. Нажмите «Включить ключи»\.
-vpn-awg-panel-error-hint = Панель AmneziaWG сейчас недоступна, статус устройств не показан\.
+vpn-awg-device-card = *{ $name }*
+    { "" }
+    Статус: { $status }
+    Последнее подключение: { $handshake }
+    { "" }
+    { "*" }Трафик* \(скачано / отправлено\)
+    За сутки: { $day }
+    За 7 дней: { $week }
+    За 30 дней: { $month }
 
-vpn-awg-delete-confirm = *Удалить устройство { $number }?*
+vpn-awg-name-new = *Новое устройство*
+    { "" }
+    Напишите название, например «Телефон» или «Ноутбук» \(до { $max } символов\)\.
+
+vpn-awg-name-rename = *Переименование*
+    { "" }
+    Напишите новое название для «{ $name }» \(до { $max } символов\)\.
+
+vpn-awg-name-invalid = Название должно быть от 1 до { $max } символов, попробуйте ещё раз.
+
+vpn-awg-config-caption = *{ $name }* — конфиг AmneziaWG
+    { "" }
+    Импортируйте файл в приложение AmneziaWG или AmneziaVPN\. Один конфиг — одно устройство\.
+    { "" }
+    Это ваш личный ключ: сообщение исчезнет через { $minutes } мин или по кнопке «Готово»\.
+
+vpn-awg-qr-caption = *{ $name }* — QR\-код конфига
+    { "" }
+    Отсканируйте его приложением AmneziaWG на телефоне\.
+    { "" }
+    Это ваш личный ключ: сообщение исчезнет через { $minutes } мин или по кнопке «Готово»\.
+
+vpn-awg-config-hidden = *Конфиг скрыт*
+    { "" }
+    Сообщение с ключом убрано из чата\. Если он снова нужен, нажмите «Получить конфиг» в карточке устройства\.
+
+vpn-awg-suspended-hint = Ключи выключены, пока вы не состояли в LBG\. Нажмите «Включить ключи»\.
+vpn-awg-panel-error-hint = Панель AmneziaWG сейчас недоступна, статус и трафик не показаны\.
+
+vpn-awg-delete-confirm = *Удалить «{ $name }»?*
     { "" }
     Его конфиг перестанет работать\. Новый можно получить, добавив устройство заново\.
-
-vpn-awg-config-caption = Конфиг AmneziaWG для устройства { $number }\. Импортируйте файл в приложение AmneziaWG или AmneziaVPN\.
-    { "" }
-    Один конфиг — одно устройство\. Это ваш личный ключ — никому его не пересылайте\.
-
-vpn-awg-qr-caption = Тот же конфиг QR\-кодом: отсканируйте его приложением AmneziaWG на телефоне\.
 
 vpn-awg-granted-notice = *Вам открыт AmneziaWG*
     { "" }
@@ -91,28 +121,36 @@ vpn-awg-suspend-report = *Автоотключение ключей AmneziaWG*
     { "" }
     { $details }
 
-# Строки списка устройств - обычный текст, экранирует код
-vpn-awg-device-line = Устройство { $number }: { $status }
+# Строки списка и карточки - обычный текст, экранирует код
+vpn-awg-device-line = { $name }: { $status }
+vpn-awg-device-default-name = Устройство { $number }
 vpn-awg-devices-empty = Устройств пока нет. Нажмите «Добавить устройство».
 vpn-awg-status-online = в сети
 vpn-awg-status-inactive = давно не подключалось
 vpn-awg-status-never = ещё не подключалось
 vpn-awg-status-disabled = выключено
-vpn-awg-status-missing = ключа нет в панели, запросите конфиг
+vpn-awg-status-missing = ключа нет в панели, получите конфиг заново
 vpn-awg-status-unknown = статус неизвестен
+vpn-awg-handshake-never = не было
+vpn-awg-traffic = { $down } / { $up }
+vpn-awg-no-data = —
 
 # Кнопки
 vpn-awg-btn = AmneziaWG
 vpn-awg-add-btn = Добавить устройство
-vpn-awg-config-btn = Конфиг { $number }
-vpn-awg-delete-btn = Удалить { $number }
+vpn-awg-get-config-btn = Получить конфиг
+vpn-awg-rename-btn = Переименовать
+vpn-awg-delete-btn = Удалить
 vpn-awg-delete-yes-btn = Да, удалить
 vpn-awg-restore-btn = Включить ключи
+vpn-awg-show-qr-btn = Показать QR-код
+vpn-awg-show-file-btn = Показать файл
+vpn-awg-done-btn = Готово
 
 # Уведомления и ошибки
-vpn-awg-sent = Конфиг отправлен
 vpn-awg-deleted = Устройство удалено
 vpn-awg-restored = Ключи включены
+vpn-awg-renamed = Название сохранено
 vpn-awg-limit = Лимит устройств исчерпан ({ $used } из { $limit }). Удалите ненужное или напишите VP4HR.
 vpn-awg-denied = AmneziaWG вам не выдан. Если он нужен, напишите VP4HR.
 vpn-awg-error = Панель AmneziaWG недоступна. Попробуйте позже или напишите VP4HR.

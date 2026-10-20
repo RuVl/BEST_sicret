@@ -2,10 +2,12 @@ import pytest
 
 from includes.awg import (
     AwgPeer,
+    AwgUsageSummary,
     build_peer_comment,
     device_client_name,
     free_device_number,
     is_valid_client_name,
+    normalize_device_label,
     render_config_qr,
 )
 
@@ -59,7 +61,23 @@ class TestFreeDeviceNumber:
         assert free_device_number([1, 3]) == 2
 
 
+class TestDeviceLabel:
+    def test_collapses_whitespace(self):
+        assert normalize_device_label("  Мой   телефон\n") == "Мой телефон"
+
+    def test_keeps_emoji(self):
+        assert normalize_device_label("📱 iPhone") == "📱 iPhone"
+
+    @pytest.mark.parametrize("value", ["", "   ", "x" * 33])
+    def test_rejects(self, value):
+        with pytest.raises(ValueError):
+            normalize_device_label(value)
+
+
 class TestPeerComment:
+    def test_with_label(self):
+        assert build_peer_comment("Иванов Иван", "ivan", 7, 2, "Ноутбук").endswith("«Ноутбук» - выдан ботом")
+
     def test_with_username(self):
         assert (
             build_peer_comment("Иванов Иван", "ivan", 7, 2) == "Иванов Иван (@ivan, tg 7), устройство 2 - выдан ботом"
@@ -88,8 +106,20 @@ class TestAwgPeer:
         assert peer.friendly_name == "lbg42"
         assert not peer.disabled
 
+    def test_parses_handshake_time(self):
+        peer = AwgPeer.model_validate({"id": 1, "latest_handshake_at": "2026-10-20T14:45:00Z"})
+        assert peer.latest_handshake_at is not None and peer.latest_handshake_at.hour == 14
+
     def test_disabled_status(self):
         assert AwgPeer.model_validate({"id": 1, "connection_status": "disabled"}).disabled
+
+
+class TestUsageSummary:
+    def test_bytes_come_as_strings(self):
+        summary = AwgUsageSummary.model_validate(
+            {"peer_id": 1, "day": {"rx_bytes": "10", "tx_bytes": "20"}, "week": {}, "month": {"rx_bytes": "5"}}
+        )
+        assert (summary.day.rx_bytes, summary.day.tx_bytes, summary.month.rx_bytes) == (10, 20, 5)
 
 
 class TestQr:

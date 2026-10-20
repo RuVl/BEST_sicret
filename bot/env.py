@@ -132,6 +132,8 @@ class AwgConfig(_Section):
     TUNNEL_NAME: str = Field("BEST-AWG", alias="AWG_TUNNEL_NAME")
     # Один ключ - одно устройство; админ может поменять лимит человеку (make awg-grant devices=N).
     DEVICE_LIMIT: int = Field(3, alias="AWG_DEVICE_LIMIT")
+    # Сколько секунд сообщение с конфигом (приватным ключом) висит в чате, прежде чем бот его уберёт.
+    CONFIG_TTL_SECONDS: int = Field(300, alias="AWG_CONFIG_TTL_SECONDS")
 
     @property
     def ENABLED(self) -> bool:

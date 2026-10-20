@@ -30,15 +30,7 @@ from dialogs.user.vpn_awg import awg_allowed, awg_windows
 from includes.vpn import XuiError, ensure_subscription, get_xui_client
 from middlewares import L10N_FORMAT_KEY, LOGGING_KEY
 from state_machines.vpn import ViewVpnSubscription
-from utils import L10nFormat, current_member, escape_mdv2
-
-
-def _format_traffic(used_bytes: int) -> str:
-    """Байты в читаемый вид: до гигабайта - мегабайты, дальше гигабайты."""
-    _GB = 1024**3
-    if used_bytes < _GB:
-        return f"{used_bytes / 1024**2:.1f} МБ"
-    return f"{used_bytes / _GB:.2f} ГБ"
+from utils import L10nFormat, current_member, escape_mdv2, format_traffic
 
 
 # ========== Геттер: статус подписки ==========
@@ -107,7 +99,7 @@ async def _get_subscription_data(
         "vpn-active" if traffic.enable else "vpn-disabled",
         args={
             "url": escape_mdv2(client.build_subscription_url(subscription.sub_id)),
-            "traffic": escape_mdv2(_format_traffic(traffic.used_bytes)),
+            "traffic": escape_mdv2(format_traffic(traffic.used_bytes)),
         },
     )
     return {"is_allowed": True, "has_subscription": True, "text": text}
