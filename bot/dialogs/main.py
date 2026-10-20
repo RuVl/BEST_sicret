@@ -8,6 +8,7 @@ from structlog import getLogger
 from structlog.typing import FilteringBoundLogger
 
 from dialogs.user import user_dialog_router
+from includes.memory_media import MemoryMediaMessageManager
 from middlewares.main import register_dialog_update_middlewares
 
 logger: FilteringBoundLogger = getLogger("dialogs")
@@ -23,7 +24,8 @@ def register_dialogs(dp: Dispatcher, router: Router):
         user_dialog_router,
     )
 
-    setup_dialogs(dp)  # Register on dispatcher for using anywhere
+    # Свой MessageManager: окна могут показывать файлы из памяти (конфиги AmneziaWG) без диска
+    setup_dialogs(dp, message_manager=MemoryMediaMessageManager())  # Register on dispatcher for using anywhere
     register_dialog_update_middlewares(dp)
 
 
