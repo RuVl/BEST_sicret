@@ -42,6 +42,9 @@ class AwgDevice(Base):
         comment="Имя клиента в AmneziaWG (lbg<person_id>-<number>)",
     )
 
+    # Название задаёт сам человек (``Телефон``, ``Ноутбук``); NULL - «Устройство <number>».
+    label: Mapped[str | None] = mapped_column(String(32), nullable=True, comment="Название устройства от владельца")
+
     # --- Служебное ---
     issued_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),

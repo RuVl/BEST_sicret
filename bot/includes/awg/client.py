@@ -13,7 +13,7 @@ from structlog.typing import FilteringBoundLogger
 
 from env import settings
 from includes.awg.exceptions import AwgAuthError, AwgError, AwgPeerNotFoundError
-from includes.awg.schemas import AwgPeer
+from includes.awg.schemas import AwgPeer, AwgUsageSummary
 
 logger: FilteringBoundLogger = structlog.get_logger("awg")
 
@@ -90,6 +90,14 @@ class AwgClient:
     async def get_config(self, peer_id: int) -> str:
         """Текст клиентского ``.conf``. Внутри приватный ключ - не логировать и не хранить."""
         return await self._request("GET", f"/peers/{peer_id}/config", as_text=True)
+
+    async def set_comment(self, peer_id: int, comment: str) -> None:
+        """Переписать подпись пира в панели (например, после переименования устройства)."""
+        await self._request("PATCH", f"/peers/{peer_id}", json={"comment": comment})
+
+    async def get_usage_summary(self, peer_id: int) -> AwgUsageSummary:
+        obj = await self._request("GET", f"/peers/{peer_id}/usage/summary")
+        return AwgUsageSummary.model_validate(obj or {})
 
     async def set_disabled(self, peer_id: int, disabled: bool) -> None:
         """Выключить/включить пира: панель сразу снимает его с интерфейса или возвращает."""
