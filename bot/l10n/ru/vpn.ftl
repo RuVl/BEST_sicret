@@ -13,12 +13,12 @@ vpn-active = *VLESS\-подписка активна* \(запасной вар�
     { "" }
     Трафик за текущий период: { $traffic }
 
-vpn-orphaned = *VLESS\-подписка недействительна*
+vpn-orphaned = *VLESS\-подписка недействительна* \(запасной вариант\)
     { "" }
     Ключ удалён из панели, старая ссылка больше не работает\.
     Нажмите «Выпустить» — бот создаст новый ключ и пришлёт новую ссылку\.
 
-vpn-disabled = *VLESS\-подписка отключена*
+vpn-disabled = *VLESS\-подписка отключена* \(запасной вариант\)
     { "" }
     Ключ есть, но выключен в панели\. Если это ошибка — напишите VP4HR\.
     { "" }
@@ -47,7 +47,9 @@ vpn-handbook-url = https://docs.google.com/document/d/1gcmkXYgEY308JLwmrzNfeBirz
 # Notifications and errors
 vpn-issued-alert = Подписка выпущена
 vpn-error-alert = Панель VPN недоступна. Попробуйте позже или напишите VP4HR.
+vpn-error = Панель VPN недоступна\. Попробуйте позже или напишите VP4HR\.
 vpn-access-denied-alert = Доступ к VPN только для активных мемберов LBG
+vpn-access-denied = Доступ к VPN только для активных мемберов LBG\.
 
 # === AmneziaWG (основной протокол, открыт всем активным мемберам) ===
 # Один конфиг - одно устройство, поэтому ключи заводятся по устройствам.
@@ -103,6 +105,10 @@ vpn-awg-delete-confirm = *Удалить «{ $name }»?*
     { "" }
     Его конфиг перестанет работать\. Новый можно получить, добавив устройство заново\.
 
+vpn-awg-denied = *AmneziaWG недоступен*
+    { "" }
+    AmneziaWG открыт только активным мемберам LBG\. Если доступ закрыт по ошибке, напишите VP4HR\.
+
 vpn-awg-granted-notice = *Вам открыт AmneziaWG*
     { "" }
     Это основной VPN\-протокол бота\.
@@ -112,7 +118,7 @@ vpn-awg-announce = *AmneziaWG — новый основной VPN*
     { "" }
     В боте появился AmneziaWG: он работает там, где VLESS не подключается\. Откройте /start → «VPN\-подписка» → «AmneziaWG», добавьте устройство и импортируйте файл или QR\-код в приложение AmneziaWG последней версии\. Один конфиг — одно устройство, всего можно завести { $limit }\.
     { "" }
-    Если у вас уже был конфиг AmneziaWG, он перестал работать — получите новый в карточке устройства\.
+    Если у вас уже был конфиг AmneziaWG, скоро он перестанет работать — заранее получите новый в карточке устройства\.
 
 vpn-awg-suspended-notice = Ваши ключи AmneziaWG отключены: вы больше не активный мембер LBG\.
     { "" }
@@ -133,7 +139,7 @@ vpn-awg-status-online-part = в сети
 vpn-awg-status-inactive-part = давно не подключалось
 vpn-awg-status-never-part = ещё не подключалось
 vpn-awg-status-disabled-part = выключено
-vpn-awg-status-missing-part = ключа нет в панели, получите конфиг заново
+vpn-awg-status-missing-part = нужен новый конфиг — нажмите «Получить конфиг»
 vpn-awg-status-unknown-part = статус неизвестен
 vpn-awg-handshake-never-part = не было
 vpn-awg-traffic-part = { $down } / { $up }
@@ -163,5 +169,5 @@ vpn-awg-ios-url = https://apps.apple.com/app/amneziawg/id6478942365
 vpn-awg-deleted-alert = Устройство удалено
 vpn-awg-restored-alert = Ключи включены
 vpn-awg-limit-alert = Лимит устройств исчерпан ({ $used } из { $limit }). Удалите ненужное или напишите VP4HR.
-vpn-awg-denied-alert = AmneziaWG вам не выдан. Если он нужен, напишите VP4HR.
+vpn-awg-denied-alert = AmneziaWG доступен только активным мемберам LBG. Если доступ закрыт по ошибке, напишите VP4HR.
 vpn-awg-error-alert = Панель VPN недоступна. Попробуйте позже или напишите VP4HR.

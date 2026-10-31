@@ -1,44 +1,22 @@
+import base64
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from includes.awg import (
     AwgError,
-    AwgInbound,
     AwgPeer,
-    build_client_config,
     build_peer_comment,
     device_client_name,
-    effective_mtu,
+    extract_device_config,
     free_device_number,
     is_valid_client_name,
     normalize_device_label,
     render_config_qr,
 )
-from includes.vpn import ClientTraffic
+from includes.vpn import ClientDetails, ClientTraffic
 
-# Инбаунд в том виде, в каком его отдаёт GET /panel/api/inbounds/get/:id (ключи ненастоящие).
-INBOUND = {
-    "id": 3,
-    "protocol": "amneziawg",
-    "remark": "BEST AWG test",
-    "listen": "45.136.228.156",
-    "port": 51900,
-    "settings": """{"clients": [], "server": {
-        "privateKey": "0000000000000000000000000000000000000000000=",
-        "publicKey": "1111111111111111111111111111111111111111111=",
-        "primaryDns": "94.140.14.14", "secondaryDns": "94.140.15.15",
-        "jc": 3, "jmin": 55, "jmax": 294, "s1": 112, "s2": 98, "s3": 38, "s4": 27,
-        "h1": "127423176", "h2": 776342377, "h3": "1094690827", "h4": "1729788298",
-        "i1": "<r 186>",
-        "headerProtectionKey": "2222222222222222222222222222222222222222222=",
-        "contentPaddingAddition": "24-36", "rekeyAfterTime": "110-140", "rekeyTimeout": "4-7",
-        "rejectAfterTime": "200-268", "keepaliveTimeout": "10-18", "maxHandshakeAttempts": "20-33",
-        "randomTrailers": true, "disableCookies": true,
-        "subnetIp": "10.70.0.0", "subnetCidr": 20}}""",
-}
-
-# Ответ GET /panel/api/clients/get/:email для устройства.
+# Ответ GET /panel/api/clients/get/:email для устройства (ключи ненастоящие).
 CLIENT_OBJ = {
     "client": {
         "id": 12,
@@ -55,8 +33,35 @@ CLIENT_OBJ = {
 }
 
 
+def _details(**overrides) -> ClientDetails:
+    return ClientDetails.model_validate(CLIENT_OBJ | overrides)
+
+
 def _peer(**client) -> AwgPeer:
-    return AwgPeer.from_panel({**CLIENT_OBJ, "client": CLIENT_OBJ["client"] | client}, 3, None)
+    return AwgPeer.from_panel(_details(client=CLIENT_OBJ["client"] | client), 3, None)
+
+
+# Конфиг устройства, как его собирает 3x-ui (сокращён: параметры обфускации бот не разбирает).
+CONF = """[Interface]
+PrivateKey = 3333333333333333333333333333333333333333333=
+Address = 10.70.0.2/32
+DNS = 94.140.14.14, 94.140.15.15
+MTU = 1393
+Jc = 3
+HeaderProtectionKey = 2222222222222222222222222222222222222222222=
+RandomTrailers = on
+
+# BEST AWG test
+[Peer]
+PublicKey = 1111111111111111111111111111111111111111111=
+AllowedIPs = 0.0.0.0/0, ::/0
+Endpoint = 45.136.228.156:443
+PersistentKeepalive = 25"""
+
+
+def _vpn_link(conf: str) -> str:
+    # Как genAmneziaWGLink панели: base64url без паддинга.
+    return "vpn://" + base64.urlsafe_b64encode(conf.encode()).decode().rstrip("=")
 
 
 class TestClientName:
@@ -114,7 +119,7 @@ class TestAwgPeer:
         assert _peer().address == "10.70.0.2/32"
 
     def test_falls_back_to_shared_address(self):
-        peer = AwgPeer.from_panel({**CLIENT_OBJ, "tunnelAllowedIPs": {}}, 3, None)
+        peer = AwgPeer.from_panel(_details(tunnelAllowedIPs={}), 3, None)
         assert peer.address == "10.0.0.9/32"
 
     def test_keepalive_number_and_range(self):
@@ -124,7 +129,7 @@ class TestAwgPeer:
 
     def test_traffic_and_last_online(self):
         traffic = ClientTraffic.model_validate({"up": 10, "down": 20, "lastOnline": 1_793_407_202_000})
-        peer = AwgPeer.from_panel(CLIENT_OBJ, 3, traffic)
+        peer = AwgPeer.from_panel(_details(), 3, traffic)
         assert (peer.up, peer.down) == (10, 20)
         assert peer.last_online_at == datetime.fromtimestamp(1_793_407_202, UTC)
 
@@ -138,80 +143,39 @@ class TestAwgPeer:
         assert stale.connection_status(now) == "inactive"
 
 
-class TestInbound:
-    def test_parses_settings_string(self):
-        inbound = AwgInbound.from_panel(INBOUND)
-        assert (inbound.listen, inbound.port) == ("45.136.228.156", 51900)
-        assert inbound.server.public_key.startswith("111")
-        # H может прийти и числом - в конфиг он уходит строкой как есть.
-        assert inbound.server.h2 == "776342377"
-        assert inbound.server.random_trailers and inbound.server.disable_cookies
+class TestShareLink:
+    def test_picks_device_config_among_other_links(self):
+        other_device = CONF.replace("PrivateKey = 333", "PrivateKey = 555")
+        links = ["vless://uuid@host:443?type=xhttp#BEST", _vpn_link(other_device), _vpn_link(CONF)]
+        assert extract_device_config(links, _peer()) == CONF + "\n"
 
-
-class TestEffectiveMtu:
-    def test_explicit_mtu_wins(self):
-        assert effective_mtu(1380, 27) == 1380
-
-    def test_shrinks_by_s4(self):
-        assert effective_mtu(0, 27) == 1393
-
-    def test_never_below_ipv6_minimum(self):
-        assert effective_mtu(0, 500) == 1280
-
-
-class TestClientConfig:
-    def _config(self) -> str:
-        return build_client_config(_peer(), AwgInbound.from_panel(INBOUND), "45.136.228.156", "BEST-AWG - Телефон")
-
-    def test_interface_and_peer(self):
-        lines = self._config().splitlines()
-        assert lines[:4] == [
-            "[Interface]",
-            "PrivateKey = 3333333333333333333333333333333333333333333=",
-            "Address = 10.70.0.2/32",
-            "DNS = 94.140.14.14, 94.140.15.15",
-        ]
-        assert "MTU = 1393" in lines
-        assert "Endpoint = 45.136.228.156:51900" in lines
-        assert "PublicKey = 1111111111111111111111111111111111111111111=" in lines
-        assert "PersistentKeepalive = 25" in lines
-        assert "# BEST-AWG - Телефон" in lines
-        # Приватный ключ сервера в клиентский конфиг попадать не должен.
-        assert "0000000000000000000000000000000000000000000=" not in self._config()
-
-    def test_awg31_parameters_match_server(self):
-        lines = self._config().splitlines()
-        for line in (
-            "Jc = 3",
-            "S4 = 27",
-            "H2 = 776342377",
-            "I1 = <r 186>",
-            "HeaderProtectionKey = 2222222222222222222222222222222222222222222=",
-            "ContentPaddingAddition = 24-36",
-            "MaxHandshakeAttempts = 20-33",
-            "RandomTrailers = on",
-            "DisableCookies = on",
-        ):
-            assert line in lines
-
-    def test_blank_h_falls_back_to_wireguard_types(self):
-        inbound = AwgInbound.from_panel(INBOUND)
-        inbound.server.h1 = ""
-        assert "H1 = 1" in build_client_config(_peer(), inbound, "203.0.113.1").splitlines()
-
-    def test_line_break_in_value_is_rejected(self):
-        # Иначе значение открыло бы новую секцию с PostUp, который wg-quick выполнит от root.
-        inbound = AwgInbound.from_panel(INBOUND)
-        inbound.server.i1 = "<r 10>\nPostUp = id"
+    def test_other_inbound_of_same_client_is_skipped(self):
+        # Тот же клиент в другом AmneziaWG-инбаунде - другой адрес туннеля.
+        elsewhere = CONF.replace("Address = 10.70.0.2/32", "Address = 10.80.0.2/32")
         with pytest.raises(AwgError):
-            build_client_config(_peer(), inbound, "203.0.113.1")
+            extract_device_config([_vpn_link(elsewhere)], _peer())
 
-    def test_missing_keys_are_an_error(self):
+    def test_address_with_ipv6(self):
+        dual = CONF.replace("Address = 10.70.0.2/32", "Address = 10.70.0.2/32, fd00::2/128")
+        assert "fd00::2/128" in extract_device_config([_vpn_link(dual)], _peer())
+
+    def test_no_awg_link_is_an_error(self):
         with pytest.raises(AwgError):
-            build_client_config(_peer(privateKey=""), AwgInbound.from_panel(INBOUND), "203.0.113.1")
+            extract_device_config(["vless://uuid@host:443", "vpn://не-base64!"], _peer())
+
+    @pytest.mark.parametrize("endpoint", ["127.0.0.1:443", "10.0.0.5:443", "localhost:443", ":443"])
+    def test_internal_endpoint_is_rejected(self, endpoint):
+        # Без Listen IP панель подставила бы адрес, по которому к ней ходит бот, - снаружи он не работает.
+        conf = CONF.replace("Endpoint = 45.136.228.156:443", f"Endpoint = {endpoint}")
+        with pytest.raises(AwgError):
+            extract_device_config([_vpn_link(conf)], _peer())
+
+    def test_missing_private_key_is_an_error(self):
+        with pytest.raises(AwgError):
+            extract_device_config([_vpn_link(CONF)], _peer(privateKey=""))
 
     def test_fits_into_qr(self):
-        assert render_config_qr(self._config()).startswith(b"\x89PNG")
+        assert render_config_qr(CONF).startswith(b"\x89PNG")
 
 
 class TestQr:

@@ -52,8 +52,7 @@ async def get_vpn_data(
             "is_allowed": False,
             "has_subscription": False,
             "awg_allowed": False,
-            # Ключ живёт и в алерте (там разметки нет), поэтому в ftl он без экранирования.
-            "text": escape_mdv2(l10n.format_value("vpn-access-denied-alert")),
+            "text": l10n.format_value("vpn-access-denied"),
         }
 
     data = await _get_subscription_data(subscription, person.id, l10n, log)
@@ -84,7 +83,7 @@ async def _get_subscription_data(
         traffic = await client.get_traffic(subscription.xui_email)
     except XuiError as exc:
         await log.aerror("vpn-status-failed", person_id=person_id, error=str(exc))
-        return {"is_allowed": True, "has_subscription": True, "text": escape_mdv2(l10n.format_value("vpn-error-alert"))}
+        return {"is_allowed": True, "has_subscription": True, "text": l10n.format_value("vpn-error")}
 
     if traffic is None:
         # Панель на удалённого клиента отвечает success=true с пустым obj.

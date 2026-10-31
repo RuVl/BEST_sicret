@@ -7,17 +7,20 @@
 Все ответы приходят в конверте ``{"success": bool, "msg": str, "obj": any}``.
 """
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
 import aiohttp
 import structlog
-from pydantic import BaseModel
 from structlog.typing import FilteringBoundLogger
 
 from env import settings
 from includes.vpn.exceptions import XuiAuthError, XuiClientNotFoundError, XuiError
-from includes.vpn.schemas import ClientRecord, ClientTraffic, XuiClientPayload
+from includes.vpn.schemas import ClientDetails, ClientRecord, ClientTraffic, XuiClientPayload
+
+if TYPE_CHECKING:
+    # includes.awg сам импортирует этот модуль - во время выполнения тип не нужен.
+    from includes.awg.schemas import AwgClientPayload
 
 logger: FilteringBoundLogger = structlog.get_logger("xui")
 
@@ -84,8 +87,8 @@ class XuiClient:
 
     # === Клиенты ===
 
-    async def get_client_obj(self, email: str) -> dict[str, Any] | None:
-        """Сырой ответ ``/clients/get/:email`` (``client``, ``inboundIds``, ``tunnelAllowedIPs``) или ``None``."""
+    async def get_client_details(self, email: str) -> ClientDetails | None:
+        """Клиент с его инбаундами и адресами в туннелях или ``None``, если клиента нет."""
         try:
             obj = await self._request("GET", f"/clients/get/{quote(email, safe='')}")
         except XuiClientNotFoundError:
@@ -98,12 +101,12 @@ class XuiClient:
 
         if not obj or not obj.get("client"):
             return None
-        return obj
+        return ClientDetails.model_validate(obj)
 
     async def get_client(self, email: str) -> ClientRecord | None:
         """Вернуть клиента панели или ``None``, если его нет."""
-        obj = await self.get_client_obj(email)
-        return ClientRecord.model_validate(obj["client"]) if obj else None
+        details = await self.get_client_details(email)
+        return ClientRecord.model_validate(details.client) if details else None
 
     async def get_traffic(self, email: str) -> ClientTraffic | None:
         obj = await self._request("GET", f"/clients/traffic/{quote(email, safe='')}")
@@ -111,7 +114,14 @@ class XuiClient:
             return None
         return ClientTraffic.model_validate(obj)
 
-    async def add_client(self, client: BaseModel, inbound_ids: list[int]) -> None:
+    async def get_links(self, email: str) -> list[str]:
+        """Ссылки клиента во всех его инбаундах (``vless://``, ``vpn://``...) - то же, что в его подписке."""
+        obj = await self._request("GET", f"/clients/links/{quote(email, safe='')}")
+        if not isinstance(obj, list):
+            raise XuiError(f"Панель вернула неожиданный список ссылок клиента {email}")
+        return [link for link in obj if isinstance(link, str)]
+
+    async def add_client(self, client: "XuiClientPayload | AwgClientPayload", inbound_ids: list[int]) -> None:
         """Завести клиента в инбаундах. Тело зависит от протокола: VLESS - ``XuiClientPayload``.
 
         Секреты, которых нет в теле, панель генерирует сама (у AmneziaWG - ключи и адрес в подсети).
@@ -165,15 +175,6 @@ class XuiClient:
         """Все email клиентов в группе - для сверки «БД бота ↔ панель»."""
         obj = await self._request("GET", f"/clients/groups/{quote(group, safe='')}/emails")
         return list(obj or [])
-
-    # === Инбаунды ===
-
-    async def get_inbound(self, inbound_id: int) -> dict[str, Any]:
-        """Инбаунд как есть: ``settings`` панель отдаёт JSON-строкой."""
-        obj = await self._request("GET", f"/inbounds/get/{inbound_id}")
-        if not isinstance(obj, dict):
-            raise XuiError(f"Инбаунда {inbound_id} нет в панели")
-        return obj
 
     # === Ссылка-подписка ===
 

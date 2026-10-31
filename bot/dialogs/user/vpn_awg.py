@@ -1,7 +1,7 @@
 """Окна устройств AmneziaWG внутри диалога VPN-подписки.
 
 AmneziaWG - основной протокол, он открыт каждому активному мемберу LBG: разрешение заводится
-само при первом входе в окно, админ может только отозвать его или поменять лимит (``make awg-*``).
+само вместе с первым устройством, админ может только отозвать его или поменять лимит (``make awg-*``).
 
 Один ключ AmneziaWG - одно устройство (в отличие от VLESS, где одна ссылка работает на
 нескольких), поэтому человек заводит ключ на каждое устройство в пределах лимита, называет
@@ -89,11 +89,11 @@ def awg_allowed(access: AwgAccess | None) -> bool:
     return settings.awg.ENABLED and (access is None or access.status != "revoked")
 
 
-async def _load_access(session: AsyncSession, telegram_id: int) -> tuple[Person, AwgAccess] | None:
-    """Человек и его разрешение - или ``None``, если доступа к AmneziaWG у него сейчас нет.
+async def _load_access(session: AsyncSession, telegram_id: int) -> tuple[Person, AwgAccess | None] | None:
+    """Человек и его разрешение - или ``None``, если AmneziaWG ему сейчас закрыт.
 
-    Разрешения ещё нет - заводим и сразу коммитим: так у устройств есть строка-владелец, а лимит
-    админ потом поменяет точечно.
+    Разрешение ``None`` - мембер ещё не заводил устройств: окно пускает его, а строку заводит
+    ``_grant_access`` при добавлении первого устройства. Здесь только чтение - геттеры не пишут в БД.
     """
     person = await get_person_with_member(session, telegram_id)
     if current_member(person) is None:
@@ -101,15 +101,24 @@ async def _load_access(session: AsyncSession, telegram_id: int) -> tuple[Person,
     access = await get_access_by_person(session, person.id)
     if not awg_allowed(access):
         return None
-    if access is None:
-        access = await create_access(session, person_id=person.id)
-        await session.commit()
-        await logger.ainfo("awg-access-auto-granted", person_id=person.id)
     return person, access
 
 
-def _find_device(access: AwgAccess, number: int | None) -> AwgDevice | None:
-    return next((device for device in access.devices if device.number == number), None)
+async def _grant_access(session: AsyncSession, person: Person, access: AwgAccess | None) -> AwgAccess:
+    """Разрешение мембера, заведённое при необходимости. Коммит - на вызывающем хэндлере."""
+    if access is not None:
+        return access
+    access = await create_access(session, person_id=person.id)
+    await logger.ainfo("awg-access-auto-granted", person_id=person.id)
+    return access
+
+
+def _devices(access: AwgAccess | None) -> list[AwgDevice]:
+    return list(access.devices) if access is not None else []
+
+
+def _find_device(access: AwgAccess | None, number: int | None) -> AwgDevice | None:
+    return next((device for device in _devices(access) if device.number == number), None)
 
 
 def _device_name(l10n: FluentLocalization, device: AwgDevice) -> str:
@@ -221,6 +230,10 @@ _DENIED: dict[str, Any] = {
 }
 
 
+def _denied(l10n: FluentLocalization) -> dict[str, Any]:
+    return _DENIED | {"text": l10n.format_value("vpn-awg-denied")}
+
+
 async def get_awg_data(
     dialog_manager: DialogManager,
     l10n: FluentLocalization,
@@ -231,12 +244,13 @@ async def get_awg_data(
         loaded = await _load_access(session, dialog_manager.event.from_user.id)
 
     if loaded is None:
-        return _DENIED | {"text": escape_mdv2(l10n.format_value("vpn-awg-denied-alert"))}
+        return _denied(l10n)
     person, access = loaded
+    devices = _devices(access)
 
     peers: dict[str, AwgPeer] = {}
     peers_known = True
-    if access.devices:
+    if access is not None and devices:
         try:
             peers = await peers_by_name(get_awg_client(), access)
         except AwgError as exc:
@@ -251,15 +265,15 @@ async def get_awg_data(
                 "status": _device_status(l10n, peers.get(device.client_name), peers_known),
             },
         )
-        for device in access.devices
+        for device in devices
     ] or [l10n.format_value("vpn-awg-devices-empty-part")]
 
     limit = device_limit(access)
     text = l10n.format_value(
         "vpn-awg-devices",
-        args={"used": len(access.devices), "limit": limit, "devices": escape_mdv2("\n".join(lines))},
+        args={"used": len(devices), "limit": limit, "devices": escape_mdv2("\n".join(lines))},
     )
-    is_suspended = access.status == "suspended"
+    is_suspended = access is not None and access.status == "suspended"
     if is_suspended:
         text += "\n\n" + l10n.format_value("vpn-awg-suspended-hint")
     if not peers_known:
@@ -267,9 +281,9 @@ async def get_awg_data(
 
     return _DENIED | {
         "is_allowed": True,
-        "can_add": len(access.devices) < limit,
+        "can_add": len(devices) < limit,
         "is_suspended": is_suspended,
-        "devices": [(_device_name(l10n, device), device.number) for device in access.devices],
+        "devices": [(_device_name(l10n, device), device.number) for device in devices],
         "text": text,
     }
 
@@ -282,10 +296,10 @@ async def get_device_data(
 ) -> dict[str, Any]:
     async with async_session() as session:
         loaded = await _load_access(session, dialog_manager.event.from_user.id)
-    device = _find_device(loaded[1], dialog_manager.dialog_data.get(_DEVICE)) if loaded else None
+    device = _find_device(loaded[1] if loaded else None, dialog_manager.dialog_data.get(_DEVICE))
 
     if loaded is None or device is None:
-        return _DENIED | {"text": escape_mdv2(l10n.format_value("vpn-awg-denied-alert"))}
+        return _denied(l10n)
 
     peer: AwgPeer | None = None
     panel_ok = True
@@ -318,7 +332,7 @@ async def get_name_data(dialog_manager: DialogManager, l10n: FluentLocalization,
     else:
         async with async_session() as session:
             loaded = await _load_access(session, dialog_manager.event.from_user.id)
-        device = _find_device(loaded[1], target) if loaded else None
+        device = _find_device(loaded[1] if loaded else None, target)
         name = _device_name(l10n, device) if device else ""
         text = l10n.format_value("vpn-awg-name-rename", args={"name": escape_mdv2(name), "max": MAX_DEVICE_LABEL_LEN})
 
@@ -364,7 +378,7 @@ async def get_config_data(dialog_manager: DialogManager, l10n: FluentLocalizatio
 async def get_delete_data(dialog_manager: DialogManager, l10n: FluentLocalization, **kwargs) -> dict[str, Any]:
     async with async_session() as session:
         loaded = await _load_access(session, dialog_manager.event.from_user.id)
-    device = _find_device(loaded[1], dialog_manager.dialog_data.get(_DEVICE)) if loaded else None
+    device = _find_device(loaded[1] if loaded else None, dialog_manager.dialog_data.get(_DEVICE))
     name = _device_name(l10n, device) if device else ""
     return {"text": l10n.format_value("vpn-awg-delete-confirm", args={"name": escape_mdv2(name)})}
 
@@ -385,7 +399,7 @@ async def on_start_add(clb: CallbackQuery, widget: Button, dialog_manager: Dialo
         return
     # Лимит проверяем до вопроса о названии, чтобы человек не печатал его зря.
     access = loaded[1]
-    if len(access.devices) >= device_limit(access):
+    if len(_devices(access)) >= device_limit(access):
         await clb.answer(_awg_error_text(l10n, AwgDeviceLimitError(), access), show_alert=True)
         return
 
@@ -403,7 +417,7 @@ async def on_restore(clb: CallbackQuery, widget: Button, dialog_manager: DialogM
             if loaded is None:
                 await clb.answer(l10n.format_value("vpn-awg-denied-alert"), show_alert=True)
                 return
-            if loaded[1].status == "suspended":
+            if loaded[1] is not None and loaded[1].status == "suspended":
                 await restore_access(session, get_awg_client(), loaded[1])
                 await session.commit()
     except AwgError as exc:
@@ -423,11 +437,11 @@ async def on_get_config(clb: CallbackQuery, widget: Button, dialog_manager: Dial
     try:
         async with async_session() as session:
             loaded = await _load_access(session, clb.from_user.id)
-            device = _find_device(loaded[1], number) if loaded else None
-            if loaded is None or device is None:
+            person, access = loaded or (None, None)
+            device = _find_device(access, number)
+            if person is None or access is None or device is None:
                 await clb.answer(l10n.format_value("vpn-awg-denied-alert"), show_alert=True)
                 return
-            person, access = loaded
 
             config = await issue_device_config(session, get_awg_client(), access, device, person)
             await session.commit()
@@ -453,10 +467,11 @@ async def on_delete_confirmed(clb: CallbackQuery, widget: Button, dialog_manager
     try:
         async with async_session() as session:
             loaded = await _load_access(session, clb.from_user.id)
-            device = _find_device(loaded[1], number) if loaded else None
+            access = loaded[1] if loaded else None
+            device = _find_device(access, number)
             # Устройство могли уже удалить из другого окна - удалять нечего, просто возвращаемся.
-            if device is not None:
-                await remove_device(session, get_awg_client(), loaded[1], device)
+            if access is not None and device is not None:
+                await remove_device(session, get_awg_client(), access, device)
                 await session.commit()
     except AwgError as exc:
         await log.aerror("vpn-awg-delete-failed", telegram_id=clb.from_user.id, number=number, error=str(exc))
@@ -489,6 +504,7 @@ async def on_name_entered(
             person, access = loaded
 
             if target is None:
+                access = await _grant_access(session, person, access)
                 device, config = await add_device(session, get_awg_client(), access, person, label)
                 await session.commit()
             else:

@@ -1,10 +1,11 @@
 from .client import XuiClient, close_xui_client, get_xui_client
 from .exceptions import XuiAuthError, XuiClientNotFoundError, XuiError
 from .identity import build_client_email, fallback_client_email, is_valid_client_id
-from .schemas import ClientRecord, ClientTraffic, XuiClientPayload
+from .schemas import ClientDetails, ClientRecord, ClientTraffic, XuiClientPayload
 from .service import ensure_subscription, issue_subscription, reissue_subscription, restore_subscription
 
 __all__ = [
+    "ClientDetails",
     "ClientRecord",
     "ClientTraffic",
     "XuiAuthError",

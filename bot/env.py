@@ -129,9 +129,6 @@ class AwgConfig(_Section):
 
     # ID AmneziaWG-инбаунда в 3x-ui; 0 - AmneziaWG в боте выключен.
     INBOUND_ID: int = Field(0, alias="AWG_INBOUND_ID")
-    # Адрес сервера в Endpoint конфига; пусто - Listen IP инбаунда. Домен за Cloudflare не подойдёт:
-    # CDN не проксирует UDP, и handshake не дойдёт до сервера.
-    ENDPOINT_HOST: str = Field("", alias="AWG_ENDPOINT_HOST")
     # Отдельная группа: по XUI_GROUP бот сверяет VLESS-подписки, ключам устройств там не место.
     GROUP: str = Field("SPb LBG AmneziaWG", alias="AWG_GROUP")
     # Имя файла конфига: приложения AmneziaWG берут его как имя туннеля (до 15 символов),

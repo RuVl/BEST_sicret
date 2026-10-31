@@ -1,83 +1,21 @@
-"""Схемы AmneziaWG-инбаунда панели 3x-ui (v3.11+).
+"""Схемы клиента AmneziaWG-инбаунда панели 3x-ui (v3.11+).
 
-Поля повторяют Go-структуры панели: ``amneziawg.InboundSettings.Server`` (параметры сервера и
-обфускации, общие для всех клиентов) и ``model.ClientRecord`` (ключи и адрес устройства).
+Поля повторяют Go-структуру панели ``model.ClientRecord``: ключи и адрес устройства.
+Параметры сервера и обфускации бот не читает - готовый конфиг собирает сама панель.
 """
 
-import json
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from includes.vpn.schemas import ClientTraffic
+from includes.vpn.schemas import ClientDetails, ClientTraffic
 
 # 3x-ui отмечает клиента онлайн по трафику, а keepalive у нас 25 с - три минуты тишины значат «не в сети».
 ONLINE_WINDOW = timedelta(minutes=3)
 DEFAULT_KEEPALIVE = 25
 
 ConnectionStatus = Literal["online", "inactive", "never", "disabled"]
-
-
-class AwgServer(BaseModel):
-    """Блок ``settings.server`` инбаунда: всё, что клиентский конфиг должен повторить один в один."""
-
-    # H1-H4 панель хранит строками, но может прислать и числом - приводим к строке.
-    model_config = ConfigDict(populate_by_name=True, extra="ignore", coerce_numbers_to_str=True)
-
-    public_key: str = Field("", alias="publicKey")
-    primary_dns: str = Field("", alias="primaryDns")
-    secondary_dns: str = Field("", alias="secondaryDns")
-    mtu: int = 0
-
-    jc: int | None = None
-    jmin: int | None = None
-    jmax: int | None = None
-    s1: int | None = None
-    s2: int | None = None
-    s3: int | None = None
-    s4: int | None = None
-    h1: str = ""
-    h2: str = ""
-    h3: str = ""
-    h4: str = ""
-    i1: str = ""
-    i2: str = ""
-    i3: str = ""
-    i4: str = ""
-    i5: str = ""
-
-    # AWG 3.0 / 3.1: без 3.1-клиента с этими полями handshake молча не пройдёт.
-    header_protection_key: str = Field("", alias="headerProtectionKey")
-    content_padding_addition: str = Field("", alias="contentPaddingAddition")
-    rekey_after_time: str = Field("", alias="rekeyAfterTime")
-    rekey_timeout: str = Field("", alias="rekeyTimeout")
-    reject_after_time: str = Field("", alias="rejectAfterTime")
-    keepalive_timeout: str = Field("", alias="keepaliveTimeout")
-    max_handshake_attempts: str = Field("", alias="maxHandshakeAttempts")
-    random_trailers: bool = Field(False, alias="randomTrailers")
-    disable_cookies: bool = Field(False, alias="disableCookies")
-
-
-class AwgInbound(BaseModel):
-    """AmneziaWG-инбаунд из ``GET /panel/api/inbounds/get/:id``."""
-
-    model_config = ConfigDict(populate_by_name=True, extra="ignore")
-
-    id: int
-    protocol: str = ""
-    remark: str = ""
-    listen: str = ""
-    port: int
-    server: AwgServer
-
-    @classmethod
-    def from_panel(cls, obj: dict[str, Any]) -> "AwgInbound":
-        """``settings`` панель отдаёт JSON-строкой - разбираем и достаём ``server``."""
-        settings = obj.get("settings") or {}
-        if isinstance(settings, str):
-            settings = json.loads(settings) if settings else {}
-        return cls.model_validate({**obj, "server": settings.get("server") or {}})
 
 
 class AwgPeer(BaseModel):
@@ -120,14 +58,14 @@ class AwgPeer(BaseModel):
         return "inactive"
 
     @classmethod
-    def from_panel(cls, obj: dict[str, Any], inbound_id: int, traffic: ClientTraffic | None) -> "AwgPeer":
+    def from_panel(cls, details: ClientDetails, inbound_id: int, traffic: ClientTraffic | None) -> "AwgPeer":
         """Собрать устройство из ``/clients/get/:email`` и счётчиков ``/clients/traffic/:email``.
 
         ``client.allowedIPs`` у панели одна колонка на все туннельные инбаунды, поэтому адрес
         именно этого инбаунда берём из ``tunnelAllowedIPs``, а общий - только запасным.
         """
-        client = obj["client"]
-        tunnel = (obj.get("tunnelAllowedIPs") or {}).get(str(inbound_id))
+        client = details.client
+        tunnel = details.tunnel_allowed_ips.get(str(inbound_id))
         address = tunnel if tunnel is not None else client.get("allowedIPs")
         if isinstance(address, list):
             address = ", ".join(address)

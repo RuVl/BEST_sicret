@@ -29,14 +29,11 @@ def _peer_comment(person: Person, device: AwgDevice) -> str:
     return build_peer_comment(person.full_name, person.telegram_username, person.telegram_id, device.number)
 
 
-def _remark(device: AwgDevice) -> str:
-    """Подпись над [Peer] в конфиге - по ней человек отличит файлы своих устройств."""
-    return f"{settings.awg.TUNNEL_NAME} - {device.label or f'устройство {device.number}'}"
-
-
-def device_limit(access: AwgAccess) -> int:
-    """Лимит устройств: личный из разрешения или общий из настроек."""
-    return access.device_limit if access.device_limit is not None else settings.awg.DEVICE_LIMIT
+def device_limit(access: AwgAccess | None) -> int:
+    """Лимит устройств: личный из разрешения или общий из настроек (в том числе, пока разрешения нет)."""
+    if access is None or access.device_limit is None:
+        return settings.awg.DEVICE_LIMIT
+    return access.device_limit
 
 
 async def peers_by_name(client: AwgClient, access: AwgAccess) -> dict[str, AwgPeer]:
@@ -91,7 +88,7 @@ async def issue_device_config(
     await _ensure_usable(session, client, access)
 
     peer = await ensure_peer(client, device, person)
-    config = await client.get_config(peer, _remark(device))
+    config = await client.get_config(peer)
 
     await mark_issued(session, device)
     return config

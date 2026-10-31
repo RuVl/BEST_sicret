@@ -9,13 +9,18 @@
 
 Человек указывается Telegram-username'ом (``@ivan``) или числовым Telegram ID и должен хоть раз
 нажать /start в боте. Активным мемберам AmneziaWG открыт и без ``grant``: разрешение заводится
-само при первом входе в окно. ``grant`` нужен, чтобы вернуть отозванный доступ или выставить личный
-лимит устройств; ключи в 3x-ui появятся, когда человек сам заведёт устройства в боте.
+само с первым устройством (или рассылкой). ``grant`` нужен, чтобы вернуть отозванный доступ или
+выставить личный лимит устройств; ключи в 3x-ui появятся, когда человек сам заведёт устройства в боте.
+
+``announce`` шлёт каждому один раз: кому сообщение дошло, отмечается в БД, и повторный запуск
+дошлёт только остальным (новым мемберам и тем, у кого отправка сорвалась).
 """
 
 import argparse
 import asyncio
 import sys
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
@@ -29,10 +34,11 @@ from database.methods.awg_access import (
     create_access,
     get_access_by_person,
     list_accesses,
+    mark_announced,
     mark_revoked,
     set_device_limit,
 )
-from database.methods.person import list_active_member_persons
+from database.methods.person import list_member_persons
 from database.models import AwgAccess, Person
 from env import settings
 from includes import get_fluent_localization
@@ -77,13 +83,20 @@ def _devices(access: AwgAccess) -> str:
     return f"устройств {len(access.devices)}/{device_limit(access)}"
 
 
-async def _send_granted_notice(telegram_id: int, limit: int) -> None:
-    text = get_fluent_localization().format_value("vpn-awg-granted-notice", args={"limit": limit})
+@asynccontextmanager
+async def _bot() -> AsyncIterator[Bot]:
+    """Бот только для отправки уведомлений из CLI - без polling, сессию закрываем сами."""
     bot = Bot(token=settings.telegram.API_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN_V2))
     try:
-        await notify(bot, telegram_id, text)
+        yield bot
     finally:
         await bot.session.close()
+
+
+async def _send_granted_notice(telegram_id: int, limit: int) -> None:
+    text = get_fluent_localization().format_value("vpn-awg-granted-notice", args={"limit": limit})
+    async with _bot() as bot:
+        await notify(bot, telegram_id, text)
 
 
 async def cmd_list(_: argparse.Namespace) -> None:
@@ -163,26 +176,42 @@ async def cmd_revoke(args: argparse.Namespace) -> None:
 
 
 async def cmd_announce(args: argparse.Namespace) -> None:
-    """Рассказать всем активным мемберам, что AmneziaWG теперь основной и старые конфиги надо получить заново."""
+    """Рассказать активным мемберам, что AmneziaWG теперь основной и старые конфиги надо получить заново.
+
+    Отозванным доступ не предлагаем, а кому сообщение уже дошло - не шлём повторно.
+    """
+    l10n = get_fluent_localization()
+    sent = 0
     async with async_session() as session:
-        persons = [person for person in await list_active_member_persons(session) if current_member(person)]
+        recipients: list[tuple[Person, AwgAccess | None]] = []
+        for person in await list_member_persons(session):
+            if current_member(person) is None:
+                continue
+            access = await get_access_by_person(session, person.id)
+            if access is not None and (access.status == "revoked" or access.announced_at is not None):
+                continue
+            recipients.append((person, access))
 
-    if args.dry_run:
-        for person in persons:
-            print(_describe(person))
-        print(f"Получат сообщение: {len(persons)} (dry-run, ничего не отправлено)")
-        return
+        if args.dry_run:
+            for person, access in recipients:
+                print(f"{_describe(person)}, лимит {device_limit(access)}")
+            print(f"Получат сообщение: {len(recipients)} (dry-run, ничего не отправлено)")
+            return
 
-    text = get_fluent_localization().format_value("vpn-awg-announce", args={"limit": settings.awg.DEVICE_LIMIT})
-    bot = Bot(token=settings.telegram.API_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN_V2))
-    try:
-        for person in persons:
-            await notify(bot, person.telegram_id, text)
-            # Telegram режет рассылку больше ~30 сообщений в секунду - идём с запасом.
-            await asyncio.sleep(0.1)
-    finally:
-        await bot.session.close()
-    print(f"Отправлено: {len(persons)} (заблокировавшие бота пропущены, см. лог)")
+        async with _bot() as bot:
+            for person, access in recipients:
+                # Отметку о рассылке хранит разрешение - заводим его тем, у кого его ещё нет.
+                access = access or await create_access(session, person_id=person.id)
+                text = l10n.format_value("vpn-awg-announce", args={"limit": device_limit(access)})
+                if await notify(bot, person.telegram_id, text):
+                    await mark_announced(session, access)
+                    sent += 1
+                # Коммит на каждого: прерванный запуск не разошлёт уже дошедшее повторно.
+                await session.commit()
+                # Telegram режет рассылку больше ~30 сообщений в секунду - идём с запасом.
+                await asyncio.sleep(0.1)
+
+    print(f"Отправлено: {sent} из {len(recipients)} (не дошедшим - см. лог, повторный запуск дошлёт им)")
 
 
 def _parser() -> argparse.ArgumentParser:
