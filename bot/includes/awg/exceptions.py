@@ -1,13 +1,9 @@
 class AwgError(Exception):
-    """Веб-панель AmneziaWG вернула ошибку или недоступна."""
+    """Панель 3x-ui вернула ошибку или недоступна, либо AmneziaWG-инбаунд настроен не так."""
 
 
 class AwgAuthError(AwgError):
     """API-токен не принят панелью (401/403)."""
-
-
-class AwgPeerNotFoundError(AwgError):
-    """Пира с таким ID в панели нет (или у него не найден конфиг)."""
 
 
 class AwgDeviceLimitError(AwgError):

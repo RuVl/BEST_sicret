@@ -12,6 +12,7 @@ from urllib.parse import quote
 
 import aiohttp
 import structlog
+from pydantic import BaseModel
 from structlog.typing import FilteringBoundLogger
 
 from env import settings
@@ -83,8 +84,8 @@ class XuiClient:
 
     # === Клиенты ===
 
-    async def get_client(self, email: str) -> ClientRecord | None:
-        """Вернуть клиента панели или ``None``, если его нет."""
+    async def get_client_obj(self, email: str) -> dict[str, Any] | None:
+        """Сырой ответ ``/clients/get/:email`` (``client``, ``inboundIds``, ``tunnelAllowedIPs``) или ``None``."""
         try:
             obj = await self._request("GET", f"/clients/get/{quote(email, safe='')}")
         except XuiClientNotFoundError:
@@ -97,7 +98,12 @@ class XuiClient:
 
         if not obj or not obj.get("client"):
             return None
-        return ClientRecord.model_validate(obj["client"])
+        return obj
+
+    async def get_client(self, email: str) -> ClientRecord | None:
+        """Вернуть клиента панели или ``None``, если его нет."""
+        obj = await self.get_client_obj(email)
+        return ClientRecord.model_validate(obj["client"]) if obj else None
 
     async def get_traffic(self, email: str) -> ClientTraffic | None:
         obj = await self._request("GET", f"/clients/traffic/{quote(email, safe='')}")
@@ -105,7 +111,11 @@ class XuiClient:
             return None
         return ClientTraffic.model_validate(obj)
 
-    async def add_client(self, client: XuiClientPayload, inbound_ids: list[int]) -> None:
+    async def add_client(self, client: BaseModel, inbound_ids: list[int]) -> None:
+        """Завести клиента в инбаундах. Тело зависит от протокола: VLESS - ``XuiClientPayload``.
+
+        Секреты, которых нет в теле, панель генерирует сама (у AmneziaWG - ключи и адрес в подсети).
+        """
         await self._request(
             "POST",
             "/clients/add",
@@ -138,10 +148,32 @@ class XuiClient:
         await self.update_client(email, record.to_payload().model_copy(update={"enable": enabled}))
         await logger.ainfo("xui-client-set-enabled", email=email, enabled=enabled)
 
+    async def set_enabled_many(self, emails: list[str], enabled: bool) -> None:
+        """Включить/выключить сразу нескольких клиентов. Тело клиента не пересылаем - ключи не трогаются."""
+        if not emails:
+            return
+        path = "/clients/bulkEnable" if enabled else "/clients/bulkDisable"
+        await self._request("POST", path, json={"emails": emails})
+        await logger.ainfo("xui-clients-set-enabled", emails=emails, enabled=enabled)
+
+    async def delete_client(self, email: str) -> None:
+        """Удалить клиента из всех инбаундов вместе со счётчиками трафика."""
+        await self._request("POST", f"/clients/del/{quote(email, safe='')}")
+        await logger.ainfo("xui-client-delete", email=email)
+
     async def list_group_emails(self, group: str) -> list[str]:
         """Все email клиентов в группе - для сверки «БД бота ↔ панель»."""
         obj = await self._request("GET", f"/clients/groups/{quote(group, safe='')}/emails")
         return list(obj or [])
+
+    # === Инбаунды ===
+
+    async def get_inbound(self, inbound_id: int) -> dict[str, Any]:
+        """Инбаунд как есть: ``settings`` панель отдаёт JSON-строкой."""
+        obj = await self._request("GET", f"/inbounds/get/{inbound_id}")
+        if not isinstance(obj, dict):
+            raise XuiError(f"Инбаунда {inbound_id} нет в панели")
+        return obj
 
     # === Ссылка-подписка ===
 

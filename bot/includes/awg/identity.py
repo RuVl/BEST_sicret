@@ -1,7 +1,8 @@
-"""Имя клиента AmneziaWG.
+"""Имя клиента AmneziaWG - его email в панели 3x-ui.
 
-Установщик и панель пускают только ASCII-буквы, цифры, ``_`` и ``-``, не длиннее 15 символов
-(``validate_client_name`` в amneziawg-web), а имя глобально уникально на интерфейсе.
+Имя глобально уникально в панели. Правила - от прежнего сервера AmneziaWG (ASCII-буквы, цифры,
+``_`` и ``-``, не длиннее 15 символов): с ними уже заведены устройства в БД, и они же проходят
+проверку email в 3x-ui.
 """
 
 import re
@@ -46,14 +47,11 @@ def normalize_device_label(value: str) -> str:
     return label
 
 
-def build_peer_comment(
-    full_name: str,
-    username: str | None,
-    telegram_id: int,
-    number: int,
-    label: str | None = None,
-) -> str:
-    """Подпись пира в панели - чтобы в админке было видно, чей это ключ и на каком он устройстве."""
+def build_peer_comment(full_name: str, username: str | None, telegram_id: int, number: int) -> str:
+    """Подпись клиента в панели - чтобы в админке было видно, чей это ключ и какое устройство по счёту.
+
+    Название устройства сюда не пишем: оно меняется в боте, а подпись в панели после создания
+    бот не трогает (см. ``rename_device``).
+    """
     handle = f"@{username}" if username else "без username"
-    device = f"«{label}»" if label else f"устройство {number}"
-    return f"{full_name} ({handle}, tg {telegram_id}), {device} - выдан ботом"
+    return f"{full_name} ({handle}, tg {telegram_id}), устройство {number} - выдан ботом"

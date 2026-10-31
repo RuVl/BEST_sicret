@@ -1,5 +1,6 @@
-from .client import AwgClient, close_awg_client, get_awg_client
-from .exceptions import AwgAccessRevokedError, AwgAuthError, AwgDeviceLimitError, AwgError, AwgPeerNotFoundError
+from .client import AwgClient, get_awg_client
+from .config import build_client_config, effective_mtu
+from .exceptions import AwgAccessRevokedError, AwgAuthError, AwgDeviceLimitError, AwgError
 from .identity import (
     MAX_DEVICE_LABEL_LEN,
     build_peer_comment,
@@ -9,7 +10,7 @@ from .identity import (
     normalize_device_label,
 )
 from .qr import render_config_qr
-from .schemas import AwgPeer, AwgUsagePeriod, AwgUsageSummary
+from .schemas import AwgClientPayload, AwgInbound, AwgPeer, AwgServer
 from .service import (
     add_device,
     device_limit,
@@ -28,18 +29,19 @@ __all__ = [
     "AwgAccessRevokedError",
     "AwgAuthError",
     "AwgClient",
+    "AwgClientPayload",
     "AwgDeviceLimitError",
     "AwgError",
+    "AwgInbound",
     "AwgPeer",
-    "AwgPeerNotFoundError",
-    "AwgUsagePeriod",
-    "AwgUsageSummary",
+    "AwgServer",
     "add_device",
+    "build_client_config",
     "build_peer_comment",
-    "close_awg_client",
     "device_client_name",
     "device_limit",
     "disable_peers",
+    "effective_mtu",
     "ensure_peer",
     "free_device_number",
     "get_awg_client",

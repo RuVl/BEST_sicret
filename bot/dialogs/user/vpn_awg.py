@@ -1,8 +1,11 @@
 """Окна устройств AmneziaWG внутри диалога VPN-подписки.
 
+AmneziaWG - основной протокол, он открыт каждому активному мемберу LBG: разрешение заводится
+само при первом входе в окно, админ может только отозвать его или поменять лимит (``make awg-*``).
+
 Один ключ AmneziaWG - одно устройство (в отличие от VLESS, где одна ссылка работает на
 нескольких), поэтому человек заводит ключ на каждое устройство в пределах лимита, называет
-его сам и видит по нему статус и трафик из веб-панели AmneziaWG.
+его сам и видит по нему статус и трафик из панели 3x-ui.
 
 Конфиг - это приватный ключ, поэтому он не уходит отдельными сообщениями: он показывается
 окном диалога (файл или QR-код с кнопками) и исчезает из чата, когда человек уходит из окна,
@@ -26,7 +29,7 @@ from aiogram.types import CallbackQuery, ContentType, Message
 from aiogram_dialog import BaseDialogManager, DialogManager, ShowMode, Window
 from aiogram_dialog.api.entities import MediaAttachment
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
-from aiogram_dialog.widgets.kbd import Button, Column, Select, SwitchTo
+from aiogram_dialog.widgets.kbd import Button, Column, Select, SwitchTo, Url
 from aiogram_dialog.widgets.media import DynamicMedia
 from aiogram_dialog.widgets.text import Format
 from fluent.runtime import FluentLocalization
@@ -34,7 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from structlog.typing import FilteringBoundLogger
 
 from database.main import async_session
-from database.methods.awg_access import get_access_by_person
+from database.methods.awg_access import create_access, get_access_by_person
 from database.methods.person import get_person_with_member
 from database.models import AwgAccess, AwgDevice, Person
 from env import settings
@@ -44,8 +47,6 @@ from includes.awg import (
     AwgDeviceLimitError,
     AwgError,
     AwgPeer,
-    AwgUsagePeriod,
-    AwgUsageSummary,
     add_device,
     device_limit,
     get_awg_client,
@@ -81,18 +82,29 @@ _hide_tasks: set[asyncio.Task] = set()
 
 # ========== Общие помощники ==========
 def awg_allowed(access: AwgAccess | None) -> bool:
-    """Окно AmneziaWG: разрешение есть и не отозвано админом (``suspended`` оживает по кнопке)."""
-    return settings.awg.ENABLED and access is not None and access.status != "revoked"
+    """Окно AmneziaWG: у мембера нет разрешения (заведётся само) или оно не отозвано админом.
+
+    ``suspended`` тоже пускает: выключенные ключи оживают по кнопке «Включить ключи».
+    """
+    return settings.awg.ENABLED and (access is None or access.status != "revoked")
 
 
 async def _load_access(session: AsyncSession, telegram_id: int) -> tuple[Person, AwgAccess] | None:
-    """Человек и его разрешение - или ``None``, если доступа к AmneziaWG у него сейчас нет."""
+    """Человек и его разрешение - или ``None``, если доступа к AmneziaWG у него сейчас нет.
+
+    Разрешения ещё нет - заводим и сразу коммитим: так у устройств есть строка-владелец, а лимит
+    админ потом поменяет точечно.
+    """
     person = await get_person_with_member(session, telegram_id)
     if current_member(person) is None:
         return None
     access = await get_access_by_person(session, person.id)
     if not awg_allowed(access):
         return None
+    if access is None:
+        access = await create_access(session, person_id=person.id)
+        await session.commit()
+        await logger.ainfo("awg-access-auto-granted", person_id=person.id)
     return person, access
 
 
@@ -109,24 +121,22 @@ def _device_status(l10n: FluentLocalization, peer: AwgPeer | None, peers_known: 
         return l10n.format_value("vpn-awg-status-unknown-part")
     if peer is None:
         return l10n.format_value("vpn-awg-status-missing-part")
-    if peer.connection_status in ("online", "inactive", "never", "disabled"):
-        return l10n.format_value(f"vpn-awg-status-{peer.connection_status}-part")
-    return l10n.format_value("vpn-awg-status-unknown-part")
+    return l10n.format_value(f"vpn-awg-status-{peer.connection_status()}-part")
 
 
-def _format_handshake(l10n: FluentLocalization, moment: datetime | None) -> str:
+def _format_last_online(l10n: FluentLocalization, moment: datetime | None) -> str:
     if moment is None:
         return l10n.format_value("vpn-awg-handshake-never-part")
     return moment.astimezone(_DISPLAY_TZ).strftime("%d.%m.%Y %H:%M")
 
 
-def _format_period(l10n: FluentLocalization, period: AwgUsagePeriod | None) -> str:
-    """«скачано / отправлено» глазами человека: панель считает со стороны сервера, поэтому tx - это скачано."""
-    if period is None:
+def _format_traffic(l10n: FluentLocalization, peer: AwgPeer | None) -> str:
+    """«скачано / отправлено» глазами человека - счётчики 3x-ui и так считают со стороны клиента."""
+    if peer is None:
         return l10n.format_value("vpn-awg-no-data-part")
     return l10n.format_value(
         "vpn-awg-traffic-part",
-        args={"down": format_traffic(period.tx_bytes), "up": format_traffic(period.rx_bytes)},
+        args={"down": format_traffic(peer.down), "up": format_traffic(peer.up)},
     )
 
 
@@ -228,7 +238,7 @@ async def get_awg_data(
     peers_known = True
     if access.devices:
         try:
-            peers = await peers_by_name(get_awg_client())
+            peers = await peers_by_name(get_awg_client(), access)
         except AwgError as exc:
             await log.aerror("vpn-awg-status-failed", person_id=person.id, error=str(exc))
             peers_known = False
@@ -278,13 +288,9 @@ async def get_device_data(
         return _DENIED | {"text": escape_mdv2(l10n.format_value("vpn-awg-denied-alert"))}
 
     peer: AwgPeer | None = None
-    usage: AwgUsageSummary | None = None
     panel_ok = True
-    client = get_awg_client()
     try:
-        peer = await client.find_peer(device.client_name)
-        if peer is not None:
-            usage = await client.get_usage_summary(peer.id)
+        peer = await get_awg_client().find_peer(device.client_name)
     except AwgError as exc:
         await log.aerror("vpn-awg-stats-failed", person_id=loaded[0].id, number=device.number, error=str(exc))
         panel_ok = False
@@ -295,10 +301,8 @@ async def get_device_data(
         args={
             "name": escape_mdv2(_device_name(l10n, device)),
             "status": escape_mdv2(_device_status(l10n, peer, panel_ok)),
-            "handshake": escape_mdv2(_format_handshake(l10n, peer.latest_handshake_at) if peer else no_data),
-            "day": escape_mdv2(_format_period(l10n, usage.day if usage else None)),
-            "week": escape_mdv2(_format_period(l10n, usage.week if usage else None)),
-            "month": escape_mdv2(_format_period(l10n, usage.month if usage else None)),
+            "online": escape_mdv2(_format_last_online(l10n, peer.last_online_at) if peer else no_data),
+            "traffic": escape_mdv2(_format_traffic(l10n, peer)),
         },
     )
     if not panel_ok:
@@ -483,15 +487,14 @@ async def on_name_entered(
                 await dialog_manager.switch_to(ViewVpnSubscription.AWG)
                 return
             person, access = loaded
-            client = get_awg_client()
 
             if target is None:
-                device, config = await add_device(session, client, access, person, label)
+                device, config = await add_device(session, get_awg_client(), access, person, label)
                 await session.commit()
             else:
                 device = _find_device(access, target)
                 if device is not None:
-                    await rename_device(session, client, device, person, label)
+                    await rename_device(session, device, label)
                     await session.commit()
                 config = None
     except AwgError as exc:
@@ -561,6 +564,13 @@ awg_windows = (
             id="awg_add",
             on_click=on_start_add,
             when=F["is_allowed"] & F["can_add"],
+        ),
+        # Конфиг 3.1 старые клиенты не импортируют или молча не подключаются - даём ссылки на свежие.
+        Column(
+            Url(L10nFormat("vpn-awg-android-btn"), L10nFormat("vpn-awg-android-url")),
+            Url(L10nFormat("vpn-awg-apk-btn"), L10nFormat("vpn-awg-apk-url")),
+            Url(L10nFormat("vpn-awg-ios-btn"), L10nFormat("vpn-awg-ios-url")),
+            when="is_allowed",
         ),
         SwitchTo(L10nFormat("back-btn"), id="awg_back", state=ViewVpnSubscription.VIEW),
         getter=get_awg_data,
