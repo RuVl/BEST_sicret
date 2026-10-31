@@ -53,7 +53,7 @@ async def get_vpn_data(
             "has_subscription": False,
             "awg_allowed": False,
             # Ключ живёт и в алерте (там разметки нет), поэтому в ftl он без экранирования.
-            "text": escape_mdv2(l10n.format_value("vpn-access-denied")),
+            "text": escape_mdv2(l10n.format_value("vpn-access-denied-alert")),
         }
 
     data = await _get_subscription_data(subscription, person.id, l10n, log)
@@ -83,7 +83,7 @@ async def _get_subscription_data(
         traffic = await client.get_traffic(subscription.xui_email)
     except XuiError as exc:
         await log.aerror("vpn-status-failed", person_id=person_id, error=str(exc))
-        return {"is_allowed": True, "has_subscription": True, "text": escape_mdv2(l10n.format_value("vpn-error"))}
+        return {"is_allowed": True, "has_subscription": True, "text": escape_mdv2(l10n.format_value("vpn-error-alert"))}
 
     if traffic is None:
         # Панель на удалённого клиента отвечает success=true с пустым obj.
@@ -123,7 +123,7 @@ async def on_issue(
             member = current_member(person)
 
             if member is None:
-                await clb.answer(l10n.format_value("vpn-access-denied"), show_alert=True)
+                await clb.answer(l10n.format_value("vpn-access-denied-alert"), show_alert=True)
                 return
 
             # Всё сведение расхождений с панелью - внутри ensure_subscription.
@@ -131,10 +131,10 @@ async def on_issue(
             await session.commit()
     except XuiError as exc:
         await log.aerror("vpn-issue-failed", telegram_id=clb.from_user.id, error=str(exc))
-        await clb.answer(l10n.format_value("vpn-error"), show_alert=True)
+        await clb.answer(l10n.format_value("vpn-error-alert"), show_alert=True)
         return
 
-    await clb.answer(l10n.format_value("vpn-issued"))
+    await clb.answer(l10n.format_value("vpn-issued-alert"))
 
 
 # ========== Диалог ==========
@@ -165,7 +165,7 @@ vpn_dialog = Dialog(
             L10nFormat("vpn-handbook-url"),
             when=F["is_allowed"],
         ),
-        Cancel(L10nFormat("back")),
+        Cancel(L10nFormat("back-btn")),
         getter=get_vpn_data,
         state=ViewVpnSubscription.VIEW,
     ),

@@ -103,7 +103,7 @@ async def get_item_detail(
         await dialog_manager.switch_to(ViewInventory.SELECT_ITEM)
         return {}
 
-    place_address = item.place.address if item.place else l10n.format_value("no-place")
+    place_address = item.place.address if item.place else l10n.format_value("no-place-part")
 
     item_text = l10n.format_value(
         "item-detail",
@@ -216,7 +216,7 @@ inventory_dialog = Dialog(
             hide_on_single_page=True,
         ),
         Button(
-            L10nFormat("cancel"),
+            L10nFormat("cancel-btn"),
             id="cancel_inventory",
             on_click=lambda c, b, m: m.done(),
             when="is_selection_mode",
@@ -245,12 +245,12 @@ inventory_dialog = Dialog(
             hide_on_single_page=True,
         ),
         Button(
-            L10nFormat("clear-search"),
+            L10nFormat("clear-search-btn"),
             id="clear_search",
             on_click=clear_search,
             when="search_query",
         ),
-        Back(L10nFormat("back")),
+        Back(L10nFormat("back-btn")),
         getter=get_items_data,
         state=ViewInventory.SELECT_ITEM,
     ),
@@ -258,12 +258,12 @@ inventory_dialog = Dialog(
     Window(
         Format("{item_text}"),
         Button(
-            L10nFormat("select-item"),
+            L10nFormat("select-item-btn"),
             id="select_item_btn",
             on_click=on_item_chosen,
             when="is_selection_mode",
         ),
-        Back(L10nFormat("back")),
+        Back(L10nFormat("back-btn")),
         getter=get_item_detail,
         state=ViewInventory.VIEW_ITEM,
     ),

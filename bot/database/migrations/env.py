@@ -1,10 +1,12 @@
 import asyncio
 import logging
+from collections.abc import Iterable
 from logging.config import fileConfig
-from typing import Iterable
 
+# Импорт ради побочного эффекта: пакет регистрирует в alembic сравнение Postgres ENUM,
+# без него autogenerate не видит изменений значений enum. Имя модуля в коде не нужно.
 # noinspection PyUnresolvedReferences
-import alembic_postgresql_enum
+import alembic_postgresql_enum  # noqa: F401
 from alembic import context
 from alembic.operations import MigrationScript
 from alembic.runtime.migration import MigrationContext
@@ -18,7 +20,7 @@ from env import PostgresKeys
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
-config.set_main_option('sqlalchemy.url', PostgresKeys.URL)
+config.set_main_option("sqlalchemy.url", PostgresKeys.URL)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -35,7 +37,7 @@ target_metadata = models.Base.metadata
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
-logger = logging.getLogger('alembic')
+logger = logging.getLogger("alembic")
 
 
 def run_migrations_offline() -> None:
@@ -64,24 +66,22 @@ def run_migrations_offline() -> None:
 
 # noinspection PyUnusedLocal
 def process_revision_directives(
-        context: MigrationContext,
-        revision: str | Iterable[str | None] | Iterable[str],
-        directives: list[MigrationScript],
+    context: MigrationContext,
+    revision: str | Iterable[str | None] | Iterable[str],
+    directives: list[MigrationScript],
 ):
     assert config.cmd_opts is not None
-    if getattr(config.cmd_opts, 'autogenerate', False):
+    if getattr(config.cmd_opts, "autogenerate", False):
         script = directives[0]
         assert script.upgrade_ops is not None
         if script.upgrade_ops.is_empty():
             directives[:] = []
-            logger.info('No changes found! Nothing to do.')
+            logger.info("No changes found! Nothing to do.")
 
 
 def do_run_migrations(connection: Connection) -> None:
     context.configure(
-        connection=connection,
-        target_metadata=target_metadata,
-        process_revision_directives=process_revision_directives
+        connection=connection, target_metadata=target_metadata, process_revision_directives=process_revision_directives
     )
 
     with context.begin_transaction():

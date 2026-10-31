@@ -101,31 +101,31 @@ def _find_device(access: AwgAccess, number: int | None) -> AwgDevice | None:
 
 
 def _device_name(l10n: FluentLocalization, device: AwgDevice) -> str:
-    return device.label or l10n.format_value("vpn-awg-device-default-name", args={"number": device.number})
+    return device.label or l10n.format_value("vpn-awg-device-default-name-part", args={"number": device.number})
 
 
 def _device_status(l10n: FluentLocalization, peer: AwgPeer | None, peers_known: bool) -> str:
     if not peers_known:
-        return l10n.format_value("vpn-awg-status-unknown")
+        return l10n.format_value("vpn-awg-status-unknown-part")
     if peer is None:
-        return l10n.format_value("vpn-awg-status-missing")
+        return l10n.format_value("vpn-awg-status-missing-part")
     if peer.connection_status in ("online", "inactive", "never", "disabled"):
-        return l10n.format_value(f"vpn-awg-status-{peer.connection_status}")
-    return l10n.format_value("vpn-awg-status-unknown")
+        return l10n.format_value(f"vpn-awg-status-{peer.connection_status}-part")
+    return l10n.format_value("vpn-awg-status-unknown-part")
 
 
 def _format_handshake(l10n: FluentLocalization, moment: datetime | None) -> str:
     if moment is None:
-        return l10n.format_value("vpn-awg-handshake-never")
+        return l10n.format_value("vpn-awg-handshake-never-part")
     return moment.astimezone(_DISPLAY_TZ).strftime("%d.%m.%Y %H:%M")
 
 
 def _format_period(l10n: FluentLocalization, period: AwgUsagePeriod | None) -> str:
     """«скачано / отправлено» глазами человека: панель считает со стороны сервера, поэтому tx - это скачано."""
     if period is None:
-        return l10n.format_value("vpn-awg-no-data")
+        return l10n.format_value("vpn-awg-no-data-part")
     return l10n.format_value(
-        "vpn-awg-traffic",
+        "vpn-awg-traffic-part",
         args={"down": format_traffic(period.tx_bytes), "up": format_traffic(period.rx_bytes)},
     )
 
@@ -137,10 +137,12 @@ def _middleware(dialog_manager: DialogManager) -> tuple[FluentLocalization, Filt
 
 def _awg_error_text(l10n: FluentLocalization, exc: AwgError, access: AwgAccess | None) -> str:
     if isinstance(exc, AwgDeviceLimitError) and access is not None:
-        return l10n.format_value("vpn-awg-limit", args={"used": len(access.devices), "limit": device_limit(access)})
+        return l10n.format_value(
+            "vpn-awg-limit-alert", args={"used": len(access.devices), "limit": device_limit(access)}
+        )
     if isinstance(exc, AwgAccessRevokedError):
-        return l10n.format_value("vpn-awg-denied")
-    return l10n.format_value("vpn-awg-error")
+        return l10n.format_value("vpn-awg-denied-alert")
+    return l10n.format_value("vpn-awg-error-alert")
 
 
 async def _delete_quietly(bot: Bot, chat_id: int, message_id: int) -> None:
@@ -219,7 +221,7 @@ async def get_awg_data(
         loaded = await _load_access(session, dialog_manager.event.from_user.id)
 
     if loaded is None:
-        return _DENIED | {"text": escape_mdv2(l10n.format_value("vpn-awg-denied"))}
+        return _DENIED | {"text": escape_mdv2(l10n.format_value("vpn-awg-denied-alert"))}
     person, access = loaded
 
     peers: dict[str, AwgPeer] = {}
@@ -233,14 +235,14 @@ async def get_awg_data(
 
     lines = [
         l10n.format_value(
-            "vpn-awg-device-line",
+            "vpn-awg-device-line-part",
             args={
                 "name": _device_name(l10n, device),
                 "status": _device_status(l10n, peers.get(device.client_name), peers_known),
             },
         )
         for device in access.devices
-    ] or [l10n.format_value("vpn-awg-devices-empty")]
+    ] or [l10n.format_value("vpn-awg-devices-empty-part")]
 
     limit = device_limit(access)
     text = l10n.format_value(
@@ -273,7 +275,7 @@ async def get_device_data(
     device = _find_device(loaded[1], dialog_manager.dialog_data.get(_DEVICE)) if loaded else None
 
     if loaded is None or device is None:
-        return _DENIED | {"text": escape_mdv2(l10n.format_value("vpn-awg-denied"))}
+        return _DENIED | {"text": escape_mdv2(l10n.format_value("vpn-awg-denied-alert"))}
 
     peer: AwgPeer | None = None
     usage: AwgUsageSummary | None = None
@@ -287,7 +289,7 @@ async def get_device_data(
         await log.aerror("vpn-awg-stats-failed", person_id=loaded[0].id, number=device.number, error=str(exc))
         panel_ok = False
 
-    no_data = l10n.format_value("vpn-awg-no-data")
+    no_data = l10n.format_value("vpn-awg-no-data-part")
     text = l10n.format_value(
         "vpn-awg-device-card",
         args={
@@ -375,7 +377,7 @@ async def on_start_add(clb: CallbackQuery, widget: Button, dialog_manager: Dialo
         loaded = await _load_access(session, clb.from_user.id)
 
     if loaded is None:
-        await clb.answer(l10n.format_value("vpn-awg-denied"), show_alert=True)
+        await clb.answer(l10n.format_value("vpn-awg-denied-alert"), show_alert=True)
         return
     # Лимит проверяем до вопроса о названии, чтобы человек не печатал его зря.
     access = loaded[1]
@@ -395,17 +397,17 @@ async def on_restore(clb: CallbackQuery, widget: Button, dialog_manager: DialogM
         async with async_session() as session:
             loaded = await _load_access(session, clb.from_user.id)
             if loaded is None:
-                await clb.answer(l10n.format_value("vpn-awg-denied"), show_alert=True)
+                await clb.answer(l10n.format_value("vpn-awg-denied-alert"), show_alert=True)
                 return
             if loaded[1].status == "suspended":
                 await restore_access(session, get_awg_client(), loaded[1])
                 await session.commit()
     except AwgError as exc:
         await log.aerror("vpn-awg-restore-failed", telegram_id=clb.from_user.id, error=str(exc))
-        await clb.answer(l10n.format_value("vpn-awg-error"), show_alert=True)
+        await clb.answer(l10n.format_value("vpn-awg-error-alert"), show_alert=True)
         return
 
-    await clb.answer(l10n.format_value("vpn-awg-restored"))
+    await clb.answer(l10n.format_value("vpn-awg-restored-alert"))
 
 
 # ========== Хэндлеры: карточка устройства ==========
@@ -419,7 +421,7 @@ async def on_get_config(clb: CallbackQuery, widget: Button, dialog_manager: Dial
             loaded = await _load_access(session, clb.from_user.id)
             device = _find_device(loaded[1], number) if loaded else None
             if loaded is None or device is None:
-                await clb.answer(l10n.format_value("vpn-awg-denied"), show_alert=True)
+                await clb.answer(l10n.format_value("vpn-awg-denied-alert"), show_alert=True)
                 return
             person, access = loaded
 
@@ -454,12 +456,12 @@ async def on_delete_confirmed(clb: CallbackQuery, widget: Button, dialog_manager
                 await session.commit()
     except AwgError as exc:
         await log.aerror("vpn-awg-delete-failed", telegram_id=clb.from_user.id, number=number, error=str(exc))
-        await clb.answer(l10n.format_value("vpn-awg-error"), show_alert=True)
+        await clb.answer(l10n.format_value("vpn-awg-error-alert"), show_alert=True)
         await dialog_manager.switch_to(ViewVpnSubscription.AWG_DEVICE)
         return
 
     dialog_manager.dialog_data.pop(_DEVICE, None)
-    await clb.answer(l10n.format_value("vpn-awg-deleted"))
+    await clb.answer(l10n.format_value("vpn-awg-deleted-alert"))
     await dialog_manager.switch_to(ViewVpnSubscription.AWG)
 
 
@@ -512,7 +514,7 @@ async def on_name_error(message: Message, widget: ManagedTextInput, dialog_manag
     await _delete_quietly(message.bot, message.chat.id, message.message_id)
     dialog_manager.show_mode = ShowMode.EDIT
     dialog_manager.dialog_data[_NAME_ERROR] = l10n.format_value(
-        "vpn-awg-name-invalid", args={"max": MAX_DEVICE_LABEL_LEN}
+        "vpn-awg-name-invalid-part", args={"max": MAX_DEVICE_LABEL_LEN}
     )
 
 
@@ -560,7 +562,7 @@ awg_windows = (
             on_click=on_start_add,
             when=F["is_allowed"] & F["can_add"],
         ),
-        SwitchTo(L10nFormat("back"), id="awg_back", state=ViewVpnSubscription.VIEW),
+        SwitchTo(L10nFormat("back-btn"), id="awg_back", state=ViewVpnSubscription.VIEW),
         getter=get_awg_data,
         state=ViewVpnSubscription.AWG,
     ),
@@ -575,7 +577,7 @@ awg_windows = (
             state=ViewVpnSubscription.AWG_DELETE,
             when="has_device",
         ),
-        SwitchTo(L10nFormat("back"), id="awg_device_back", state=ViewVpnSubscription.AWG),
+        SwitchTo(L10nFormat("back-btn"), id="awg_device_back", state=ViewVpnSubscription.AWG),
         getter=get_device_data,
         state=ViewVpnSubscription.AWG_DEVICE,
     ),
@@ -588,7 +590,7 @@ awg_windows = (
             on_success=on_name_entered,
             on_error=on_name_error,
         ),
-        Button(L10nFormat("back"), id="awg_name_back", on_click=on_name_back),
+        Button(L10nFormat("back-btn"), id="awg_name_back", on_click=on_name_back),
         getter=get_name_data,
         state=ViewVpnSubscription.AWG_NAME,
     ),
@@ -611,7 +613,7 @@ awg_windows = (
     Window(
         Format("{text}"),
         Button(L10nFormat("vpn-awg-delete-yes-btn"), id="awg_delete_yes", on_click=on_delete_confirmed),
-        SwitchTo(L10nFormat("back"), id="awg_delete_back", state=ViewVpnSubscription.AWG_DEVICE),
+        SwitchTo(L10nFormat("back-btn"), id="awg_delete_back", state=ViewVpnSubscription.AWG_DEVICE),
         getter=get_delete_data,
         state=ViewVpnSubscription.AWG_DELETE,
     ),

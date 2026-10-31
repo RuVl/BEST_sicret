@@ -249,9 +249,9 @@ async def on_submit(clb: CallbackQuery, widget: Button, dialog_manager: DialogMa
             ),
         )
         await clb.message.forward(treasurer_id)
-        await clb.answer(l10n.format_value("application-saved"), show_alert=True)
+        await clb.answer(l10n.format_value("application-saved-alert"), show_alert=True)
     else:
-        await clb.answer(l10n.format_value("application-error"), show_alert=True)
+        await clb.answer(l10n.format_value("application-error-alert"), show_alert=True)
 
     await dialog_manager.done()
 
@@ -295,7 +295,7 @@ apply_equipment_dialog = Dialog(
         ),
         # Navigation to item selection
         Button(
-            L10nFormat("apply-eq-add-item"),
+            L10nFormat("apply-eq-add-item-btn"),
             id="go_to_inventory",
             on_click=on_start_add_item,
         ),
@@ -309,7 +309,7 @@ apply_equipment_dialog = Dialog(
         ),
         # Final submit
         Button(
-            L10nFormat("submit-application"),
+            L10nFormat("submit-application-btn"),
             id="submit_app",
             on_click=on_submit,
             when="can_submit",
@@ -336,7 +336,7 @@ apply_equipment_dialog = Dialog(
         Format("{question}"),
         TextInput(id="qty_input", on_success=on_quantity_input),
         SwitchTo(
-            L10nFormat("back"),
+            L10nFormat("back-btn"),
             id="back_to_view",
             state=CreateByApplyEquipment.VIEW,
         ),

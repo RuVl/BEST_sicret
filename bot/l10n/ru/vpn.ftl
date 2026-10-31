@@ -45,9 +45,9 @@ vpn-handbook-btn = Как подключиться
 vpn-handbook-url = https://docs.google.com/document/d/1gcmkXYgEY308JLwmrzNfeBirzJZDPrPx/edit
 
 # Notifications and errors
-vpn-issued = Подписка выпущена
-vpn-error = Панель VPN недоступна. Попробуйте позже или напишите VP4HR.
-vpn-access-denied = Доступ к VPN только для активных мемберов LBG
+vpn-issued-alert = Подписка выпущена
+vpn-error-alert = Панель VPN недоступна. Попробуйте позже или напишите VP4HR.
+vpn-access-denied-alert = Доступ к VPN только для активных мемберов LBG
 
 # === AmneziaWG (запасной протокол по разрешению админа) ===
 # Один конфиг - одно устройство, поэтому ключи заводятся по устройствам.
@@ -80,7 +80,7 @@ vpn-awg-name-rename = *Переименование*
     { "" }
     Напишите новое название для «{ $name }» \(до { $max } символов\)\.
 
-vpn-awg-name-invalid = Название должно быть от 1 до { $max } символов, попробуйте ещё раз.
+vpn-awg-name-invalid-part = Название должно быть от 1 до { $max } символов, попробуйте ещё раз.
 
 vpn-awg-config-caption = *{ $name }* — конфиг AmneziaWG
     { "" }
@@ -122,18 +122,18 @@ vpn-awg-suspend-report = *Автоотключение ключей AmneziaWG*
     { $details }
 
 # Строки списка и карточки - обычный текст, экранирует код
-vpn-awg-device-line = { $name }: { $status }
-vpn-awg-device-default-name = Устройство { $number }
-vpn-awg-devices-empty = Устройств пока нет. Нажмите «Добавить устройство».
-vpn-awg-status-online = в сети
-vpn-awg-status-inactive = давно не подключалось
-vpn-awg-status-never = ещё не подключалось
-vpn-awg-status-disabled = выключено
-vpn-awg-status-missing = ключа нет в панели, получите конфиг заново
-vpn-awg-status-unknown = статус неизвестен
-vpn-awg-handshake-never = не было
-vpn-awg-traffic = { $down } / { $up }
-vpn-awg-no-data = —
+vpn-awg-device-line-part = { $name }: { $status }
+vpn-awg-device-default-name-part = Устройство { $number }
+vpn-awg-devices-empty-part = Устройств пока нет. Нажмите «Добавить устройство».
+vpn-awg-status-online-part = в сети
+vpn-awg-status-inactive-part = давно не подключалось
+vpn-awg-status-never-part = ещё не подключалось
+vpn-awg-status-disabled-part = выключено
+vpn-awg-status-missing-part = ключа нет в панели, получите конфиг заново
+vpn-awg-status-unknown-part = статус неизвестен
+vpn-awg-handshake-never-part = не было
+vpn-awg-traffic-part = { $down } / { $up }
+vpn-awg-no-data-part = —
 
 # Кнопки
 vpn-awg-btn = AmneziaWG
@@ -148,9 +148,8 @@ vpn-awg-show-file-btn = Показать файл
 vpn-awg-done-btn = Готово
 
 # Уведомления и ошибки
-vpn-awg-deleted = Устройство удалено
-vpn-awg-restored = Ключи включены
-vpn-awg-renamed = Название сохранено
-vpn-awg-limit = Лимит устройств исчерпан ({ $used } из { $limit }). Удалите ненужное или напишите VP4HR.
-vpn-awg-denied = AmneziaWG вам не выдан. Если он нужен, напишите VP4HR.
-vpn-awg-error = Панель AmneziaWG недоступна. Попробуйте позже или напишите VP4HR.
+vpn-awg-deleted-alert = Устройство удалено
+vpn-awg-restored-alert = Ключи включены
+vpn-awg-limit-alert = Лимит устройств исчерпан ({ $used } из { $limit }). Удалите ненужное или напишите VP4HR.
+vpn-awg-denied-alert = AmneziaWG вам не выдан. Если он нужен, напишите VP4HR.
+vpn-awg-error-alert = Панель AmneziaWG недоступна. Попробуйте позже или напишите VP4HR.
