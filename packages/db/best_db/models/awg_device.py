@@ -34,12 +34,12 @@ class AwgDevice(Base):
 
     number: Mapped[int] = mapped_column(Integer, nullable=False, comment="Номер устройства у человека (с 1)")
 
-    # Ограничения установщика AmneziaWG: [a-zA-Z0-9_-], не длиннее 15 символов.
+    # Email клиента в панели 3x-ui: [a-zA-Z0-9_-], см. includes/awg/identity.py бота.
     client_name: Mapped[str] = mapped_column(
-        String(15),
+        String(32),
         unique=True,
         nullable=False,
-        comment="Имя клиента в AmneziaWG (lbg<person_id>-<number>)",
+        comment="Email клиента AmneziaWG в 3x-ui (awg-lbg<person_id>-<number>)",
     )
 
     # Название задаёт сам человек (``Телефон``, ``Ноутбук``); NULL - «Устройство <number>».

@@ -20,7 +20,7 @@ from includes.vpn import ClientDetails, ClientTraffic
 CLIENT_OBJ = {
     "client": {
         "id": 12,
-        "email": "lbg42-1",
+        "email": "awg-lbg42-1",
         "subId": "abc",
         "enable": True,
         "privateKey": "3333333333333333333333333333333333333333333=",
@@ -65,16 +65,16 @@ def _vpn_link(conf: str) -> str:
 
 
 class TestClientName:
-    def test_device_name_fits_installer_rules(self):
-        assert device_client_name(42, 1) == "lbg42-1"
-        # С запасом: семизначный person_id и двузначный номер устройства укладываются в 15 символов.
+    def test_device_name_is_marked_as_awg(self):
+        assert device_client_name(42, 1) == "awg-lbg42-1"
+        # С запасом: семизначный person_id и двузначный номер устройства укладываются в колонку.
         assert is_valid_client_name(device_client_name(10**7 - 1, 99))
 
-    @pytest.mark.parametrize("name", ["ivan_pc", "lbg-7", "A1", "x" * 15])
+    @pytest.mark.parametrize("name", ["ivan_pc", "lbg-7", "A1", "x" * 32])
     def test_valid(self, name):
         assert is_valid_client_name(name)
 
-    @pytest.mark.parametrize("name", ["", "x" * 16, "иван", "ivan pc", "a/b", "a.b"])
+    @pytest.mark.parametrize("name", ["", "x" * 33, "иван", "ivan pc", "a/b", "a.b"])
     def test_invalid(self, name):
         assert not is_valid_client_name(name)
 

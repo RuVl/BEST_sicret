@@ -1,14 +1,15 @@
 """Имя клиента AmneziaWG - его email в панели 3x-ui.
 
-Имя глобально уникально в панели. Правила - от прежнего сервера AmneziaWG (ASCII-буквы, цифры,
-``_`` и ``-``, не длиннее 15 символов): с ними уже заведены устройства в БД, и они же проходят
-проверку email в 3x-ui.
+Имя глобально уникально в панели, а одно устройство - отдельный клиент (в одном инбаунде у email
+ровно один ключ). Префикс ``awg-`` отличает такие клиенты от VLESS-подписок в общем списке панели.
+Допустимы ASCII-буквы, цифры, ``_`` и ``-`` - они проходят проверку email в 3x-ui.
 """
 
 import re
 from collections.abc import Iterable
 
-MAX_CLIENT_NAME_LEN = 15
+MAX_CLIENT_NAME_LEN = 32
+CLIENT_NAME_PREFIX = "awg-"
 MAX_DEVICE_LABEL_LEN = 32
 
 _CLIENT_NAME = re.compile(rf"[A-Za-z0-9_-]{{1,{MAX_CLIENT_NAME_LEN}}}")
@@ -20,7 +21,7 @@ def is_valid_client_name(value: str) -> bool:
 
 def device_client_name(person_id: int, number: int) -> str:
     """Стабильное имя по ``person_id`` и номеру устройства: не зависит от смены ФИО или username."""
-    return f"lbg{person_id}-{number}"
+    return f"{CLIENT_NAME_PREFIX}lbg{person_id}-{number}"
 
 
 def free_device_number(used: Iterable[int]) -> int:
