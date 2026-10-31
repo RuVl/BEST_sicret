@@ -52,11 +52,11 @@ class ArrayContext(BaseContext):
         return text, i
 
     def render_action_kb(self, l10n: FluentLocalization) -> list[tuple[str, str | int]]:
-        keyboard = [(l10n.format_value("add-item"), self.ADD_ITEM)]
+        keyboard = [(l10n.format_value("add-item-btn"), self.ADD_ITEM)]
 
         if self._parent is not None:  # Если мы в подменю
-            keyboard.append((l10n.format_value("back"), self.BACK_ACTION))
-            keyboard.append((l10n.format_value("delete"), self.DELETE_ACTION))
+            keyboard.append((l10n.format_value("back-btn"), self.BACK_ACTION))
+            keyboard.append((l10n.format_value("delete-btn"), self.DELETE_ACTION))
 
         return keyboard
 

@@ -13,7 +13,6 @@ from structlog.typing import FilteringBoundLogger
 from env import settings
 from handlers import register_handlers
 from includes import PickleRedisStorage, get_fluent_localization, get_redis_storage, setup_logging
-from includes.awg import close_awg_client
 from includes.vpn import close_xui_client
 from jobs import revoke_inactive_subscriptions, suspend_inactive_awg_access
 from middlewares import register_middlewares
@@ -102,8 +101,8 @@ async def main():
     finally:
         if scheduler is not None:
             scheduler.shutdown(wait=False)
+        # Клиент AmneziaWG ходит через ту же сессию 3x-ui - закрывать его отдельно не нужно.
         await close_xui_client()
-        await close_awg_client()
         await bot.session.close()
         await logger.ainfo("Bot stopped.")
 

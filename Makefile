@@ -139,16 +139,20 @@ migrate-docker: ## Применить миграции бд в докере
 	# --build обязателен: без него compose run берёт старый образ и новые ревизии не попадут внутрь.
 	$(COMPOSE) run --rm --build db_migrate
 
-# --- AmneziaWG: выдача по решению админа ------------------------------------
+# --- AmneziaWG: открыт всем мемберам, админ отзывает и меняет лимит --------
 # Работают в запущенном контейнере бота (make up). who - @username или Telegram ID.
 
 .PHONY: awg-list
-awg-list: ## Кому выдан AmneziaWG
+awg-list: ## У кого заведён AmneziaWG и сколько устройств
 	$(COMPOSE) exec telegram_bot python3 -m cli.awg list
 
 .PHONY: awg-grant
-awg-grant: ## Открыть AmneziaWG или сменить лимит: make awg-grant who=@username [devices=3] [notify=0]
+awg-grant: ## Вернуть отозванный AmneziaWG или сменить лимит: make awg-grant who=@username [devices=3] [notify=0]
 	$(COMPOSE) exec telegram_bot python3 -m cli.awg grant "$(who)" $(if $(devices),--devices "$(devices)") $(if $(filter 0,$(notify)),--no-notify)
+
+.PHONY: awg-announce
+awg-announce: ## Разослать мемберам, что AmneziaWG - основной: make awg-announce [dry=1]
+	$(COMPOSE) exec telegram_bot python3 -m cli.awg announce $(if $(filter 1,$(dry)),--dry-run)
 
 .PHONY: awg-revoke
 awg-revoke: ## Забрать AmneziaWG: make awg-revoke who=@username [delete=1]

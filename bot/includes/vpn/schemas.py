@@ -4,6 +4,8 @@
 Панель отдаёт всё в конверте ``{success, msg, obj}`` - его разбирает ``client.py``.
 """
 
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
 
 # XTLS-Vision - единственный flow, который мы выдаём: панель на update перезаписывает поле
@@ -91,3 +93,17 @@ class ClientTraffic(BaseModel):
     def used_bytes(self) -> int:
         """Потрачено с последнего сброса счётчика (панель сбрасывает раз в ``reset`` дней)."""
         return self.up + self.down
+
+
+class ClientDetails(BaseModel):
+    """Ответ ``GET /panel/api/clients/get/:email``: клиент и инбаунды, к которым он привязан.
+
+    ``client`` оставляем словарём: VLESS читает из него ``ClientRecord``, AmneziaWG - ``AwgPeer``.
+    """
+
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    client: dict[str, Any]
+    inbound_ids: list[int] = Field(default_factory=list, alias="inboundIds")
+    # Адрес клиента в каждом туннельном инбаунде (WireGuard/AmneziaWG): ``{"3": "10.70.0.2/32"}``.
+    tunnel_allowed_ips: dict[str, str | list[str]] = Field(default_factory=dict, alias="tunnelAllowedIPs")

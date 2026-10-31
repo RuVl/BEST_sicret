@@ -1,11 +1,13 @@
 """Доменные операции над ключами AmneziaWG: устройства, выдача конфига, выключение.
 
 Один ключ AmneziaWG - одно устройство: пир с одним ключом на двух устройствах сразу
-перебивает endpoint, и связь рвётся на обоих. Поэтому человек заводит ключ на каждое
-устройство, в пределах лимита из разрешения.
+перебивает endpoint, и связь рвётся на обоих. Поэтому человек заводит ключ (клиента
+AmneziaWG-инбаунда в 3x-ui) на каждое устройство, в пределах лимита из разрешения.
 
-Как и у VLESS, источник правды о ключе - панель: пира могли удалить или выключить в её
-админке, поэтому перед выдачей бот сверяется с ней и чинит расхождение сам.
+Как и у VLESS, источник правды о ключе - панель: клиента могли удалить или выключить в её
+админке, поэтому перед выдачей бот сверяется с ней и чинит расхождение сам. Так же переезжают
+устройства со старого сервера AmneziaWG: клиента под их именем в 3x-ui нет, и бот заводит его
+при первой выдаче конфига.
 """
 
 import structlog
@@ -24,50 +26,44 @@ logger: FilteringBoundLogger = structlog.get_logger("awg")
 
 
 def _peer_comment(person: Person, device: AwgDevice) -> str:
-    return build_peer_comment(
-        person.full_name, person.telegram_username, person.telegram_id, device.number, device.label
-    )
+    return build_peer_comment(person.full_name, person.telegram_username, person.telegram_id, device.number)
 
 
-def device_limit(access: AwgAccess) -> int:
-    """Лимит устройств: личный из разрешения или общий из настроек."""
-    return access.device_limit if access.device_limit is not None else settings.awg.DEVICE_LIMIT
+def device_limit(access: AwgAccess | None) -> int:
+    """Лимит устройств: личный из разрешения или общий из настроек (в том числе, пока разрешения нет)."""
+    if access is None or access.device_limit is None:
+        return settings.awg.DEVICE_LIMIT
+    return access.device_limit
 
 
-async def peers_by_name(client: AwgClient) -> dict[str, AwgPeer]:
-    """Пиры панели по имени клиента - один запрос на все устройства сразу."""
-    return {peer.friendly_name: peer for peer in await client.list_peers() if peer.friendly_name}
+async def peers_by_name(client: AwgClient, access: AwgAccess) -> dict[str, AwgPeer]:
+    """Ключи всех устройств разрешения в панели по имени клиента; отсутствующих в словаре нет."""
+    return await client.find_peers([device.client_name for device in access.devices])
 
 
 async def ensure_peer(client: AwgClient, device: AwgDevice, person: Person) -> AwgPeer:
-    """Привести пира устройства в рабочее состояние: создать, если его нет, и включить, если выключен."""
+    """Привести ключ устройства в рабочее состояние: создать, если его нет, и включить, если выключен."""
     peer = await client.find_peer(device.client_name)
 
     if peer is None:
-        await client.create_peer(device.client_name, _peer_comment(person, device))
+        await client.create_peer(device.client_name, _peer_comment(person, device), person.telegram_id)
         peer = await client.find_peer(device.client_name)
         if peer is None:
-            raise AwgError(f"Панель создала клиента {device.client_name}, но не показывает его в списке")
+            raise AwgError(f"Панель создала клиента {device.client_name}, но не отдаёт его")
         await logger.ainfo("awg-peer-created", person_id=person.id, client_name=device.client_name)
 
     if peer.disabled:
-        await client.set_disabled(peer.id, False)
+        await client.set_disabled([device.client_name], False)
+        peer = peer.model_copy(update={"enable": True})
         await logger.ainfo("awg-peer-enabled", person_id=person.id, client_name=device.client_name)
-
-    if not peer.has_config:
-        # Пир заведён в обход установщика (конфига в каталоге клиентов нет) - отдать нечего.
-        raise AwgError(f"У клиента {device.client_name} нет конфига в панели")
 
     return peer
 
 
 async def restore_access(session: AsyncSession, client: AwgClient, access: AwgAccess) -> None:
     """Доступ снова в силе (мембер вернулся в LBG или админ выдал повторно): включаем все ключи разом."""
-    peers = await peers_by_name(client)
-    for device in access.devices:
-        peer = peers.get(device.client_name)
-        if peer is not None and peer.disabled:
-            await client.set_disabled(peer.id, False)
+    peers = await peers_by_name(client, access)
+    await client.set_disabled([name for name, peer in peers.items() if peer.disabled], False)
 
     await mark_granted(session, access)
     await logger.ainfo("awg-access-restored", person_id=access.person_id)
@@ -92,7 +88,7 @@ async def issue_device_config(
     await _ensure_usable(session, client, access)
 
     peer = await ensure_peer(client, device, person)
-    config = await client.get_config(peer.id)
+    config = await client.get_config(peer)
 
     await mark_issued(session, device)
     return config
@@ -123,26 +119,19 @@ async def add_device(
     return device, config
 
 
-async def rename_device(
-    session: AsyncSession,
-    client: AwgClient,
-    device: AwgDevice,
-    person: Person,
-    label: str,
-) -> None:
-    """Переименовать устройство. Подпись в панели - вдогонку: без неё ключ работает так же."""
-    await set_device_label(session, device, label)
+async def rename_device(session: AsyncSession, device: AwgDevice, label: str) -> None:
+    """Переименовать устройство - только в боте.
 
-    peer = await client.find_peer(device.client_name)
-    if peer is not None:
-        await client.set_comment(peer.id, _peer_comment(person, device))
+    Подпись клиента в панели не трогаем: 3x-ui на update не патчит клиента, а заменяет его телом
+    запроса, и неполное тело перевыпустило бы ключи - конфиг на устройстве перестал бы работать.
+    """
+    await set_device_label(session, device, label)
 
 
 async def remove_device(session: AsyncSession, client: AwgClient, access: AwgAccess, device: AwgDevice) -> None:
     """Удалить устройство: сначала пира в панели, потом строку - иначе ключ остался бы жить без учёта."""
-    peer = await client.find_peer(device.client_name)
-    if peer is not None:
-        await client.remove_peer(peer.id)
+    if await client.find_peer(device.client_name) is not None:
+        await client.remove_peer(device.client_name)
 
     await delete_device(session, access, device)
     await logger.ainfo("awg-device-removed", person_id=access.person_id, number=device.number)
@@ -150,16 +139,9 @@ async def remove_device(session: AsyncSession, client: AwgClient, access: AwgAcc
 
 async def disable_peers(client: AwgClient, access: AwgAccess) -> int:
     """Выключить в панели ключи всех устройств. Возвращает, сколько ключей там нашлось."""
-    peers = await peers_by_name(client)
-    found = 0
-    for device in access.devices:
-        peer = peers.get(device.client_name)
-        if peer is None:
-            continue
-        found += 1
-        if not peer.disabled:
-            await client.set_disabled(peer.id, True)
-    return found
+    peers = await peers_by_name(client, access)
+    await client.set_disabled([name for name, peer in peers.items() if not peer.disabled], True)
+    return len(peers)
 
 
 async def remove_peers(session: AsyncSession, client: AwgClient, access: AwgAccess) -> int:

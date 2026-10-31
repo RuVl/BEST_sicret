@@ -7,7 +7,7 @@
 Все ответы приходят в конверте ``{"success": bool, "msg": str, "obj": any}``.
 """
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
 import aiohttp
@@ -16,7 +16,11 @@ from structlog.typing import FilteringBoundLogger
 
 from env import settings
 from includes.vpn.exceptions import XuiAuthError, XuiClientNotFoundError, XuiError
-from includes.vpn.schemas import ClientRecord, ClientTraffic, XuiClientPayload
+from includes.vpn.schemas import ClientDetails, ClientRecord, ClientTraffic, XuiClientPayload
+
+if TYPE_CHECKING:
+    # includes.awg сам импортирует этот модуль - во время выполнения тип не нужен.
+    from includes.awg.schemas import AwgClientPayload
 
 logger: FilteringBoundLogger = structlog.get_logger("xui")
 
@@ -83,8 +87,8 @@ class XuiClient:
 
     # === Клиенты ===
 
-    async def get_client(self, email: str) -> ClientRecord | None:
-        """Вернуть клиента панели или ``None``, если его нет."""
+    async def get_client_details(self, email: str) -> ClientDetails | None:
+        """Клиент с его инбаундами и адресами в туннелях или ``None``, если клиента нет."""
         try:
             obj = await self._request("GET", f"/clients/get/{quote(email, safe='')}")
         except XuiClientNotFoundError:
@@ -97,7 +101,12 @@ class XuiClient:
 
         if not obj or not obj.get("client"):
             return None
-        return ClientRecord.model_validate(obj["client"])
+        return ClientDetails.model_validate(obj)
+
+    async def get_client(self, email: str) -> ClientRecord | None:
+        """Вернуть клиента панели или ``None``, если его нет."""
+        details = await self.get_client_details(email)
+        return ClientRecord.model_validate(details.client) if details else None
 
     async def get_traffic(self, email: str) -> ClientTraffic | None:
         obj = await self._request("GET", f"/clients/traffic/{quote(email, safe='')}")
@@ -105,7 +114,18 @@ class XuiClient:
             return None
         return ClientTraffic.model_validate(obj)
 
-    async def add_client(self, client: XuiClientPayload, inbound_ids: list[int]) -> None:
+    async def get_links(self, email: str) -> list[str]:
+        """Ссылки клиента во всех его инбаундах (``vless://``, ``vpn://``...) - то же, что в его подписке."""
+        obj = await self._request("GET", f"/clients/links/{quote(email, safe='')}")
+        if not isinstance(obj, list):
+            raise XuiError(f"Панель вернула неожиданный список ссылок клиента {email}")
+        return [link for link in obj if isinstance(link, str)]
+
+    async def add_client(self, client: "XuiClientPayload | AwgClientPayload", inbound_ids: list[int]) -> None:
+        """Завести клиента в инбаундах. Тело зависит от протокола: VLESS - ``XuiClientPayload``.
+
+        Секреты, которых нет в теле, панель генерирует сама (у AmneziaWG - ключи и адрес в подсети).
+        """
         await self._request(
             "POST",
             "/clients/add",
@@ -137,6 +157,19 @@ class XuiClient:
 
         await self.update_client(email, record.to_payload().model_copy(update={"enable": enabled}))
         await logger.ainfo("xui-client-set-enabled", email=email, enabled=enabled)
+
+    async def set_enabled_many(self, emails: list[str], enabled: bool) -> None:
+        """Включить/выключить сразу нескольких клиентов. Тело клиента не пересылаем - ключи не трогаются."""
+        if not emails:
+            return
+        path = "/clients/bulkEnable" if enabled else "/clients/bulkDisable"
+        await self._request("POST", path, json={"emails": emails})
+        await logger.ainfo("xui-clients-set-enabled", emails=emails, enabled=enabled)
+
+    async def delete_client(self, email: str) -> None:
+        """Удалить клиента из всех инбаундов вместе со счётчиками трафика."""
+        await self._request("POST", f"/clients/del/{quote(email, safe='')}")
+        await logger.ainfo("xui-client-delete", email=email)
 
     async def list_group_emails(self, group: str) -> list[str]:
         """Все email клиентов в группе - для сверки «БД бота ↔ панель»."""

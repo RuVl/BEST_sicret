@@ -118,7 +118,7 @@ async def send_apply(
         caption=l10n.format_value("treasure-refund-apply", args=data),
     )
 
-    await clb.answer(l10n.format_value("refund-apply-was-sent"))
+    await clb.answer(l10n.format_value("refund-apply-was-sent-alert"))
     await dialog_manager.done()
 
 
@@ -263,7 +263,7 @@ refund_dialog = Dialog(
     Window(  # Окно добавления чека
         L10nFormat("refund-add-bill"),
         MessageInput(download_bill, content_types=ContentType.DOCUMENT),
-        SwitchTo(L10nFormat("back"), id="back", state=CreateRefundApply.VIEW),
+        SwitchTo(L10nFormat("back-btn"), id="back", state=CreateRefundApply.VIEW),
         state=CreateRefundApply.ADD_BILL,
     ),
 )

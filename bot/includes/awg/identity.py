@@ -1,13 +1,15 @@
-"""Имя клиента AmneziaWG.
+"""Имя клиента AmneziaWG - его email в панели 3x-ui.
 
-Установщик и панель пускают только ASCII-буквы, цифры, ``_`` и ``-``, не длиннее 15 символов
-(``validate_client_name`` в amneziawg-web), а имя глобально уникально на интерфейсе.
+Имя глобально уникально в панели, а одно устройство - отдельный клиент (в одном инбаунде у email
+ровно один ключ). Префикс ``awg-`` отличает такие клиенты от VLESS-подписок в общем списке панели.
+Допустимы ASCII-буквы, цифры, ``_`` и ``-`` - они проходят проверку email в 3x-ui.
 """
 
 import re
 from collections.abc import Iterable
 
-MAX_CLIENT_NAME_LEN = 15
+MAX_CLIENT_NAME_LEN = 32
+CLIENT_NAME_PREFIX = "awg-"
 MAX_DEVICE_LABEL_LEN = 32
 
 _CLIENT_NAME = re.compile(rf"[A-Za-z0-9_-]{{1,{MAX_CLIENT_NAME_LEN}}}")
@@ -19,7 +21,7 @@ def is_valid_client_name(value: str) -> bool:
 
 def device_client_name(person_id: int, number: int) -> str:
     """Стабильное имя по ``person_id`` и номеру устройства: не зависит от смены ФИО или username."""
-    return f"lbg{person_id}-{number}"
+    return f"{CLIENT_NAME_PREFIX}lbg{person_id}-{number}"
 
 
 def free_device_number(used: Iterable[int]) -> int:
@@ -46,14 +48,11 @@ def normalize_device_label(value: str) -> str:
     return label
 
 
-def build_peer_comment(
-    full_name: str,
-    username: str | None,
-    telegram_id: int,
-    number: int,
-    label: str | None = None,
-) -> str:
-    """Подпись пира в панели - чтобы в админке было видно, чей это ключ и на каком он устройстве."""
+def build_peer_comment(full_name: str, username: str | None, telegram_id: int, number: int) -> str:
+    """Подпись клиента в панели - чтобы в админке было видно, чей это ключ и какое устройство по счёту.
+
+    Название устройства сюда не пишем: оно меняется в боте, а подпись в панели после создания
+    бот не трогает (см. ``rename_device``).
+    """
     handle = f"@{username}" if username else "без username"
-    device = f"«{label}»" if label else f"устройство {number}"
-    return f"{full_name} ({handle}, tg {telegram_id}), {device} - выдан ботом"
+    return f"{full_name} ({handle}, tg {telegram_id}), устройство {number} - выдан ботом"

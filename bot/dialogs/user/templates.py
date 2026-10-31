@@ -43,7 +43,7 @@ async def on_template_selected(
         schema = load_template_schema(template_name)
         context = create_context(schema)
     except FileNotFoundError:
-        await clb.answer(l10n.format_value("schema-not-found"), show_alert=True)
+        await clb.answer(l10n.format_value("schema-not-found-alert"), show_alert=True)
         return
 
     # Send notification to president if exists
@@ -134,7 +134,7 @@ async def response_document(clb: CallbackQuery, _select: Select, dialog_manager:
             await sent_doc.forward(president_id)
 
     except TelegramNetworkError as e:
-        await clb.answer(l10n.format_value("telegram-network-error"), show_alert=True)
+        await clb.answer(l10n.format_value("telegram-network-error-alert"), show_alert=True)
         raise e
 
 
@@ -185,7 +185,7 @@ template_dialog = Dialog(
             height=5,
             hide_on_single_page=True,
         ),
-        Row(Url(L10nFormat("templates-link-text"), url=L10nFormat("templates-link"))),
+        Row(Url(L10nFormat("templates-link-btn"), url=L10nFormat("templates-link-url"))),
         getter=get_template_list,
         state=CreateByTemplate.CHOOSE_TEMPLATE,
     ),
@@ -216,7 +216,7 @@ template_dialog = Dialog(
         ),
         Row(
             Button(
-                L10nFormat("generate-document"),
+                L10nFormat("generate-document-btn"),
                 id="generate_document",
                 on_click=response_document,
                 when=F["can_generate"],

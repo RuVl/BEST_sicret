@@ -1,246 +1,245 @@
-"""Fluent молча возвращает имя ключа, если шаблон не распарсился.
+"""Проверки всех ключей локализации: новый ключ попадает под них без правки теста.
 
-Ловушек две: пустая строка обрывает многострочное сообщение, а строка, начинающаяся
-с ``*``, читается как синтаксис вариантов. Поэтому ключи новых экранов проверяем явно.
+Fluent прячет ошибки молча: нераспарсенный кусок ``.ftl`` становится ``Junk`` и выбрасывается
+(так обрывается сообщение на пустой строке или на строке, начинающейся с ``*``), а ``format_value``
+вместо текста отдаёт имя ключа. Поэтому файлы разбираем сами и рендерим через ``FluentBundle``,
+который возвращает ошибки, а не глотает их.
 
-Вторая проверка - экранирование: текст сообщения уходит с ``parse_mode=MarkdownV2``,
-а подписи кнопок и алерты - обычным текстом, где экранирование видно как есть.
+Экранирование зависит от того, куда уходит текст, и это видно по суффиксу ключа:
+
+- без суффикса - сообщение с ``parse_mode=MarkdownV2``, спецсимволы обязаны быть экранированы;
+- ``-btn`` - подпись кнопки, ``-url`` - ссылка кнопки, ``-alert`` - ответ на callback,
+  ``-part`` - кусок, который код экранирует сам при вставке в сообщение. Telegram показывает
+  их как есть, поэтому экранирования в них быть не должно.
 """
 
+import ast as py_ast
 import re
+from collections import Counter
+from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
+from fluent.runtime import FluentBundle
+from fluent.syntax import FluentParser, ast, visitor
 
+from env import settings
 from includes import get_fluent_localization
 
-# Значения подставляем уже экранированными - ровно так их отдают геттеры и джоб.
-ARGS = {
-    "name": "Иванов Иван",
-    "category": "Борда",
-    "roles": "VP4HR of X Board",
-    "local_involvement": "l",
-    "international_involvement": "i",
-    "best_events": "b",
-    "url": r"https://vpn\.example\.org/sub/abc",
-    "traffic": r"1\.20 ГБ",
-    "revoked": 1,
-    "failed": 0,
-    "details": r"ivan@best\-eu\.org",
-    "number": 2,
-    "used": 1,
-    "limit": 3,
-    "status": "в сети",
-    "devices": r"Устройство 1: в сети",
-    "handshake": r"20\.10\.2026 17:45",
-    "day": r"1\.0 МБ / 0\.5 МБ",
-    "week": r"1\.0 МБ / 0\.5 МБ",
-    "month": r"1\.0 МБ / 0\.5 МБ",
-    "max": 32,
-    "minutes": 5,
-    "down": "1.0 МБ",
-    "up": "0.5 МБ",
+PLAIN_SUFFIXES = ("-btn", "-url", "-alert", "-part")
+
+BOT_DIR = Path(__file__).resolve().parents[1]
+LOCALE_DIR = BOT_DIR / settings.project.LOCALE_DIR
+LOCALES = settings.project.AVAILABLE_LOCALES
+
+
+# === Разбор .ftl ===
+
+
+def _parse(path: Path) -> ast.Resource:
+    return FluentParser().parse(path.read_text(encoding="utf-8"))
+
+
+FTL_FILES = {locale: sorted((LOCALE_DIR / locale).rglob("*.ftl")) for locale in LOCALES}
+RESOURCES = {path: _parse(path) for paths in FTL_FILES.values() for path in paths}
+MESSAGES = {
+    locale: [entry for path in paths for entry in RESOURCES[path].body if isinstance(entry, ast.Message)]
+    for locale, paths in FTL_FILES.items()
 }
-
-PROFILE_KEYS = [
-    "profile-card",
-    "profile-not-member",
-    "profile-vpn-btn",
-    "menu-document-btn",
-    "menu-equipment-apply-btn",
-    "menu-refund-btn",
-    "menu-inventory-btn",
-]
-
-VPN_KEYS = [
-    "vpn-none",
-    "vpn-active",
-    "vpn-disabled",
-    "vpn-orphaned",
-    "vpn-issued",
-    "vpn-issue-btn",
-    "vpn-refresh-btn",
-    "vpn-handbook-btn",
-    "vpn-handbook-url",
-    "vpn-error",
-    "vpn-access-denied",
-    "vpn-revoked-notice",
-    "vpn-revoke-report",
-    "vpn-awg-hint",
-    "vpn-awg-devices",
-    "vpn-awg-device-card",
-    "vpn-awg-name-new",
-    "vpn-awg-name-rename",
-    "vpn-awg-config-caption",
-    "vpn-awg-qr-caption",
-    "vpn-awg-config-hidden",
-    "vpn-awg-suspended-hint",
-    "vpn-awg-panel-error-hint",
-    "vpn-awg-delete-confirm",
-    "vpn-awg-granted-notice",
-    "vpn-awg-suspended-notice",
-    "vpn-awg-suspend-report",
-    "vpn-awg-device-line",
-    "vpn-awg-device-default-name",
-    "vpn-awg-devices-empty",
-    "vpn-awg-status-online",
-    "vpn-awg-status-inactive",
-    "vpn-awg-status-never",
-    "vpn-awg-status-disabled",
-    "vpn-awg-status-missing",
-    "vpn-awg-status-unknown",
-    "vpn-awg-handshake-never",
-    "vpn-awg-traffic",
-    "vpn-awg-no-data",
-    "vpn-awg-name-invalid",
-    "vpn-awg-btn",
-    "vpn-awg-add-btn",
-    "vpn-awg-get-config-btn",
-    "vpn-awg-rename-btn",
-    "vpn-awg-delete-btn",
-    "vpn-awg-delete-yes-btn",
-    "vpn-awg-restore-btn",
-    "vpn-awg-show-qr-btn",
-    "vpn-awg-show-file-btn",
-    "vpn-awg-done-btn",
-    "vpn-awg-deleted",
-    "vpn-awg-restored",
-    "vpn-awg-renamed",
-    "vpn-awg-limit",
-    "vpn-awg-denied",
-    "vpn-awg-error",
-]
+ALL_MESSAGES = [(locale, message) for locale, messages in MESSAGES.items() for message in messages]
+MARKDOWN_MESSAGES = [(lc, msg) for lc, msg in ALL_MESSAGES if not msg.id.name.endswith(PLAIN_SUFFIXES)]
+PLAIN_MESSAGES = [(lc, msg) for lc, msg in ALL_MESSAGES if msg.id.name.endswith(PLAIN_SUFFIXES)]
+BUTTON_MESSAGES = [(lc, msg) for lc, msg in ALL_MESSAGES if msg.id.name.endswith("-btn")]
+URL_MESSAGES = [(lc, msg) for lc, msg in ALL_MESSAGES if msg.id.name.endswith("-url")]
 
 
-# Уходят в сообщение с MarkdownV2 - спецсимволы обязаны быть экранированы.
-MESSAGE_KEYS = [
-    "profile-card",
-    "profile-not-member",
-    "vpn-none",
-    "vpn-active",
-    "vpn-disabled",
-    "vpn-orphaned",
-    "vpn-revoked-notice",
-    "vpn-revoke-report",
-    "vpn-awg-hint",
-    "vpn-awg-devices",
-    "vpn-awg-device-card",
-    "vpn-awg-name-new",
-    "vpn-awg-name-rename",
-    "vpn-awg-config-caption",
-    "vpn-awg-qr-caption",
-    "vpn-awg-config-hidden",
-    "vpn-awg-suspended-hint",
-    "vpn-awg-panel-error-hint",
-    "vpn-awg-delete-confirm",
-    "vpn-awg-granted-notice",
-    "vpn-awg-suspended-notice",
-    "vpn-awg-suspend-report",
-]
-
-# Подписи кнопок и текст алертов Telegram показывает как есть, разметки там нет.
-PLAIN_KEYS = [
-    "profile-vpn-btn",
-    "menu-document-btn",
-    "menu-equipment-apply-btn",
-    "menu-refund-btn",
-    "menu-inventory-btn",
-    "vpn-issue-btn",
-    "vpn-refresh-btn",
-    "vpn-handbook-btn",
-    "vpn-handbook-url",
-    "vpn-issued",
-    "vpn-error",
-    "vpn-access-denied",
-    "vpn-awg-device-line",
-    "vpn-awg-device-default-name",
-    "vpn-awg-devices-empty",
-    "vpn-awg-status-online",
-    "vpn-awg-status-inactive",
-    "vpn-awg-status-never",
-    "vpn-awg-status-disabled",
-    "vpn-awg-status-missing",
-    "vpn-awg-status-unknown",
-    "vpn-awg-handshake-never",
-    "vpn-awg-traffic",
-    "vpn-awg-no-data",
-    "vpn-awg-name-invalid",
-    "vpn-awg-btn",
-    "vpn-awg-add-btn",
-    "vpn-awg-get-config-btn",
-    "vpn-awg-rename-btn",
-    "vpn-awg-delete-btn",
-    "vpn-awg-delete-yes-btn",
-    "vpn-awg-restore-btn",
-    "vpn-awg-show-qr-btn",
-    "vpn-awg-show-file-btn",
-    "vpn-awg-done-btn",
-    "vpn-awg-deleted",
-    "vpn-awg-restored",
-    "vpn-awg-renamed",
-    "vpn-awg-limit",
-    "vpn-awg-denied",
-    "vpn-awg-error",
-]
-
-# Внутри кода и URL ссылки MarkdownV2 точку экранировать не требует - вырезаем такие куски.
-_CODE_OR_LINK = re.compile(r"`[^`]*`|\((?:https?|tg)://[^)]*\)")
-_UNESCAPED_SPECIAL = re.compile(r"(?<!\\)[.!]")
+def _ids(cases: list[tuple[str, ast.Message]]) -> list[str]:
+    return [f"{locale}:{message.id.name}" for locale, message in cases]
 
 
-@pytest.fixture(scope="module")
-def l10n():
-    return get_fluent_localization()
+class _Variables(visitor.Visitor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.names: set[str] = set()
+
+    def visit_VariableReference(self, node: ast.VariableReference) -> None:
+        self.names.add(node.id.name)
 
 
-@pytest.mark.parametrize("key", PROFILE_KEYS + VPN_KEYS)
-def test_key_resolves(l10n, key):
-    assert l10n.format_value(key, args=ARGS) != key
+def _dummy_args(message: ast.Message) -> dict[str, int]:
+    """Аргументы берём из самого шаблона - словарь значений руками вести не нужно.
+
+    Число подходит и для подстановки, и для селекторов множественного числа, а спецсимволов
+    в нём нет: экранирование настоящих значений - забота геттеров, не шаблона.
+    """
+    variables = _Variables()
+    variables.visit(message)
+    return dict.fromkeys(variables.names, 1)
 
 
-@pytest.mark.parametrize(
-    "key",
-    [
-        "profile-card",
-        "vpn-active",
-        "vpn-orphaned",
-        "vpn-revoke-report",
-        "vpn-awg-devices",
-        "vpn-awg-device-card",
-        "vpn-awg-name-new",
-        "vpn-awg-config-caption",
-        "vpn-awg-qr-caption",
-        "vpn-awg-delete-confirm",
-        "vpn-awg-granted-notice",
-        "vpn-awg-suspend-report",
-    ],
-)
-def test_multiline_message_is_not_truncated(l10n, key):
-    """Обрыв шаблона проявляется как потеря хвоста, а не как ошибка."""
-    assert "\n\n" in l10n.format_value(key, args=ARGS)
+def _bundle(locale: str) -> FluentBundle:
+    bundle = FluentBundle([locale], use_isolating=False)
+    for path in FTL_FILES[locale]:
+        bundle.add_resource(RESOURCES[path])
+    return bundle
 
 
-@pytest.mark.parametrize("key", MESSAGE_KEYS)
-def test_message_keys_are_escaped_for_markdown_v2(l10n, key):
-    rendered = _CODE_OR_LINK.sub("", l10n.format_value(key, args=ARGS))
-
-    assert not _UNESCAPED_SPECIAL.search(rendered)
+BUNDLES = {locale: _bundle(locale) for locale in LOCALES}
 
 
-@pytest.mark.parametrize("key", PLAIN_KEYS)
-def test_plain_keys_have_no_escapes(l10n, key):
-    assert "\\" not in l10n.format_value(key, args=ARGS)
+def _render(locale: str, message: ast.Message) -> str:
+    bundle = BUNDLES[locale]
+    text, errors = bundle.format_pattern(bundle.get_message(message.id.name).value, _dummy_args(message))
+    assert not errors, errors
+    return text
 
 
-def test_awg_device_card_keeps_traffic(l10n):
-    """Строка, начинающаяся с ``*``, обрезала бы карточку сразу после статуса."""
-    rendered = l10n.format_value("vpn-awg-device-card", args=ARGS)
+# === Валидация MarkdownV2 ===
 
-    assert "Трафик" in rendered
-    assert "За 30 дней" in rendered
+# Telegram разрешает экранировать любой символ с кодом 1-126, не только спецсимволы.
+_MD_ESCAPED = re.compile(r"\\[\x01-\x7e]")
+_MD_CODE = re.compile(r"```.*?```|`[^`\n]*`", re.S)
+_MD_LINK = re.compile(r"\[([^\]\n]*)\]\([^)\n]*\)")
+_MD_QUOTE = re.compile(r"^\*{0,2}>", re.M)
+_MD_PAIRED = ("||", "*", "_", "~")
+_MD_SPECIAL = re.compile(r"[\\`\[\]()>#+\-=|{}.!]")
 
 
-def test_profile_card_keeps_all_sections(l10n):
-    rendered = l10n.format_value("profile-card", args=ARGS)
+def _markdown_v2_problems(text: str) -> list[str]:
+    """Упрощённый разбор MarkdownV2: разметку снимаем, неэкранированные спецсимволы - ошибка."""
+    text = _MD_ESCAPED.sub("", text)
+    text = _MD_CODE.sub("", text)
+    text = _MD_LINK.sub(r"\1", text)
+    text = _MD_QUOTE.sub("", text)
 
-    assert "Роли" in rendered
-    assert "Мероприятия BEST" in rendered
+    problems = []
+    for marker in _MD_PAIRED:
+        if text.count(marker) % 2:
+            problems.append(f"непарный {marker!r}")
+        text = text.replace(marker, "")
+    problems.extend(f"неэкранированный {char!r}" for char in sorted(set(_MD_SPECIAL.findall(text))))
+    return problems
+
+
+# === Структура файлов ===
+
+
+@pytest.mark.parametrize("path", list(RESOURCES), ids=lambda p: str(p.relative_to(LOCALE_DIR)))
+def test_ftl_has_no_junk(path):
+    junk = [entry.content.strip() for entry in RESOURCES[path].body if isinstance(entry, ast.Junk)]
+
+    assert not junk, f"Fluent не разобрал и выбросит: {junk}"
+
+
+@pytest.mark.parametrize("locale", LOCALES)
+def test_keys_are_unique(locale):
+    # Файлы грузятся в случайном порядке, поэтому при дубле значение ключа зависело бы от запуска.
+    counts = Counter(message.id.name for message in MESSAGES[locale])
+
+    assert not [key for key, count in counts.items() if count > 1]
+
+
+@pytest.mark.parametrize(("locale", "message"), ALL_MESSAGES, ids=_ids(ALL_MESSAGES))
+def test_message_has_value_without_attributes(locale, message):
+    # Строка вида «.name = …» внутри шаблона стала бы атрибутом и пропала бы из текста.
+    assert message.value is not None
+    assert not message.attributes
+
+
+@pytest.mark.parametrize(("locale", "message"), ALL_MESSAGES, ids=_ids(ALL_MESSAGES))
+def test_message_renders_without_errors(locale, message):
+    assert _render(locale, message).strip()
+
+
+@pytest.mark.parametrize(("locale", "message"), ALL_MESSAGES, ids=_ids(ALL_MESSAGES))
+def test_loader_resolves_message(locale, message):
+    """Боевой загрузчик видит ключ: файл подхватился и ключ не подменяется своим именем."""
+    l10n = get_fluent_localization()
+    key = message.id.name
+
+    assert l10n.format_value(key, args=_dummy_args(message)) != key
+
+
+# === Экранирование по суффиксу ===
+
+
+@pytest.mark.parametrize(("locale", "message"), MARKDOWN_MESSAGES, ids=_ids(MARKDOWN_MESSAGES))
+def test_markdown_keys_are_valid_markdown_v2(locale, message):
+    problems = _markdown_v2_problems(_render(locale, message))
+
+    assert not problems, f"{problems}; если это кнопка или алерт - нужен суффикс из {PLAIN_SUFFIXES}"
+
+
+@pytest.mark.parametrize(("locale", "message"), PLAIN_MESSAGES, ids=_ids(PLAIN_MESSAGES))
+def test_plain_keys_have_no_escapes(locale, message):
+    assert "\\" not in _render(locale, message)
+
+
+@pytest.mark.parametrize(("locale", "message"), BUTTON_MESSAGES, ids=_ids(BUTTON_MESSAGES))
+def test_button_keys_are_single_line(locale, message):
+    assert "\n" not in _render(locale, message)
+
+
+@pytest.mark.parametrize(("locale", "message"), URL_MESSAGES, ids=_ids(URL_MESSAGES))
+def test_url_keys_are_urls(locale, message):
+    url = urlparse(_render(locale, message))
+
+    assert url.scheme in ("http", "https", "tg")
+    assert url.netloc
+
+
+def test_markdown_v2_checker_catches_mistakes():
+    """Сам разборщик: разметку пропускает, ошибки ловит."""
+    assert not _markdown_v2_problems(r"*Жирный* _курсив_ `код.` [ссылка](https://a.b/c) \- точка\.")
+    assert _markdown_v2_problems("Точка.")
+    assert _markdown_v2_problems("*непарная звёздочка")
+    assert _markdown_v2_problems("скобки (без экранирования)")
+    assert not _markdown_v2_problems(r"двоеточие\: можно экранировать")
+
+
+# === Ключи из кода ===
+
+_LOCALIZATION_CALLS = ("format_value", "L10nFormat")
+
+
+def _key_patterns(node: py_ast.expr) -> list[str]:
+    """Регулярка ключа из литерала; f-строка превращается в шаблон, тернарник - в обе ветки."""
+    if isinstance(node, py_ast.Constant) and isinstance(node.value, str):
+        return [re.escape(node.value)]
+    if isinstance(node, py_ast.IfExp):
+        return _key_patterns(node.body) + _key_patterns(node.orelse)
+    if isinstance(node, py_ast.JoinedStr):
+        return [
+            "".join(
+                re.escape(part.value) if isinstance(part, py_ast.Constant) else "[a-z0-9-]+" for part in node.values
+            )
+        ]
+    # Ключ из переменной статически не узнать - такие вызовы не проверяем.
+    return []
+
+
+def _code_keys() -> list[tuple[str, str]]:
+    found = []
+    for path in sorted(BOT_DIR.rglob("*.py")):
+        relative = path.relative_to(BOT_DIR)
+        if relative.parts[0] in (".venv", "tests"):
+            continue
+        for node in py_ast.walk(py_ast.parse(path.read_text(encoding="utf-8"))):
+            if not isinstance(node, py_ast.Call) or not node.args:
+                continue
+            func = node.func
+            name = func.attr if isinstance(func, py_ast.Attribute) else getattr(func, "id", None)
+            if name in _LOCALIZATION_CALLS:
+                found += [(f"{relative}:{node.lineno}", pattern) for pattern in _key_patterns(node.args[0])]
+    return found
+
+
+CODE_KEYS = _code_keys()
+
+
+@pytest.mark.parametrize(("location", "pattern"), CODE_KEYS, ids=[location for location, _ in CODE_KEYS])
+@pytest.mark.parametrize("locale", LOCALES)
+def test_code_keys_exist(locale, location, pattern):
+    keys = {message.id.name for message in MESSAGES[locale]}
+
+    assert any(re.fullmatch(pattern, key) for key in keys), f"{location}: ключа {pattern!r} нет в {locale}"

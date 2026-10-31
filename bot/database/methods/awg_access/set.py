@@ -25,6 +25,11 @@ async def mark_revoked(session: AsyncSession, access: AwgAccess) -> None:
     access.disabled_at = datetime.now(UTC)
 
 
+async def mark_announced(session: AsyncSession, access: AwgAccess) -> None:
+    """Рассылка о переезде AmneziaWG дошла до человека - повторный запуск его пропустит."""
+    access.announced_at = datetime.now(UTC)
+
+
 async def set_device_limit(session: AsyncSession, access: AwgAccess, device_limit: int | None) -> None:
     """Личный лимит устройств; ``None`` - лимит по умолчанию из настроек."""
     access.device_limit = device_limit

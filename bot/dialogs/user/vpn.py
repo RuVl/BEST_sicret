@@ -1,9 +1,9 @@
-"""Поддиалог VPN-подписки: статус, выпуск, ссылка и трафик.
+"""Поддиалог VPN: AmneziaWG (основной протокол) и VLESS-подписка (запасной).
 
-Источник правды по состоянию ключа - панель 3x-ui; в БД бота лежат только идентификаторы.
+Источник правды по состоянию ключей - панель 3x-ui; в БД бота лежат только идентификаторы.
 
-Тем, кому админ выдал AmneziaWG (``make awg-grant``), окно дополнительно ведёт в окна
-устройств AmneziaWG - они в ``vpn_awg.py``, но в том же диалоге.
+Окно ведёт в окна устройств AmneziaWG - они в ``vpn_awg.py``, но в том же диалоге - и само
+показывает VLESS-подписку: статус, выпуск, ссылку и трафик.
 
 Окно самодостаточно: пользователь берётся из ``dialog_manager.event.from_user``, все данные
 грузит геттер. Диалог не полагается ни на middleware, ни на ``start_data`` - его можно открыть
@@ -52,15 +52,15 @@ async def get_vpn_data(
             "is_allowed": False,
             "has_subscription": False,
             "awg_allowed": False,
-            # Ключ живёт и в алерте (там разметки нет), поэтому в ftl он без экранирования.
-            "text": escape_mdv2(l10n.format_value("vpn-access-denied")),
+            "text": l10n.format_value("vpn-access-denied"),
         }
 
     data = await _get_subscription_data(subscription, person.id, l10n, log)
 
     data["awg_allowed"] = awg_allowed(access)
     if data["awg_allowed"]:
-        data["text"] += "\n\n" + l10n.format_value("vpn-awg-hint")
+        # AmneziaWG - основной протокол, поэтому его подсказка идёт первой, а VLESS - запасным ниже.
+        data["text"] = l10n.format_value("vpn-awg-hint") + "\n\n" + data["text"]
     return data
 
 
@@ -83,7 +83,7 @@ async def _get_subscription_data(
         traffic = await client.get_traffic(subscription.xui_email)
     except XuiError as exc:
         await log.aerror("vpn-status-failed", person_id=person_id, error=str(exc))
-        return {"is_allowed": True, "has_subscription": True, "text": escape_mdv2(l10n.format_value("vpn-error"))}
+        return {"is_allowed": True, "has_subscription": True, "text": l10n.format_value("vpn-error")}
 
     if traffic is None:
         # Панель на удалённого клиента отвечает success=true с пустым obj.
@@ -123,7 +123,7 @@ async def on_issue(
             member = current_member(person)
 
             if member is None:
-                await clb.answer(l10n.format_value("vpn-access-denied"), show_alert=True)
+                await clb.answer(l10n.format_value("vpn-access-denied-alert"), show_alert=True)
                 return
 
             # Всё сведение расхождений с панелью - внутри ensure_subscription.
@@ -131,16 +131,22 @@ async def on_issue(
             await session.commit()
     except XuiError as exc:
         await log.aerror("vpn-issue-failed", telegram_id=clb.from_user.id, error=str(exc))
-        await clb.answer(l10n.format_value("vpn-error"), show_alert=True)
+        await clb.answer(l10n.format_value("vpn-error-alert"), show_alert=True)
         return
 
-    await clb.answer(l10n.format_value("vpn-issued"))
+    await clb.answer(l10n.format_value("vpn-issued-alert"))
 
 
 # ========== Диалог ==========
 vpn_dialog = Dialog(
     Window(
         Format("{text}"),
+        SwitchTo(
+            L10nFormat("vpn-awg-btn"),
+            id="awg_devices",
+            state=ViewVpnSubscription.AWG,
+            when=F["is_allowed"] & F["awg_allowed"],
+        ),
         Button(
             L10nFormat("vpn-issue-btn"),
             id="issue_vpn",
@@ -154,18 +160,12 @@ vpn_dialog = Dialog(
             id="refresh_vpn",
             when=F["is_allowed"] & F["has_subscription"],
         ),
-        SwitchTo(
-            L10nFormat("vpn-awg-btn"),
-            id="awg_devices",
-            state=ViewVpnSubscription.AWG,
-            when=F["is_allowed"] & F["awg_allowed"],
-        ),
         Url(
             L10nFormat("vpn-handbook-btn"),
             L10nFormat("vpn-handbook-url"),
             when=F["is_allowed"],
         ),
-        Cancel(L10nFormat("back")),
+        Cancel(L10nFormat("back-btn")),
         getter=get_vpn_data,
         state=ViewVpnSubscription.VIEW,
     ),

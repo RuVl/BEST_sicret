@@ -122,22 +122,26 @@ class XuiConfig(_Section):
 
 
 class AwgConfig(_Section):
-    """Веб-панель AmneziaWG (amneziawg-web): доступ по API-токену, выдача ключей по разрешению админа."""
+    """AmneziaWG-инбаунд панели 3x-ui: ключ на каждое устройство активного мембера.
 
-    # С хоста панель слушает 127.0.0.1, из контейнера до неё идём через адрес бриджа docker.
-    BASE_URL: str = Field("", alias="AWG_WEB_BASE_URL")
-    API_TOKEN: str = Field("", alias="AWG_WEB_API_TOKEN")
+    Панель и токен - те же, что у VLESS (``XUI_BASE_URL`` / ``XUI_API_TOKEN``).
+    """
+
+    # ID AmneziaWG-инбаунда в 3x-ui; 0 - AmneziaWG в боте выключен.
+    INBOUND_ID: int = Field(0, alias="AWG_INBOUND_ID")
+    # Отдельная группа: по XUI_GROUP бот сверяет VLESS-подписки, ключам устройств там не место.
+    GROUP: str = Field("SPb LBG AmneziaWG", alias="AWG_GROUP")
     # Имя файла конфига: приложения AmneziaWG берут его как имя туннеля (до 15 символов),
     # а к нему дописывается номер устройства - оставляем запас.
     TUNNEL_NAME: str = Field("BEST-AWG", alias="AWG_TUNNEL_NAME")
-    # Один ключ - одно устройство; админ может поменять лимит человеку (make awg-grant devices=N).
+    # Один ключ - одно устройство; админ может поменять лимит человеку (make awg-grant who=@x devices=N).
     DEVICE_LIMIT: int = Field(3, alias="AWG_DEVICE_LIMIT")
     # Сколько секунд сообщение с конфигом (приватным ключом) висит в чате, прежде чем бот его уберёт.
     CONFIG_TTL_SECONDS: int = Field(300, alias="AWG_CONFIG_TTL_SECONDS")
 
     @property
     def ENABLED(self) -> bool:
-        return bool(self.BASE_URL and self.API_TOKEN)
+        return self.INBOUND_ID > 0
 
 
 class LoggerConfig(_Section):

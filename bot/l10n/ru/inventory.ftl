@@ -8,10 +8,9 @@ item-detail = *{ $name }*
     Количество: `{ $count } { $unit }`
     Адрес: `{ $address }`
 
-# errors
-no-items = В этой категории пусто\.
-no-place = Место не указано
+# Куски текста, код экранирует их при вставке
+no-place-part = Место не указано
 
 # buttons
-clear-search = Сбросить поиск
-select-item = ✅ Выбрать этот предмет
+clear-search-btn = Сбросить поиск
+select-item-btn = ✅ Выбрать этот предмет

@@ -12,15 +12,16 @@ if TYPE_CHECKING:
 
 
 class AwgAccess(Base):
-    """Разрешение на AmneziaWG, выданное админом поверх VLESS-подписки.
+    """Разрешение на AmneziaWG: бот заводит его сам активному мемберу - с первым устройством или рассылкой.
 
     В отличие от VLESS, один ключ AmneziaWG - одно устройство: на двух устройствах сразу
     они перебивают друг другу endpoint. Поэтому разрешение - это лимит устройств, а сами
-    ключи (``AwgDevice``) человек заводит в боте по одному на устройство.
+    ключи (``AwgDevice``) человек заводит в боте по одному на устройство. Админ может отозвать
+    разрешение (``revoked``) или выставить личный лимит.
     """
 
     __tablename__ = "awg_access"
-    __table_args__ = {"comment": "Доступ к AmneziaWG, выданный админом"}
+    __table_args__ = {"comment": "Доступ мембера к AmneziaWG"}
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, comment="Уникальный ID разрешения")
 
@@ -68,6 +69,11 @@ class AwgAccess(Base):
         DateTime(timezone=True),
         nullable=True,
         comment="Когда ключи выключены (выбыл из LBG или отозван админом)",
+    )
+    announced_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Когда человеку ушла рассылка о переезде AmneziaWG (повторно не шлём)",
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

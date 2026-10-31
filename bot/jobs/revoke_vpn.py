@@ -23,14 +23,16 @@ from utils.board import get_hr_id
 logger: FilteringBoundLogger = structlog.get_logger("vpn-revoke")
 
 
-async def notify(bot: Bot, chat_id: int, text: str) -> None:
-    """Уведомление не должно ронять джоб: человек мог заблокировать бота."""
+async def notify(bot: Bot, chat_id: int, text: str) -> bool:
+    """Уведомление не должно ронять джоб: человек мог заблокировать бота. ``True`` - сообщение ушло."""
     if not chat_id:
-        return
+        return False
     try:
         await bot.send_message(chat_id, text)
     except TelegramAPIError as exc:
         await logger.awarning("vpn-revoke-notify-failed", chat_id=chat_id, error=str(exc))
+        return False
+    return True
 
 
 async def revoke_inactive_subscriptions(bot: Bot, l10n: FluentLocalization) -> None:
