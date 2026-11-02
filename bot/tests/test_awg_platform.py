@@ -1,7 +1,8 @@
 import pytest
 
 from includes.awg import PLATFORMS, excluded_apps, is_platform, personalize_config
-from includes.awg.platform import parse_excluded_apps
+from includes.awg import platform as platform_module
+from includes.awg.platform import EXCLUDED_APPS_FILE, parse_excluded_apps
 
 # Конфиг, как его отдаёт панель: подпись клиента комментарием над [Peer].
 CONF = """[Interface]
@@ -51,8 +52,18 @@ class TestExcludedApps:
         with pytest.raises(ValueError):
             parse_excluded_apps(line)
 
+    def test_missing_file_means_no_exclusions(self, monkeypatch, tmp_path):
+        # Без файла конфиг всё равно выдаётся - просто без списка, а не падает хэндлер.
+        monkeypatch.setattr(platform_module, "EXCLUDED_APPS_FILE", tmp_path / "missing.txt")
+        excluded_apps.cache_clear()
+        try:
+            assert excluded_apps() == ()
+        finally:
+            excluded_apps.cache_clear()
+
     def test_resource_file_is_valid(self):
-        apps = excluded_apps()
+        # Прямой разбор, без запасного пустого списка: битый файл должен ронять тест, а не прятаться.
+        apps = parse_excluded_apps(EXCLUDED_APPS_FILE.read_text(encoding="utf-8"))
         assert "ru.sberbankmobile" in apps
         assert len(apps) == len(set(apps))
 

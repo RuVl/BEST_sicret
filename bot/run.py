@@ -14,6 +14,7 @@ from dialogs.user.vpn_awg import hide_leftover_configs
 from env import settings
 from handlers import register_handlers
 from includes import PickleRedisStorage, get_fluent_localization, get_redis_storage, setup_logging
+from includes.awg import excluded_apps
 from includes.pending_hides import close_pending_hides
 from includes.vpn import close_xui_client
 from jobs import revoke_inactive_subscriptions, suspend_inactive_awg_access
@@ -85,6 +86,9 @@ async def main():
 
     # Конфиги AmneziaWG, которые не успели скрыть до перезапуска (там приватные ключи).
     await hide_leftover_configs(bot, bg_factory)
+    if settings.awg.ENABLED:
+        # Список читается и проверяется сразу: проблема с файлом видна в логе старта, а не у первого человека.
+        await logger.ainfo("AWG excluded apps loaded.", count=len(excluded_apps()))
 
     # Автоотзыв VPN-подписок у выбывших мемберов (без него ключи живут вечно)
     scheduler = _create_scheduler(bot)

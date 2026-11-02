@@ -15,11 +15,18 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal, get_args
 
+import structlog
+from structlog.typing import FilteringBoundLogger
+
+logger: FilteringBoundLogger = structlog.get_logger("awg")
+
 DevicePlatform = Literal["android", "ios", "windows", "macos", "linux"]
 PLATFORMS: tuple[DevicePlatform, ...] = get_args(DevicePlatform)
 
 # Российские приложения, которые на Android идут мимо VPN: правится без кода, по пакету в строке.
-EXCLUDED_APPS_FILE = Path(__file__).resolve().parents[2] / "resources" / "awg" / "excluded_apps.txt"
+# Лежит рядом с кодом, а не в resources/: туда в docker смонтирован том, и новые файлы образа
+# под ним не видны.
+EXCLUDED_APPS_FILE = Path(__file__).with_name("excluded_apps.txt")
 
 _PACKAGE = re.compile(r"[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+")
 
@@ -36,7 +43,7 @@ def parse_excluded_apps(text: str) -> tuple[str, ...]:
         if not line:
             continue
         if not _PACKAGE.fullmatch(line):
-            # Кривая строка в конфиге сломала бы его импорт на телефоне - лучше упасть при старте.
+            # Кривая строка в конфиге сломала бы его импорт на телефоне - такой файл не берём совсем.
             raise ValueError(f"{EXCLUDED_APPS_FILE.name}: не похоже на пакет Android: {line!r}")
         packages[line] = None
     return tuple(packages)
@@ -44,7 +51,13 @@ def parse_excluded_apps(text: str) -> tuple[str, ...]:
 
 @lru_cache(maxsize=1)
 def excluded_apps() -> tuple[str, ...]:
-    return parse_excluded_apps(EXCLUDED_APPS_FILE.read_text(encoding="utf-8"))
+    """Список для Android-конфигов. Нет файла или он битый - конфиг выдаётся без исключений:
+    VPN работает, просто российские приложения тоже идут через него. Ошибку видно в логе при старте."""
+    try:
+        return parse_excluded_apps(EXCLUDED_APPS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        logger.error("awg-excluded-apps-unavailable", path=str(EXCLUDED_APPS_FILE), error=str(exc))
+        return ()
 
 
 def _interface_end(lines: list[str]) -> int:
