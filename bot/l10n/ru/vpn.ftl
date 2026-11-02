@@ -75,6 +75,7 @@ vpn-awg-devices = *AmneziaWG*
 
 vpn-awg-device-card = *{ $name }*
     { "" }
+    Платформа: { $platform }
     Статус: { $status }
     Последнее подключение: { $online }
     Трафик \(скачано / отправлено\): { $traffic }
@@ -82,6 +83,12 @@ vpn-awg-device-card = *{ $name }*
 vpn-awg-name-new = *Новое устройство*
     { "" }
     Напишите название, например «Телефон» или «Ноутбук» \(до { $max } символов\)\.
+
+vpn-awg-platform-question = *Где будете подключаться?*
+    { "" }
+    От этого зависит конфиг: на Android российские приложения \(банки, Госуслуги, маркетплейсы\) пойдут мимо VPN и будут работать как без него\. На других системах такой настройки в конфиге нет\.
+
+vpn-awg-platform-changed-alert = Платформа сохранена. Получите конфиг заново, чтобы она применилась.
 
 vpn-awg-name-rename = *Переименование*
     { "" }
@@ -141,6 +148,12 @@ vpn-awg-suspend-report = *Автоотключение ключей AmneziaWG*
 # Строки списка и карточки - обычный текст, экранирует код
 vpn-awg-device-line-part = { $name }: { $status }
 vpn-awg-device-default-name-part = Устройство { $number }
+vpn-awg-platform-android-part = Android
+vpn-awg-platform-ios-part = iPhone / iPad
+vpn-awg-platform-windows-part = Windows
+vpn-awg-platform-macos-part = macOS
+vpn-awg-platform-linux-part = Linux
+vpn-awg-platform-none-part = не указана
 vpn-awg-devices-empty-part = Устройств пока нет. Нажмите «Добавить устройство».
 vpn-awg-status-online-part = в сети
 vpn-awg-status-inactive-part = давно не подключалось
@@ -157,6 +170,7 @@ vpn-awg-btn = AmneziaWG
 vpn-awg-add-btn = Добавить устройство
 vpn-awg-get-config-btn = Получить конфиг
 vpn-awg-rename-btn = Переименовать
+vpn-awg-platform-btn = Сменить платформу
 vpn-awg-delete-btn = Удалить
 vpn-awg-delete-yes-btn = Да, удалить
 vpn-awg-restore-btn = Включить ключи

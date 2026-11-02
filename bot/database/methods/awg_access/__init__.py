@@ -11,6 +11,7 @@ from .set import (
     set_device_client_name,
     set_device_label,
     set_device_limit,
+    set_device_platform,
 )
 
 __all__ = [
@@ -29,4 +30,5 @@ __all__ = [
     "set_device_client_name",
     "set_device_label",
     "set_device_limit",
+    "set_device_platform",
 ]

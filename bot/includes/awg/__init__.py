@@ -8,6 +8,7 @@ from .identity import (
     is_valid_client_name,
     normalize_device_label,
 )
+from .platform import PLATFORMS, DevicePlatform, excluded_apps, is_platform, personalize_config
 from .qr import render_config_qr
 from .schemas import AwgClientPayload, AwgPeer
 from .service import (
@@ -25,6 +26,11 @@ from .service import (
 from .share_link import extract_device_config
 
 __all__ = [
+    "PLATFORMS",
+    "DevicePlatform",
+    "excluded_apps",
+    "is_platform",
+    "personalize_config",
     "MAX_DEVICE_LABEL_LEN",
     "AwgAccessRevokedError",
     "AwgAuthError",

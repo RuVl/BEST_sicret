@@ -18,9 +18,10 @@ async def create_device(
     number: int,
     client_name: str,
     label: str | None = None,
+    platform: str | None = None,
 ) -> AwgDevice:
     """Завести устройство под разрешением. Пир в панели создаёт вызывающая сторона."""
-    device = AwgDevice(number=number, client_name=client_name, label=label)
+    device = AwgDevice(number=number, client_name=client_name, label=label, platform=platform)
     access.devices.append(device)
     await session.flush()
     return device
