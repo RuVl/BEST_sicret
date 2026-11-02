@@ -24,8 +24,7 @@ DevicePlatform = Literal["android", "ios", "windows", "macos", "linux"]
 PLATFORMS: tuple[DevicePlatform, ...] = get_args(DevicePlatform)
 
 # Российские приложения, которые на Android идут мимо VPN: правится без кода, по пакету в строке.
-# Лежит рядом с кодом, а не в resources/: туда в docker смонтирован том, и новые файлы образа
-# под ним не видны.
+# Лежит рядом с кодом: это часть логики выдачи конфига, а не данные, которые бот пишет сам.
 EXCLUDED_APPS_FILE = Path(__file__).with_name("excluded_apps.txt")
 
 _PACKAGE = re.compile(r"[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+")

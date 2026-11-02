@@ -26,3 +26,8 @@ logs/
 aiogram_dialog.png
 .dockerignore
 Dockerfile
+
+# данные, которые приходят в контейнер томами, а не из образа (чеки, шаблоны приказов)
+resources/refund_bills/
+resources/templates/
+resources/resources/
