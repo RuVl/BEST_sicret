@@ -19,6 +19,7 @@ from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Button, Cancel, SwitchTo, Url
 from aiogram_dialog.widgets.text import Format
 from fluent.runtime import FluentLocalization
+from sqlalchemy.exc import IntegrityError
 from structlog.typing import FilteringBoundLogger
 
 from database.main import async_session
@@ -55,7 +56,7 @@ async def get_vpn_data(
             "text": l10n.format_value("vpn-access-denied"),
         }
 
-    data = await _get_subscription_data(subscription, person.id, l10n, log)
+    data = {"can_restore": False} | await _get_subscription_data(subscription, person.id, l10n, log)
 
     data["awg_allowed"] = awg_allowed(access)
     if data["awg_allowed"]:
@@ -95,14 +96,18 @@ async def _get_subscription_data(
             "text": l10n.format_value("vpn-orphaned"),
         }
 
+    # Отключил джоб, а человек снова мембер (окно открыто только мемберам) - включить может сам.
+    # Выключенного в панели руками при живой подписке оставляем админу.
+    can_restore = subscription.status != "active"
+    state = "revoked" if can_restore else "active" if traffic.enable else "disabled"
     text = l10n.format_value(
-        "vpn-active" if traffic.enable else "vpn-disabled",
+        f"vpn-{state}",
         args={
             "url": escape_mdv2(client.build_subscription_url(subscription.sub_id)),
             "traffic": escape_mdv2(format_traffic(traffic.used_bytes)),
         },
     )
-    return {"is_allowed": True, "has_subscription": True, "text": text}
+    return {"is_allowed": True, "has_subscription": True, "can_restore": can_restore, "text": text}
 
 
 # ========== Хэндлер: выпуск или восстановление подписки ==========
@@ -129,12 +134,15 @@ async def on_issue(
             # Всё сведение расхождений с панелью - внутри ensure_subscription.
             await ensure_subscription(session, client, person, member)
             await session.commit()
-    except XuiError as exc:
+    except (XuiError, IntegrityError) as exc:
+        # IntegrityError - двойной клик или чужая строка с теми же идентификаторами: сессия
+        # откатится сама, а человек получит ответ вместо зависшей кнопки.
         await log.aerror("vpn-issue-failed", telegram_id=clb.from_user.id, error=str(exc))
         await clb.answer(l10n.format_value("vpn-error-alert"), show_alert=True)
         return
 
-    await clb.answer(l10n.format_value("vpn-issued-alert"))
+    alert = "vpn-restored-alert" if widget.widget_id == "restore_vpn" else "vpn-issued-alert"
+    await clb.answer(l10n.format_value(alert))
 
 
 # ========== Диалог ==========
@@ -152,6 +160,13 @@ vpn_dialog = Dialog(
             id="issue_vpn",
             on_click=on_issue,
             when=F["is_allowed"] & ~F["has_subscription"],
+        ),
+        # Тот же ensure_subscription: он и включает отключённого джобом клиента по прежней ссылке.
+        Button(
+            L10nFormat("vpn-restore-btn"),
+            id="restore_vpn",
+            on_click=on_issue,
+            when=F["is_allowed"] & F["can_restore"],
         ),
         # Обработанный клик в приватном чате сам вызывает перерисовку окна,
         # а геттер на каждой отрисовке ходит в панель - своего on_click кнопке не нужно.

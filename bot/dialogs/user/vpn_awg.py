@@ -10,7 +10,8 @@ AmneziaWG - основной протокол, он открыт каждому 
 Конфиг - это приватный ключ, поэтому он не уходит отдельными сообщениями: он показывается
 окном диалога (файл или QR-код с кнопками) и исчезает из чата, когда человек уходит из окна,
 жмёт «Готово» или истекает ``AWG_CONFIG_TTL_SECONDS``. Байты файла и QR лежат только в памяти
-бота (``includes.memory_media``) и удаляются оттуда вместе с окном.
+бота (``includes.memory_media``) и удаляются оттуда вместе с окном. Таймеры записаны в Redis
+(``includes.pending_hides``): конфиг, который не успели скрыть до перезапуска, бот скроет при старте.
 
 Как и окно VLESS, окна самодостаточны: членство и разрешение перепроверяются на каждой
 отрисовке и каждом клике - клавиатура у пользователя могла устареть.
@@ -26,13 +27,14 @@ import structlog
 from aiogram import Bot, F
 from aiogram.exceptions import TelegramAPIError
 from aiogram.types import CallbackQuery, ContentType, Message
-from aiogram_dialog import BaseDialogManager, DialogManager, ShowMode, Window
+from aiogram_dialog import BaseDialogManager, BgManagerFactory, DialogManager, ShowMode, Window
 from aiogram_dialog.api.entities import MediaAttachment
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
 from aiogram_dialog.widgets.kbd import Button, Column, Select, SwitchTo, Url
 from aiogram_dialog.widgets.media import DynamicMedia
 from aiogram_dialog.widgets.text import Format
 from fluent.runtime import FluentLocalization
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from structlog.typing import FilteringBoundLogger
 
@@ -59,6 +61,7 @@ from includes.awg import (
     restore_access,
 )
 from includes.memory_media import memory_media
+from includes.pending_hides import PendingHide, get_pending_hides
 from middlewares import L10N_FORMAT_KEY, LOGGING_KEY
 from state_machines.vpn import ViewVpnSubscription
 from utils import L10nFormat, current_member, escape_mdv2, format_traffic
@@ -154,7 +157,9 @@ def _middleware(dialog_manager: DialogManager) -> tuple[FluentLocalization, Filt
     return dialog_manager.middleware_data[L10N_FORMAT_KEY], dialog_manager.middleware_data[LOGGING_KEY]
 
 
-def _awg_error_text(l10n: FluentLocalization, exc: AwgError, access: AwgAccess | None) -> str:
+def _awg_error_text(l10n: FluentLocalization, exc: Exception, access: AwgAccess | None) -> str:
+    # IntegrityError приходит из гонки двух событий одного человека (двойной клик, два названия
+    # подряд - апдейты не сериализуются): строка уже есть, человеку - обычная ошибка «попробуйте ещё».
     if isinstance(exc, AwgDeviceLimitError) and access is not None:
         return l10n.format_value(
             "vpn-awg-limit-alert", args={"used": len(access.devices), "limit": device_limit(access)}
@@ -180,17 +185,33 @@ def _forget_config(dialog_manager: DialogManager) -> None:
         memory_media.drop(config["file"], config["qr"])
 
 
-async def _hide_later(bg: BaseDialogManager, token: str, urls: tuple[str | None, ...]) -> None:
-    await asyncio.sleep(settings.awg.CONFIG_TTL_SECONDS)
+async def _hide(bg: BaseDialogManager, token: str) -> None:
     try:
         # Окно конфига по этому токену поймёт, что пора убрать файл; другие окна ключ проигнорируют.
         await bg.update({_HIDDEN: token})
     except Exception as exc:
         # Фоновая задача: исключение некому поймать, поэтому только пишем в лог.
         await logger.awarning("awg-config-hide-failed", error=str(exc))
+
+
+async def _hide_later(bg: BaseDialogManager, token: str, urls: tuple[str | None, ...]) -> None:
+    try:
+        await asyncio.sleep(settings.awg.CONFIG_TTL_SECONDS)
+        await _hide(bg, token)
     finally:
         # Что бы ни случилось с окном, ключ в памяти бота дольше срока не живёт.
         memory_media.drop(*urls)
+        await get_pending_hides().remove(token)
+
+
+async def hide_leftover_configs(bot: Bot, bg_factory: BgManagerFactory) -> None:
+    """При старте: скрыть конфиги, чьи таймеры оборвал перезапуск. Ждать срока незачем -
+    байтов конфига в памяти уже нет, и окно всё равно не сможет показать файл заново."""
+    hides = await get_pending_hides().take_all()
+    for hide in hides:
+        await _hide(bg_factory.bg(bot, hide.user_id, hide.chat_id, stack_id=hide.stack_id), hide.token)
+    if hides:
+        await logger.ainfo("awg-leftover-configs-hidden", count=len(hides))
 
 
 async def _open_config(dialog_manager: DialogManager, device: AwgDevice, name: str, config: str) -> None:
@@ -210,7 +231,11 @@ async def _open_config(dialog_manager: DialogManager, device: AwgDevice, name: s
 
     # Привязка к стеку, а не к окну: если человек к тому времени закрыл диалог, обновление
     # не упадёт с UnknownIntent (а его хэндлер сбросил бы человеку меню).
-    bg = dialog_manager.bg(stack_id=dialog_manager.current_stack().id)
+    stack_id = dialog_manager.current_stack().id
+    bg = dialog_manager.bg(stack_id=stack_id)
+    user = dialog_manager.middleware_data["event_from_user"]
+    chat = dialog_manager.middleware_data["event_chat"]
+    await get_pending_hides().add(PendingHide(token=token, user_id=user.id, chat_id=chat.id, stack_id=stack_id))
     task = asyncio.create_task(_hide_later(bg, token, (file_url, qr_url)))
     _hide_tasks.add(task)
     task.add_done_callback(_hide_tasks.discard)
@@ -420,7 +445,7 @@ async def on_restore(clb: CallbackQuery, widget: Button, dialog_manager: DialogM
             if loaded[1] is not None and loaded[1].status == "suspended":
                 await restore_access(session, get_awg_client(), loaded[1])
                 await session.commit()
-    except AwgError as exc:
+    except (AwgError, IntegrityError) as exc:
         await log.aerror("vpn-awg-restore-failed", telegram_id=clb.from_user.id, error=str(exc))
         await clb.answer(l10n.format_value("vpn-awg-error-alert"), show_alert=True)
         return
@@ -445,7 +470,7 @@ async def on_get_config(clb: CallbackQuery, widget: Button, dialog_manager: Dial
 
             config = await issue_device_config(session, get_awg_client(), access, device, person)
             await session.commit()
-    except AwgError as exc:
+    except (AwgError, IntegrityError) as exc:
         await log.aerror("vpn-awg-issue-failed", telegram_id=clb.from_user.id, number=number, error=str(exc))
         await clb.answer(_awg_error_text(l10n, exc, access), show_alert=True)
         return
@@ -473,7 +498,7 @@ async def on_delete_confirmed(clb: CallbackQuery, widget: Button, dialog_manager
             if access is not None and device is not None:
                 await remove_device(session, get_awg_client(), access, device)
                 await session.commit()
-    except AwgError as exc:
+    except (AwgError, IntegrityError) as exc:
         await log.aerror("vpn-awg-delete-failed", telegram_id=clb.from_user.id, number=number, error=str(exc))
         await clb.answer(l10n.format_value("vpn-awg-error-alert"), show_alert=True)
         await dialog_manager.switch_to(ViewVpnSubscription.AWG_DEVICE)
@@ -513,7 +538,7 @@ async def on_name_entered(
                     await rename_device(session, device, label)
                     await session.commit()
                 config = None
-    except AwgError as exc:
+    except (AwgError, IntegrityError) as exc:
         await log.aerror("vpn-awg-name-failed", telegram_id=message.from_user.id, target=target, error=str(exc))
         dialog_manager.dialog_data[_NAME_ERROR] = _awg_error_text(l10n, exc, access)
         return

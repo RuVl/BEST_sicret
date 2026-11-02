@@ -54,6 +54,11 @@ class AwgClient:
             traffic = await self._xui.get_traffic(client_name)
         return AwgPeer.from_panel(details, self._inbound_id, traffic)
 
+    async def has_client(self, client_name: str) -> bool:
+        """Есть ли клиент с таким email в панели - один запрос, без счётчиков трафика."""
+        with _panel_errors():
+            return await self._xui.get_client_details(client_name) is not None
+
     async def find_peers(self, client_names: list[str]) -> dict[str, AwgPeer]:
         """Устройства по email разом - запросы к панели идут параллельно."""
         peers = await asyncio.gather(*(self.find_peer(name) for name in client_names))

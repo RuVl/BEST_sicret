@@ -2,8 +2,8 @@ from .client import AwgClient, get_awg_client
 from .exceptions import AwgAccessRevokedError, AwgAuthError, AwgDeviceLimitError, AwgError
 from .identity import (
     MAX_DEVICE_LABEL_LEN,
-    build_peer_comment,
     device_client_name,
+    fallback_device_client_name,
     free_device_number,
     is_valid_client_name,
     normalize_device_label,
@@ -34,8 +34,8 @@ __all__ = [
     "AwgError",
     "AwgPeer",
     "add_device",
-    "build_peer_comment",
     "device_client_name",
+    "fallback_device_client_name",
     "device_limit",
     "disable_peers",
     "ensure_peer",

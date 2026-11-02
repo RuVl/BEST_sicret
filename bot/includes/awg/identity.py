@@ -1,27 +1,40 @@
 """Имя клиента AmneziaWG - его email в панели 3x-ui.
 
 Имя глобально уникально в панели, а одно устройство - отдельный клиент (в одном инбаунде у email
-ровно один ключ). Префикс ``awg-`` отличает такие клиенты от VLESS-подписок в общем списке панели.
-Допустимы ASCII-буквы, цифры, ``_`` и ``-`` - они проходят проверку email в 3x-ui.
+ровно один ключ). Имя ``awg-<номер>-<email человека>``: префикс ``awg-`` отличает такие клиенты
+от VLESS-подписок в общем списке панели, а email тот же, что у VLESS-клиента человека, - в админке
+сразу видно, чьё устройство. Символы проверяем по правилам панели (``includes.vpn.identity``).
 """
 
-import re
 from collections.abc import Iterable
 
-MAX_CLIENT_NAME_LEN = 32
+from database.models import AwgDevice
+from includes.vpn.identity import build_client_email, fallback_client_email, is_valid_client_id
+
+MAX_CLIENT_NAME_LEN: int = AwgDevice.__table__.c.client_name.type.length
 CLIENT_NAME_PREFIX = "awg-"
 MAX_DEVICE_LABEL_LEN = 32
 
-_CLIENT_NAME = re.compile(rf"[A-Za-z0-9_-]{{1,{MAX_CLIENT_NAME_LEN}}}")
-
 
 def is_valid_client_name(value: str) -> bool:
-    return _CLIENT_NAME.fullmatch(value) is not None
+    return len(value) <= MAX_CLIENT_NAME_LEN and is_valid_client_id(value)
 
 
-def device_client_name(person_id: int, number: int) -> str:
-    """Стабильное имя по ``person_id`` и номеру устройства: не зависит от смены ФИО или username."""
-    return f"{CLIENT_NAME_PREFIX}lbg{person_id}-{number}"
+def fallback_device_client_name(person_id: int, number: int) -> str:
+    """Имя без почты: у человека нет пригодного email или такое имя уже заняло чужое устройство."""
+    return f"{CLIENT_NAME_PREFIX}{number}-{fallback_client_email(person_id)}"
+
+
+def device_client_name(person_id: int, best_email: str | None, number: int) -> str:
+    """Имя устройства по email человека и номеру устройства.
+
+    Имя фиксируется в БД, когда бот заводит клиента в панели: смена почты потом его не меняет,
+    иначе бот потерял бы уже выданный ключ. Без пригодного email - ``lbg-<person_id>``, как у VLESS.
+    """
+    name = f"{CLIENT_NAME_PREFIX}{number}-{build_client_email(person_id, best_email)}"
+    if is_valid_client_name(name):
+        return name
+    return fallback_device_client_name(person_id, number)
 
 
 def free_device_number(used: Iterable[int]) -> int:
@@ -46,13 +59,3 @@ def normalize_device_label(value: str) -> str:
     if any(not char.isprintable() for char in label):
         raise ValueError("непечатаемые символы")
     return label
-
-
-def build_peer_comment(full_name: str, username: str | None, telegram_id: int, number: int) -> str:
-    """Подпись клиента в панели - чтобы в админке было видно, чей это ключ и какое устройство по счёту.
-
-    Название устройства сюда не пишем: оно меняется в боте, а подпись в панели после создания
-    бот не трогает (см. ``rename_device``).
-    """
-    handle = f"@{username}" if username else "без username"
-    return f"{full_name} ({handle}, tg {telegram_id}), устройство {number} - выдан ботом"

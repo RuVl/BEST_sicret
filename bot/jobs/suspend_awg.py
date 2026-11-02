@@ -14,7 +14,7 @@ from database.main import async_session
 from database.methods.awg_access import list_accesses_to_suspend, mark_suspended
 from includes.awg import AwgError, disable_peers, get_awg_client
 from jobs.revoke_vpn import notify
-from utils import escape_mdv2
+from utils import escape_mdv2, split_message
 from utils.board import get_hr_id
 
 logger: FilteringBoundLogger = structlog.get_logger("awg-suspend")
@@ -63,4 +63,5 @@ async def suspend_inactive_awg_access(bot: Bot, l10n: FluentLocalization) -> Non
             "details": escape_mdv2("\n".join(suspended + failed)),
         },
     )
-    await notify(bot, hr_id, report)
+    for part in split_message(report):
+        await notify(bot, hr_id, part)

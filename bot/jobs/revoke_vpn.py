@@ -17,7 +17,7 @@ from structlog.typing import FilteringBoundLogger
 from database.main import async_session
 from database.methods.vpn_subscription import list_subscriptions_to_revoke, mark_revoked
 from includes.vpn import XuiClientNotFoundError, XuiError, get_xui_client
-from utils import escape_mdv2
+from utils import escape_mdv2, split_message
 from utils.board import get_hr_id
 
 logger: FilteringBoundLogger = structlog.get_logger("vpn-revoke")
@@ -79,4 +79,6 @@ async def revoke_inactive_subscriptions(bot: Bot, l10n: FluentLocalization) -> N
             "details": escape_mdv2(details),
         },
     )
-    await notify(bot, hr_id, report)
+    # При массовом отзыве сводка длиннее лимита Telegram - шлём частями, иначе она не дойдёт вовсе.
+    for part in split_message(report):
+        await notify(bot, hr_id, part)

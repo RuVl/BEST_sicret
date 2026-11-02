@@ -6,27 +6,49 @@ AmneziaWG-инбаунда в 3x-ui) на каждое устройство, в 
 
 Как и у VLESS, источник правды о ключе - панель: клиента могли удалить или выключить в её
 админке, поэтому перед выдачей бот сверяется с ней и чинит расхождение сам. Так же переезжают
-устройства со старого сервера AmneziaWG: клиента под их именем в 3x-ui нет, и бот заводит его
-при первой выдаче конфига.
+старые устройства (со старого сервера AmneziaWG и с именами ``awg-lbg<id>-<n>``): клиента под их
+именем в 3x-ui нет, и бот при первой выдаче конфига заводит его уже под именем с почтой.
 """
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 from structlog.typing import FilteringBoundLogger
 
-from database.methods.awg_access import create_device, delete_device, mark_granted, mark_issued, set_device_label
+from database.methods.awg_access import (
+    create_device,
+    delete_device,
+    get_device_by_client_name,
+    mark_granted,
+    mark_issued,
+    set_device_client_name,
+    set_device_label,
+)
 from database.models import AwgAccess, AwgDevice, Person
 from env import settings
 from includes.awg.client import AwgClient
 from includes.awg.exceptions import AwgAccessRevokedError, AwgDeviceLimitError, AwgError
-from includes.awg.identity import build_peer_comment, device_client_name, free_device_number
+from includes.awg.identity import device_client_name, fallback_device_client_name, free_device_number
 from includes.awg.schemas import AwgPeer
+from includes.vpn.service import person_comment
 
 logger: FilteringBoundLogger = structlog.get_logger("awg")
 
 
-def _peer_comment(person: Person, device: AwgDevice) -> str:
-    return build_peer_comment(person.full_name, person.telegram_username, person.telegram_id, device.number)
+async def _device_client_name(
+    session: AsyncSession, person: Person, number: int, current: AwgDevice | None = None
+) -> str:
+    """Имя клиента для устройства: по почте человека, а если его уже заняло чужое устройство - без почты.
+
+    Почта приходит из таблицы мемберов и не уникальна: у двух людей она может совпасть.
+    """
+    # lbg_member подгружен вызывающей стороной (get_person_with_member) - ленивой загрузки в async нет.
+    member = person.lbg_member
+    name = device_client_name(person.id, member.best_email if member else None, number)
+    owner = await get_device_by_client_name(session, name)
+    if owner is None or owner is current:
+        return name
+    await logger.awarning("awg-client-name-taken", person_id=person.id, client_name=name)
+    return fallback_device_client_name(person.id, number)
 
 
 def device_limit(access: AwgAccess | None) -> int:
@@ -41,12 +63,20 @@ async def peers_by_name(client: AwgClient, access: AwgAccess) -> dict[str, AwgPe
     return await client.find_peers([device.client_name for device in access.devices])
 
 
-async def ensure_peer(client: AwgClient, device: AwgDevice, person: Person) -> AwgPeer:
-    """Привести ключ устройства в рабочее состояние: создать, если его нет, и включить, если выключен."""
+async def ensure_peer(session: AsyncSession, client: AwgClient, device: AwgDevice, person: Person) -> AwgPeer:
+    """Привести ключ устройства в рабочее состояние: создать, если его нет, и включить, если выключен.
+
+    Клиента под именем устройства в панели нет - значит, имя ещё ничего не держит, и устройство
+    получает актуальное (старые ``awg-lbg<id>-<n>``, сменившаяся почта) прямо перед созданием.
+    """
     peer = await client.find_peer(device.client_name)
 
     if peer is None:
-        await client.create_peer(device.client_name, _peer_comment(person, device), person.telegram_id)
+        name = await _device_client_name(session, person, device.number, current=device)
+        if name != device.client_name:
+            await logger.ainfo("awg-device-renamed", person_id=person.id, old=device.client_name, new=name)
+            await set_device_client_name(session, device, name)
+        await client.create_peer(device.client_name, person_comment(person, person.lbg_member), person.telegram_id)
         peer = await client.find_peer(device.client_name)
         if peer is None:
             raise AwgError(f"Панель создала клиента {device.client_name}, но не отдаёт его")
@@ -87,7 +117,7 @@ async def issue_device_config(
     """Конфиг устройства для отправки человеку. Коммит - на вызывающей стороне."""
     await _ensure_usable(session, client, access)
 
-    peer = await ensure_peer(client, device, person)
+    peer = await ensure_peer(session, client, device, person)
     config = await client.get_config(peer)
 
     await mark_issued(session, device)
@@ -104,16 +134,17 @@ async def add_device(
     """Завести новое устройство и вернуть его конфиг. Коммит - на вызывающей стороне.
 
     Сначала строка в БД, потом пир: если коммит не доедет, следующий заход получит тот же
-    свободный номер и то же имя клиента, а ``ensure_peer`` подхватит уже созданного пира.
+    свободный номер и то же имя клиента, а ``ensure_peer`` подхватит уже созданного пира. Имя
+    другое будет, только если между заходами в таблице сменилась почта, - тогда клиент первой
+    попытки остаётся в панели без устройства, и убирать его придётся руками (он в группе ``AWG_GROUP``).
     """
     await _ensure_usable(session, client, access)
     if len(access.devices) >= device_limit(access):
         raise AwgDeviceLimitError(f"Заведено {len(access.devices)} из {device_limit(access)} устройств")
 
     number = free_device_number(device.number for device in access.devices)
-    device = await create_device(
-        session, access, number=number, client_name=device_client_name(person.id, number), label=label
-    )
+    client_name = await _device_client_name(session, person, number)
+    device = await create_device(session, access, number=number, client_name=client_name, label=label)
     config = await issue_device_config(session, client, access, device, person)
     await logger.ainfo("awg-device-added", person_id=person.id, number=number)
     return device, config
@@ -130,7 +161,7 @@ async def rename_device(session: AsyncSession, device: AwgDevice, label: str) ->
 
 async def remove_device(session: AsyncSession, client: AwgClient, access: AwgAccess, device: AwgDevice) -> None:
     """Удалить устройство: сначала пира в панели, потом строку - иначе ключ остался бы жить без учёта."""
-    if await client.find_peer(device.client_name) is not None:
+    if await client.has_client(device.client_name):
         await client.remove_peer(device.client_name)
 
     await delete_device(session, access, device)
