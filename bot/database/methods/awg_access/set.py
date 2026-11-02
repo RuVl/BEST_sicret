@@ -46,6 +46,11 @@ async def set_device_client_name(session: AsyncSession, device: AwgDevice, clien
     await session.flush()
 
 
+async def set_device_platform(session: AsyncSession, device: AwgDevice, platform: str) -> None:
+    """Платформа устройства - по ней собирается конфиг при следующей выдаче."""
+    device.platform = platform
+
+
 async def mark_issued(session: AsyncSession, device: AwgDevice) -> None:
     """Конфиг устройства отправлен человеку."""
     device.issued_at = datetime.now(UTC)

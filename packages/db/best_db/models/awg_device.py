@@ -42,6 +42,13 @@ class AwgDevice(Base):
         comment="Email клиента AmneziaWG в 3x-ui (awg-<number>-<email человека>)",
     )
 
+    # От платформы зависит конфиг: список приложений мимо VPN понимают только Android-клиенты.
+    platform: Mapped[str | None] = mapped_column(
+        String(16),
+        nullable=True,
+        comment="android/ios/windows/macos/linux; NULL - не указана (заведено до выбора платформы)",
+    )
+
     # Название задаёт сам человек (``Телефон``, ``Ноутбук``); NULL - «Устройство <number>».
     label: Mapped[str | None] = mapped_column(String(32), nullable=True, comment="Название устройства от владельца")
 

@@ -28,6 +28,7 @@ from env import settings
 from includes.awg.client import AwgClient
 from includes.awg.exceptions import AwgAccessRevokedError, AwgDeviceLimitError, AwgError
 from includes.awg.identity import device_client_name, fallback_device_client_name, free_device_number
+from includes.awg.platform import DevicePlatform, excluded_apps, personalize_config
 from includes.awg.schemas import AwgPeer
 from includes.vpn.service import person_comment
 
@@ -118,7 +119,12 @@ async def issue_device_config(
     await _ensure_usable(session, client, access)
 
     peer = await ensure_peer(session, client, device, person)
-    config = await client.get_config(peer)
+    config = personalize_config(
+        await client.get_config(peer),
+        device.platform,
+        name=settings.awg.CONFIG_NAME,
+        excluded=excluded_apps(),
+    )
 
     await mark_issued(session, device)
     return config
@@ -130,6 +136,7 @@ async def add_device(
     access: AwgAccess,
     person: Person,
     label: str | None = None,
+    platform: DevicePlatform | None = None,
 ) -> tuple[AwgDevice, str]:
     """Завести новое устройство и вернуть его конфиг. Коммит - на вызывающей стороне.
 
@@ -144,7 +151,9 @@ async def add_device(
 
     number = free_device_number(device.number for device in access.devices)
     client_name = await _device_client_name(session, person, number)
-    device = await create_device(session, access, number=number, client_name=client_name, label=label)
+    device = await create_device(
+        session, access, number=number, client_name=client_name, label=label, platform=platform
+    )
     config = await issue_device_config(session, client, access, device, person)
     await logger.ainfo("awg-device-added", person_id=person.id, number=number)
     return device, config

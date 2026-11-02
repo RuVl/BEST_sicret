@@ -5,7 +5,8 @@ AmneziaWG - основной протокол, он открыт каждому 
 
 Один ключ AmneziaWG - одно устройство (в отличие от VLESS, где одна ссылка работает на
 нескольких), поэтому человек заводит ключ на каждое устройство в пределах лимита, называет
-его сам и видит по нему статус и трафик из панели 3x-ui.
+его сам, указывает платформу (от неё зависит конфиг, см. ``includes.awg.platform``) и видит
+по нему статус и трафик из панели 3x-ui.
 
 Конфиг - это приватный ключ, поэтому он не уходит отдельными сообщениями: он показывается
 окном диалога (файл или QR-код с кнопками) и исчезает из чата, когда человек уходит из окна,
@@ -39,12 +40,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from structlog.typing import FilteringBoundLogger
 
 from database.main import async_session
-from database.methods.awg_access import create_access, get_access_by_person
+from database.methods.awg_access import create_access, get_access_by_person, set_device_platform
 from database.methods.person import get_person_with_member
 from database.models import AwgAccess, AwgDevice, Person
 from env import settings
 from includes.awg import (
     MAX_DEVICE_LABEL_LEN,
+    PLATFORMS,
     AwgAccessRevokedError,
     AwgDeviceLimitError,
     AwgError,
@@ -52,6 +54,7 @@ from includes.awg import (
     add_device,
     device_limit,
     get_awg_client,
+    is_platform,
     issue_device_config,
     normalize_device_label,
     peers_by_name,
@@ -75,6 +78,8 @@ _DISPLAY_TZ = ZoneInfo("Europe/Moscow")
 _DEVICE = "awg_device"  # номер открытого устройства
 _NAME_TARGET = "awg_name_target"  # None - новое устройство, число - переименование
 _NAME_ERROR = "awg_name_error"  # готовый текст ошибки под вопросом о названии
+_NEW_LABEL = "awg_new_label"  # название нового устройства, пока человек выбирает платформу
+_PLATFORM_TARGET = "awg_platform_target"  # None - новое устройство, число - смена платформы
 _CONFIG = "awg_config"  # memory://-ссылки на файл и QR открытого конфига
 _SHOW_QR = "awg_show_qr"
 _HIDDEN = "awg_hidden"  # токен конфига, который убрал таймер
@@ -126,6 +131,10 @@ def _find_device(access: AwgAccess | None, number: int | None) -> AwgDevice | No
 
 def _device_name(l10n: FluentLocalization, device: AwgDevice) -> str:
     return device.label or l10n.format_value("vpn-awg-device-default-name-part", args={"number": device.number})
+
+
+def _platform_name(l10n: FluentLocalization, platform: str | None) -> str:
+    return l10n.format_value(f"vpn-awg-platform-{platform if is_platform(platform) else 'none'}-part")
 
 
 def _device_status(l10n: FluentLocalization, peer: AwgPeer | None, peers_known: bool) -> str:
@@ -339,6 +348,7 @@ async def get_device_data(
         "vpn-awg-device-card",
         args={
             "name": escape_mdv2(_device_name(l10n, device)),
+            "platform": escape_mdv2(_platform_name(l10n, device.platform)),
             "status": escape_mdv2(_device_status(l10n, peer, panel_ok)),
             "online": escape_mdv2(_format_last_online(l10n, peer.last_online_at) if peer else no_data),
             "traffic": escape_mdv2(_format_traffic(l10n, peer)),
@@ -365,6 +375,13 @@ async def get_name_data(dialog_manager: DialogManager, l10n: FluentLocalization,
     if error:
         text += "\n\n" + escape_mdv2(error)
     return {"text": text}
+
+
+async def get_platform_data(l10n: FluentLocalization, **kwargs) -> dict[str, Any]:
+    return {
+        "text": l10n.format_value("vpn-awg-platform-question"),
+        "platforms": [(_platform_name(l10n, platform), platform) for platform in PLATFORMS],
+    }
 
 
 async def get_config_data(dialog_manager: DialogManager, l10n: FluentLocalization, **kwargs) -> dict[str, Any]:
@@ -528,16 +545,11 @@ async def on_name_entered(
                 return
             person, access = loaded
 
-            if target is None:
-                access = await _grant_access(session, person, access)
-                device, config = await add_device(session, get_awg_client(), access, person, label)
-                await session.commit()
-            else:
+            if target is not None:
                 device = _find_device(access, target)
                 if device is not None:
                     await rename_device(session, device, label)
                     await session.commit()
-                config = None
     except (AwgError, IntegrityError) as exc:
         await log.aerror("vpn-awg-name-failed", telegram_id=message.from_user.id, target=target, error=str(exc))
         dialog_manager.dialog_data[_NAME_ERROR] = _awg_error_text(l10n, exc, access)
@@ -545,12 +557,14 @@ async def on_name_entered(
 
     dialog_manager.dialog_data.pop(_NAME_ERROR, None)
     dialog_manager.dialog_data.pop(_NAME_TARGET, None)
-    if config is None:
+    if target is not None:
         await dialog_manager.switch_to(ViewVpnSubscription.AWG_DEVICE)
         return
 
-    dialog_manager.dialog_data[_DEVICE] = device.number
-    await _open_config(dialog_manager, device, label, config)
+    # Новое устройство заводим после выбора платформы: от неё зависит уже первый конфиг.
+    dialog_manager.dialog_data[_NEW_LABEL] = label
+    dialog_manager.dialog_data[_PLATFORM_TARGET] = None
+    await dialog_manager.switch_to(ViewVpnSubscription.AWG_PLATFORM)
 
 
 async def on_name_error(message: Message, widget: ManagedTextInput, dialog_manager: DialogManager, error: ValueError):
@@ -567,6 +581,70 @@ async def on_name_back(clb: CallbackQuery, widget: Button, dialog_manager: Dialo
     target = dialog_manager.dialog_data.pop(_NAME_TARGET, None)
     state = ViewVpnSubscription.AWG if target is None else ViewVpnSubscription.AWG_DEVICE
     await dialog_manager.switch_to(state)
+
+
+# ========== Хэндлеры: платформа ==========
+async def on_start_platform(clb: CallbackQuery, widget: Button, dialog_manager: DialogManager) -> None:
+    dialog_manager.dialog_data[_PLATFORM_TARGET] = dialog_manager.dialog_data.get(_DEVICE)
+    await dialog_manager.switch_to(ViewVpnSubscription.AWG_PLATFORM)
+
+
+async def on_platform_selected(
+    clb: CallbackQuery, widget: Select, dialog_manager: DialogManager, platform: str
+) -> None:
+    l10n, log = _middleware(dialog_manager)
+    if not is_platform(platform):
+        await clb.answer()
+        return
+    target = dialog_manager.dialog_data.get(_PLATFORM_TARGET)
+    access: AwgAccess | None = None
+
+    try:
+        async with async_session() as session:
+            loaded = await _load_access(session, clb.from_user.id)
+            if loaded is None:
+                await clb.answer(l10n.format_value("vpn-awg-denied-alert"), show_alert=True)
+                await dialog_manager.switch_to(ViewVpnSubscription.AWG)
+                return
+            person, access = loaded
+
+            if target is None:
+                label = dialog_manager.dialog_data.get(_NEW_LABEL)
+                access = await _grant_access(session, person, access)
+                device, config = await add_device(session, get_awg_client(), access, person, label, platform)
+                await session.commit()
+            else:
+                device = _find_device(access, target)
+                if device is not None:
+                    await set_device_platform(session, device, platform)
+                    await session.commit()
+                config = None
+    except (AwgError, IntegrityError) as exc:
+        await log.aerror("vpn-awg-platform-failed", telegram_id=clb.from_user.id, target=target, error=str(exc))
+        await clb.answer(_awg_error_text(l10n, exc, access), show_alert=True)
+        return
+
+    dialog_manager.dialog_data.pop(_PLATFORM_TARGET, None)
+    if config is None:
+        await clb.answer(l10n.format_value("vpn-awg-platform-changed-alert"), show_alert=True)
+        await dialog_manager.switch_to(ViewVpnSubscription.AWG_DEVICE)
+        return
+
+    dialog_manager.dialog_data.pop(_NEW_LABEL, None)
+    dialog_manager.dialog_data[_DEVICE] = device.number
+    await clb.answer()
+    await _open_config(dialog_manager, device, _device_name(l10n, device), config)
+
+
+async def on_platform_back(clb: CallbackQuery, widget: Button, dialog_manager: DialogManager) -> None:
+    target = dialog_manager.dialog_data.pop(_PLATFORM_TARGET, None)
+    if target is not None:
+        await dialog_manager.switch_to(ViewVpnSubscription.AWG_DEVICE)
+        return
+    # Новое устройство: возвращаемся к названию, оно ещё нигде не сохранено.
+    dialog_manager.dialog_data.pop(_NEW_LABEL, None)
+    dialog_manager.dialog_data[_NAME_TARGET] = None
+    await dialog_manager.switch_to(ViewVpnSubscription.AWG_NAME)
 
 
 # ========== Хэндлеры: конфиг ==========
@@ -622,6 +700,7 @@ awg_windows = (
         Format("{text}"),
         Button(L10nFormat("vpn-awg-get-config-btn"), id="awg_get_config", on_click=on_get_config, when="has_device"),
         Button(L10nFormat("vpn-awg-rename-btn"), id="awg_rename", on_click=on_start_rename, when="has_device"),
+        Button(L10nFormat("vpn-awg-platform-btn"), id="awg_platform", on_click=on_start_platform, when="has_device"),
         SwitchTo(
             L10nFormat("vpn-awg-delete-btn"),
             id="awg_delete",
@@ -644,6 +723,22 @@ awg_windows = (
         Button(L10nFormat("back-btn"), id="awg_name_back", on_click=on_name_back),
         getter=get_name_data,
         state=ViewVpnSubscription.AWG_NAME,
+    ),
+    # --- Платформа ---
+    Window(
+        Format("{text}"),
+        Column(
+            Select(
+                Format("{item[0]}"),
+                id="awg_platforms",
+                item_id_getter=lambda item: item[1],
+                items="platforms",
+                on_click=on_platform_selected,
+            ),
+        ),
+        Button(L10nFormat("back-btn"), id="awg_platform_back", on_click=on_platform_back),
+        getter=get_platform_data,
+        state=ViewVpnSubscription.AWG_PLATFORM,
     ),
     # --- Конфиг: файл или QR в одном сообщении с кнопками ---
     Window(

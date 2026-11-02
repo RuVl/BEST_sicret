@@ -134,6 +134,8 @@ class AwgConfig(_Section):
     # Имя файла конфига: приложения AmneziaWG берут его как имя туннеля (до 15 символов),
     # а к нему дописывается номер устройства - оставляем запас.
     TUNNEL_NAME: str = Field("BEST-AWG", alias="AWG_TUNNEL_NAME")
+    # Имя туннеля первой строкой конфига (``# Name = ...``): его показывает WG Tunnel; пусто - не пишем.
+    CONFIG_NAME: str = Field("BEST VPN", alias="AWG_CONFIG_NAME")
     # Один ключ - одно устройство; админ может поменять лимит человеку (make awg-grant who=@x devices=N).
     DEVICE_LIMIT: int = Field(3, alias="AWG_DEVICE_LIMIT")
     # Сколько секунд сообщение с конфигом (приватным ключом) висит в чате, прежде чем бот его уберёт.
