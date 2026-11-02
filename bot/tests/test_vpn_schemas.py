@@ -2,7 +2,7 @@ import pytest
 
 from includes.vpn.client import unwrap_envelope
 from includes.vpn.exceptions import XuiError
-from includes.vpn.schemas import DEFAULT_FLOW, ClientRecord, ClientTraffic, XuiClientPayload
+from includes.vpn.schemas import ClientDetails, ClientRecord, ClientTraffic, XuiClientPayload
 
 # Ответ панели на GET /panel/api/clients/get/:email (поле obj.client)
 CLIENT_RECORD_FIXTURE = {
@@ -44,34 +44,37 @@ class TestClientRecord:
         assert record.tg_id == 123456789
         assert record.limit_ip == 3
 
-    def test_to_payload_moves_uuid_into_id(self):
-        # В теле на запись UUID называется id, а числовой id строки панели не нужен вовсе.
-        payload = ClientRecord.model_validate(CLIENT_RECORD_FIXTURE).to_payload()
-
-        assert payload.id == "e18c9a96-71bf-48d4-933f-8b9a46d4290c"
-
-    def test_to_payload_keeps_manual_panel_settings(self):
-        payload = ClientRecord.model_validate(CLIENT_RECORD_FIXTURE).to_payload()
-        dumped = payload.model_dump(by_alias=True)
-
-        assert dumped["limitIp"] == 3
-        assert dumped["reset"] == 30
-        assert dumped["group"] == "SPb LBG members"
-        assert dumped["comment"] == "Иванов Иван"
-
     def test_extra_panel_fields_are_ignored(self):
         record = ClientRecord.model_validate(CLIENT_RECORD_FIXTURE | {"createdAt": 1735680000000})
 
         assert record.email == "ivan@best-eu.org"
 
-    def test_to_payload_keeps_flow_set_in_panel(self):
-        # Панель на update заменяет строку целиком, поэтому flow обязан доехать обратно.
-        record = ClientRecord.model_validate(CLIENT_RECORD_FIXTURE | {"flow": "xtls-rprx-vision"})
 
-        assert record.to_payload().flow == "xtls-rprx-vision"
+class TestClientDetails:
+    def _details(self, **client) -> ClientDetails:
+        return ClientDetails.model_validate({"client": CLIENT_RECORD_FIXTURE | client, "inboundIds": [1, 2]})
 
-    def test_to_payload_fills_flow_when_panel_left_it_empty(self):
-        assert ClientRecord.model_validate(CLIENT_RECORD_FIXTURE).to_payload().flow == DEFAULT_FLOW
+    def test_update_body_moves_uuid_into_id(self):
+        # В теле на запись UUID называется id, а числовой id строки панели не нужен вовсе.
+        body = self._details().update_body()
+
+        assert body["id"] == "e18c9a96-71bf-48d4-933f-8b9a46d4290c"
+        assert "uuid" not in body
+
+    def test_update_body_keeps_fields_unknown_to_bot(self):
+        # Панель на update заменяет клиента целиком - поля, которых нет в наших моделях, не теряются.
+        body = self._details(password="trojan-secret", reverse={"tag": "r1"}).update_body(enable=False)
+
+        assert body["password"] == "trojan-secret"
+        assert body["reverse"] == {"tag": "r1"}
+        assert body["limitIp"] == 3
+        assert body["enable"] is False
+
+    def test_record_and_inbounds(self):
+        details = self._details()
+
+        assert details.record.email == "ivan@best-eu.org"
+        assert details.inbound_ids == [1, 2]
 
 
 class TestXuiClientPayload:

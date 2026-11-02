@@ -1,5 +1,5 @@
 from .create import create_access, create_device
-from .get import get_access_by_person, list_accesses
+from .get import get_access_by_person, get_device_by_client_name, list_accesses
 from .list import list_accesses_to_suspend
 from .set import (
     delete_device,
@@ -8,6 +8,7 @@ from .set import (
     mark_issued,
     mark_revoked,
     mark_suspended,
+    set_device_client_name,
     set_device_label,
     set_device_limit,
 )
@@ -17,6 +18,7 @@ __all__ = [
     "create_device",
     "delete_device",
     "get_access_by_person",
+    "get_device_by_client_name",
     "list_accesses",
     "list_accesses_to_suspend",
     "mark_announced",
@@ -24,6 +26,7 @@ __all__ = [
     "mark_issued",
     "mark_revoked",
     "mark_suspended",
+    "set_device_client_name",
     "set_device_label",
     "set_device_limit",
 ]

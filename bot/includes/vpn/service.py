@@ -24,9 +24,14 @@ from database.models import LbgMember, Person, VpnSubscription
 from env import settings
 from includes.vpn.client import XuiClient
 from includes.vpn.identity import belongs_to_person, build_client_email, fallback_client_email
-from includes.vpn.schemas import DEFAULT_FLOW, ClientRecord, XuiClientPayload
+from includes.vpn.schemas import DEFAULT_FLOW, ClientDetails, XuiClientPayload
 
 logger: FilteringBoundLogger = structlog.get_logger("vpn")
+
+
+def person_comment(person: Person, member: LbgMember | None) -> str:
+    """Подпись клиента в панели - ФИО, как в таблице мемберов (общая для VLESS и AmneziaWG)."""
+    return (member.full_name_ru if member else None) or person.full_name
 
 
 def _person_names(person: Person, member: LbgMember) -> tuple[str, ...]:
@@ -39,32 +44,39 @@ async def _resolve_target(
     client: XuiClient,
     person: Person,
     member: LbgMember,
-) -> tuple[str, ClientRecord | None]:
+) -> tuple[str, ClientDetails | None]:
     """Выбрать идентификатор клиента и подобрать уже существующего клиента панели.
 
-    Возвращаем ``(email, record)``: ``record`` - клиент, которого можно взять себе, а не
-    создавать заново. Своим считаем клиента из ``vpn_subscriptions`` и заведённого руками,
-    у которого сходятся почта, tg-id и ФИО. Чужого не трогаем и уходим на ``lbg-<person_id>``.
+    Возвращаем ``(email, details)``: ``details`` - клиент, которого можно взять себе, а не
+    создавать заново. Своим считаем клиента из подписки этого же человека и заведённого руками,
+    у которого сходятся почта, tg-id и ФИО. Чужого не трогаем и уходим на ``lbg-<person_id>``:
+    в том числе подписку другого ``Person`` с той же почтой (сменил Telegram-аккаунт, дубль
+    почты в таблице) - иначе бот переписал бы чужого клиента и упёрся в уникальность строки.
     """
     email = build_client_email(person.id, member.best_email)
     fallback = fallback_client_email(person.id)
 
-    record = await client.get_client(email)
-    if record is None or email == fallback:
+    details = await client.get_client_details(email)
+    if details is None or email == fallback:
         # На fallback-идентификаторе клиент может остаться от попытки, у которой не доехал коммит.
-        return email, record
+        return email, details
 
     known = await get_subscription_by_email(session, email)
-    if known is not None or belongs_to_person(
-        client_tg_id=record.tg_id,
-        client_comment=record.comment,
-        telegram_id=person.telegram_id,
-        full_names=_person_names(person, member),
-    ):
-        return email, record
+    if known is not None:
+        ours = known.person_id == person.id
+    else:
+        record = details.record
+        ours = belongs_to_person(
+            client_tg_id=record.tg_id,
+            client_comment=record.comment,
+            telegram_id=person.telegram_id,
+            full_names=_person_names(person, member),
+        )
+    if ours:
+        return email, details
 
     await logger.awarning("vpn-email-taken", person_id=person.id, email=email)
-    return fallback, await client.get_client(fallback)
+    return fallback, await client.get_client_details(fallback)
 
 
 def _build_payload(person: Person, member: LbgMember, email: str) -> XuiClientPayload:
@@ -75,7 +87,7 @@ def _build_payload(person: Person, member: LbgMember, email: str) -> XuiClientPa
         subId=uuid4().hex,
         enable=True,
         tgId=person.telegram_id,
-        comment=member.full_name_ru or person.full_name,
+        comment=person_comment(person, member),
         group=settings.xui.GROUP,
         limitIp=settings.xui.CLIENT_IP_LIMIT,
         totalGB=0,
@@ -84,22 +96,20 @@ def _build_payload(person: Person, member: LbgMember, email: str) -> XuiClientPa
     )
 
 
-async def _adopt_client(client: XuiClient, record: ClientRecord, person: Person, member: LbgMember) -> None:
+async def _adopt_client(client: XuiClient, details: ClientDetails, person: Person, member: LbgMember) -> None:
     """Взять существующего клиента панели под управление бота.
 
-    Лимиты, выставленные руками, не трогаем - дописываем только принадлежность
+    Лимиты и прочее, выставленное руками, не трогаем - дописываем только принадлежность
     (tg-id, ФИО, группу), выставляем свой flow и включаем клиента, если он был выключен.
     """
-    payload = record.to_payload().model_copy(
-        update={
-            "enable": True,
-            "flow": DEFAULT_FLOW,
-            "tg_id": person.telegram_id,
-            "comment": member.full_name_ru or person.full_name,
-            "group": settings.xui.GROUP,
-        }
+    body = details.update_body(
+        enable=True,
+        flow=DEFAULT_FLOW,
+        tgId=person.telegram_id,
+        comment=person_comment(person, member),
+        group=settings.xui.GROUP,
     )
-    await client.update_client(record.email, payload)
+    await client.update_client(details.record.email, body)
 
 
 async def _acquire_client(
@@ -113,11 +123,12 @@ async def _acquire_client(
     Сначала панель, потом БД бота: если запись в БД не доедет, следующий заход подберёт
     того же клиента, а не создаст второго.
     """
-    email, record = await _resolve_target(session, client, person, member)
+    email, details = await _resolve_target(session, client, person, member)
 
-    if record is not None:
-        await _adopt_client(client, record, person, member)
+    if details is not None:
+        await _adopt_client(client, details, person, member)
         await logger.ainfo("vpn-client-adopted", person_id=person.id, email=email)
+        record = details.record
         return email, record.sub_id, record.uuid
 
     payload = _build_payload(person, member, email)

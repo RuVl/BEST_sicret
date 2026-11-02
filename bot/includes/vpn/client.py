@@ -82,6 +82,9 @@ class XuiClient:
 
         except aiohttp.ClientError as exc:
             raise XuiError(f"Панель недоступна: {exc}") from exc
+        except TimeoutError as exc:
+            # Общий таймаут aiohttp бросает голый TimeoutError - он не наследник ClientError.
+            raise XuiError(f"Панель не ответила за {_TIMEOUT.total:.0f} с") from exc
 
         return unwrap_envelope(payload)
 
@@ -106,7 +109,7 @@ class XuiClient:
     async def get_client(self, email: str) -> ClientRecord | None:
         """Вернуть клиента панели или ``None``, если его нет."""
         details = await self.get_client_details(email)
-        return ClientRecord.model_validate(details.client) if details else None
+        return details.record if details else None
 
     async def get_traffic(self, email: str) -> ClientTraffic | None:
         obj = await self._request("GET", f"/clients/traffic/{quote(email, safe='')}")
@@ -136,27 +139,20 @@ class XuiClient:
         )
         await logger.ainfo("xui-client-add", email=client.email, inbound_ids=inbound_ids)
 
-    async def update_client(self, email: str, client: XuiClientPayload) -> None:
+    async def update_client(self, email: str, body: dict[str, Any]) -> None:
         """Перезаписать клиента.
 
         Панель не патчит строку, а заменяет её телом запроса, поэтому передавать нужно
-        полного клиента - обычно ``ClientRecord.to_payload()`` с точечными правками.
+        полного клиента - ``ClientDetails.update_body()`` с точечными правками.
         """
-        await self._request(
-            "POST",
-            f"/clients/update/{quote(email, safe='')}",
-            json=client.model_dump(by_alias=True),
-        )
+        await self._request("POST", f"/clients/update/{quote(email, safe='')}", json=body)
         await logger.ainfo("xui-client-update", email=email)
 
     async def set_enabled(self, email: str, enabled: bool) -> None:
-        """Включить/выключить клиента, не тронув остальные его настройки."""
-        record = await self.get_client(email)
-        if record is None:
+        """Включить/выключить клиента, не пересылая его тело - остальные настройки не трогаются."""
+        if await self.get_client_details(email) is None:
             raise XuiClientNotFoundError(f"Клиента {email} нет в панели")
-
-        await self.update_client(email, record.to_payload().model_copy(update={"enable": enabled}))
-        await logger.ainfo("xui-client-set-enabled", email=email, enabled=enabled)
+        await self.set_enabled_many([email], enabled)
 
     async def set_enabled_many(self, emails: list[str], enabled: bool) -> None:
         """Включить/выключить сразу нескольких клиентов. Тело клиента не пересылаем - ключи не трогаются."""

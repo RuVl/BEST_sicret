@@ -57,23 +57,6 @@ class ClientRecord(BaseModel):
     expiry_time: int = Field(0, alias="expiryTime")
     reset: int = 0
 
-    def to_payload(self) -> "XuiClientPayload":
-        """Собрать тело для записи, не потеряв настройки, выставленные в панели руками."""
-        return XuiClientPayload(
-            id=self.uuid,
-            email=self.email,
-            subId=self.sub_id,
-            flow=self.flow or DEFAULT_FLOW,
-            enable=self.enable,
-            tgId=self.tg_id,
-            comment=self.comment,
-            group=self.group,
-            limitIp=self.limit_ip,
-            totalGB=self.total_bytes,
-            expiryTime=self.expiry_time,
-            reset=self.reset,
-        )
-
 
 class ClientTraffic(BaseModel):
     """Ответ ``GET /panel/api/clients/traffic/:email``."""
@@ -107,3 +90,18 @@ class ClientDetails(BaseModel):
     inbound_ids: list[int] = Field(default_factory=list, alias="inboundIds")
     # Адрес клиента в каждом туннельном инбаунде (WireGuard/AmneziaWG): ``{"3": "10.70.0.2/32"}``.
     tunnel_allowed_ips: dict[str, str | list[str]] = Field(default_factory=dict, alias="tunnelAllowedIPs")
+
+    @property
+    def record(self) -> ClientRecord:
+        return ClientRecord.model_validate(self.client)
+
+    def update_body(self, **changes: Any) -> dict[str, Any]:
+        """Тело для ``/clients/update``: клиент как есть плюс правки (ключи - имена полей панели).
+
+        Панель заменяет клиента телом запроса, поэтому шлём все поля, что она отдала, - и те,
+        которых нет в наших моделях (пароли других протоколов, выставленное в админке руками).
+        На запись UUID называется ``id``, а числовой ``id`` строки панели не нужен.
+        """
+        body = {key: value for key, value in self.client.items() if key not in ("id", "uuid")}
+        body["id"] = self.client.get("uuid", "")
+        return body | changes

@@ -27,6 +27,11 @@ vpn-disabled = *VLESS\-подписка отключена* \(запасной �
     { "" }
     Трафик за текущий период: { $traffic }
 
+vpn-revoked = *VLESS\-подписка отключена* \(запасной вариант\)
+    { "" }
+    Подписку отключили, когда вы выбыли из LBG\. Вы снова в LBG — нажмите «Включить», ссылка останется прежней:
+    `{ $url }`
+
 vpn-revoked-notice = Ваша VPN\-подписка отключена: вы больше не активный мембер LBG\.
     { "" }
     Если это ошибка — напишите VP4HR\.
@@ -41,11 +46,13 @@ vpn-revoke-report = *Автоотзыв VPN\-подписок*
 # Buttons
 vpn-issue-btn = Выпустить
 vpn-refresh-btn = Обновить
+vpn-restore-btn = Включить
 vpn-handbook-btn = Как подключиться
 vpn-handbook-url = https://docs.google.com/document/d/1gcmkXYgEY308JLwmrzNfeBirzJZDPrPx/edit
 
 # Notifications and errors
 vpn-issued-alert = Подписка выпущена
+vpn-restored-alert = Подписка снова включена
 vpn-error-alert = Панель VPN недоступна. Попробуйте позже или напишите VP4HR.
 vpn-error = Панель VPN недоступна\. Попробуйте позже или напишите VP4HR\.
 vpn-access-denied-alert = Доступ к VPN только для активных мемберов LBG

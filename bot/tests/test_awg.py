@@ -6,9 +6,9 @@ import pytest
 from includes.awg import (
     AwgError,
     AwgPeer,
-    build_peer_comment,
     device_client_name,
     extract_device_config,
+    fallback_device_client_name,
     free_device_number,
     is_valid_client_name,
     normalize_device_label,
@@ -20,7 +20,7 @@ from includes.vpn import ClientDetails, ClientTraffic
 CLIENT_OBJ = {
     "client": {
         "id": 12,
-        "email": "awg-lbg42-1",
+        "email": "awg-1-ivan.petrov@best-eu.org",
         "subId": "abc",
         "enable": True,
         "privateKey": "3333333333333333333333333333333333333333333=",
@@ -65,16 +65,34 @@ def _vpn_link(conf: str) -> str:
 
 
 class TestClientName:
-    def test_device_name_is_marked_as_awg(self):
-        assert device_client_name(42, 1) == "awg-lbg42-1"
-        # С запасом: семизначный person_id и двузначный номер устройства укладываются в колонку.
-        assert is_valid_client_name(device_client_name(10**7 - 1, 99))
+    def test_device_name_is_number_and_email(self):
+        assert device_client_name(42, "ivan.petrov@best-eu.org", 1) == "awg-1-ivan.petrov@best-eu.org"
 
-    @pytest.mark.parametrize("name", ["ivan_pc", "lbg-7", "A1", "x" * 32])
+    def test_email_is_trimmed(self):
+        assert device_client_name(42, "  ivan@best-eu.org ", 2) == "awg-2-ivan@best-eu.org"
+
+    @pytest.mark.parametrize("email", [None, "", "  ", "ivan petrov@best-eu.org", "a/b@best-eu.org"])
+    def test_falls_back_to_person_id(self, email):
+        assert device_client_name(42, email, 3) == "awg-3-lbg-42"
+
+    def test_fallback_name_has_no_email(self):
+        # Его же бот берёт, когда имя с почтой уже заняло чужое устройство (почты в таблице не уникальны).
+        assert fallback_device_client_name(42, 3) == "awg-3-lbg-42"
+
+    def test_too_long_email_falls_back(self):
+        email = "x" * 200 + "@best-eu.org"
+        assert device_client_name(42, email, 1) == "awg-1-lbg-42"
+
+    def test_long_real_email_fits(self):
+        name = device_client_name(10**7 - 1, "aleksandra.rasponamareva@best-eu.org", 99)
+        assert name == "awg-99-aleksandra.rasponamareva@best-eu.org"
+        assert is_valid_client_name(name)
+
+    @pytest.mark.parametrize("name", ["ivan_pc", "lbg-7", "A1", "awg-1-a.b@best-eu.org", "x" * 128])
     def test_valid(self, name):
         assert is_valid_client_name(name)
 
-    @pytest.mark.parametrize("name", ["", "x" * 33, "иван", "ivan pc", "a/b", "a.b"])
+    @pytest.mark.parametrize("name", ["", "x" * 129, "ivan pc", "a/b", "a\\b", "a\tb"])
     def test_invalid(self, name):
         assert not is_valid_client_name(name)
 
@@ -101,16 +119,6 @@ class TestDeviceLabel:
     def test_rejects(self, value):
         with pytest.raises(ValueError):
             normalize_device_label(value)
-
-
-class TestPeerComment:
-    def test_with_username(self):
-        assert (
-            build_peer_comment("Иванов Иван", "ivan", 7, 2) == "Иванов Иван (@ivan, tg 7), устройство 2 - выдан ботом"
-        )
-
-    def test_without_username(self):
-        assert "без username" in build_peer_comment("Иванов Иван", None, 7, 1)
 
 
 class TestAwgPeer:

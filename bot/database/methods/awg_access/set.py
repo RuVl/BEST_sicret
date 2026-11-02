@@ -40,6 +40,12 @@ async def set_device_label(session: AsyncSession, device: AwgDevice, label: str 
     device.label = label
 
 
+async def set_device_client_name(session: AsyncSession, device: AwgDevice, client_name: str) -> None:
+    """Сменить email клиента устройства - только пока клиента под прежним именем в панели нет."""
+    device.client_name = client_name
+    await session.flush()
+
+
 async def mark_issued(session: AsyncSession, device: AwgDevice) -> None:
     """Конфиг устройства отправлен человеку."""
     device.issued_at = datetime.now(UTC)
