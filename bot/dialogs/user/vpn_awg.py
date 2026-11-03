@@ -164,8 +164,8 @@ def _middleware(dialog_manager: DialogManager) -> tuple[FluentLocalization, Filt
 
 
 def _awg_error_text(l10n: FluentLocalization, exc: Exception, access: AwgAccess | None) -> str:
-    # IntegrityError приходит из гонки двух событий одного человека (двойной клик, два названия
-    # подряд - апдейты не сериализуются): строка уже есть, человеку - обычная ошибка «попробуйте ещё».
+    # IntegrityError - строка уже есть (например, устройство завели из CLI или второй копией бота):
+    # человеку - обычная ошибка «попробуйте ещё». Свои апдейты человека Dispatcher сериализует (run.py).
     if isinstance(exc, AwgDeviceLimitError) and access is not None:
         return l10n.format_value(
             "vpn-awg-limit-alert", args={"used": len(access.devices), "limit": device_limit(access)}
@@ -486,7 +486,12 @@ async def on_delete_confirmed(clb: CallbackQuery, widget: Button, dialog_manager
     try:
         async with async_session() as session:
             loaded = await _load_access(session, clb.from_user.id)
-            access = loaded[1] if loaded else None
+            if loaded is None:
+                # Доступ закрыли, пока человек подтверждал: ничего не удалено - так и говорим.
+                await clb.answer(l10n.format_value("vpn-awg-denied-alert"), show_alert=True)
+                await dialog_manager.switch_to(ViewVpnSubscription.AWG)
+                return
+            access = loaded[1]
             device = _find_device(access, number)
             # Устройство могли уже удалить из другого окна - удалять нечего, просто возвращаемся.
             if access is not None and device is not None:
