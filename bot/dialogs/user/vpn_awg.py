@@ -51,6 +51,7 @@ from includes.awg import (
     AwgDeviceLimitError,
     AwgError,
     AwgPeer,
+    DeviceLabelError,
     add_device,
     device_limit,
     get_awg_client,
@@ -553,8 +554,9 @@ async def on_name_error(message: Message, widget: ManagedTextInput, dialog_manag
     l10n, _ = _middleware(dialog_manager)
     await _delete_quietly(message.bot, message.chat.id, message.message_id)
     dialog_manager.show_mode = ShowMode.EDIT
+    problem = error.problem if isinstance(error, DeviceLabelError) else "empty"
     dialog_manager.dialog_data[_NAME_ERROR] = l10n.format_value(
-        "vpn-awg-name-invalid-part", args={"max": MAX_DEVICE_LABEL_LEN}
+        f"vpn-awg-name-{problem}-part", args={"max": MAX_DEVICE_LABEL_LEN}
     )
 
 

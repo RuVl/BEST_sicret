@@ -2,6 +2,7 @@ from .client import AwgClient, get_awg_client
 from .exceptions import AwgAccessRevokedError, AwgAuthError, AwgDeviceLimitError, AwgError
 from .identity import (
     MAX_DEVICE_LABEL_LEN,
+    DeviceLabelError,
     device_client_name,
     fallback_device_client_name,
     free_device_number,
@@ -49,6 +50,7 @@ __all__ = [
     "free_device_number",
     "get_awg_client",
     "is_valid_client_name",
+    "DeviceLabelError",
     "normalize_device_label",
     "issue_device_config",
     "peers_by_name",
