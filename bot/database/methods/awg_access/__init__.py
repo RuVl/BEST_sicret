@@ -3,7 +3,6 @@ from .get import get_access_by_person, get_device_by_client_name, list_accesses
 from .list import list_accesses_to_suspend
 from .set import (
     delete_device,
-    mark_announced,
     mark_granted,
     mark_issued,
     mark_revoked,
@@ -22,7 +21,6 @@ __all__ = [
     "get_device_by_client_name",
     "list_accesses",
     "list_accesses_to_suspend",
-    "mark_announced",
     "mark_granted",
     "mark_issued",
     "mark_revoked",
