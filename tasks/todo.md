@@ -71,7 +71,8 @@
   - Depends: —
 
 ## Checkpoint B
-- [ ] `make test-bot`, `make lint`; двойной тап по платформе на тестовом боте → одно устройство, один клиент
+- [x] `make test-bot`, `make lint`
+- [ ] Двойной тап по платформе на тестовом боте → одно устройство, один клиент в панели (ручная проверка после выкатки из `dev`; сериализацию апдейтов проверяет `test_event_isolation.py`)
 
 ## Phase 5: `person-username` + `cli-admin`
 
@@ -100,6 +101,7 @@
   - Depends: 11
 
 ## Checkpoint C
+- [x] Миграции на отдельной БД с дублями ников: upgrade, повторный ник отвергается, downgrade, `alembic check`
 - [ ] `make awg-revoke`/`awg-grant`/`broadcast` вручную: `n`, `y`, неизвестная группа, ненайденный ник
 
 ## Phase 6: `settings-qr`
@@ -133,6 +135,6 @@
   - Depends: все
 
 ## Checkpoint: Complete
-- [ ] `make test-bot`, `make lint`; `code-review high` по ветке без блокеров
+- [x] `make test-bot`, `make lint`; `code-review high` по ветке без блокеров
 - [ ] Ручной чек-лист в PR пройден на тестовом боте
 - [ ] PR в `dev` слит; #67 сливается merge-коммитом

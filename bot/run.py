@@ -59,7 +59,9 @@ def create_dispatcher(storage: BaseStorage) -> Dispatcher:
 
     Без изоляции aiogram-dialog читает контекст диалога до блокировки стека: второй клик, пришедший,
     пока первый ещё ходит в панель, отрабатывает на устаревшем ``dialog_data`` и затирает результат
-    первого (двойное устройство, потерянный конфиг). Процесс бота один - хватает локальных блокировок.
+    первого (двойное устройство, потерянный конфиг). Изоляция из ``setup_dialogs`` от этого не спасает -
+    ошибка библиотеки, https://github.com/Tishka17/aiogram_dialog/issues/537. Процесс бота один -
+    хватает локальных блокировок.
     """
     return Dispatcher(storage=storage, events_isolation=SimpleEventIsolation())
 
