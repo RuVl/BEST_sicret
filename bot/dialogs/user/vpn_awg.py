@@ -31,7 +31,7 @@ from aiogram.types import CallbackQuery, ContentType, Message
 from aiogram_dialog import DialogManager, ShowMode, Window
 from aiogram_dialog.api.entities import MediaAttachment
 from aiogram_dialog.widgets.input import ManagedTextInput, MessageInput, TextInput
-from aiogram_dialog.widgets.kbd import Button, Column, Select, SwitchTo, Url
+from aiogram_dialog.widgets.kbd import Button, Group, Row, Select, SwitchTo, Url
 from aiogram_dialog.widgets.media import DynamicMedia
 from aiogram_dialog.widgets.text import Format
 from fluent.runtime import FluentLocalization
@@ -46,12 +46,12 @@ from database.models import AwgAccess, AwgDevice, Person
 from env import settings
 from includes.awg import (
     MAX_DEVICE_LABEL_LEN,
-    PLATFORMS,
     AwgAccessRevokedError,
     AwgDeviceLimitError,
     AwgError,
     AwgPeer,
     DeviceLabelError,
+    DevicePlatform,
     add_device,
     device_limit,
     get_awg_client,
@@ -74,6 +74,9 @@ logger: FilteringBoundLogger = structlog.get_logger("awg-dialog")
 
 # Время последнего подключения показываем по Москве - как и всё расписание бота.
 _DISPLAY_TZ = ZoneInfo("Europe/Moscow")
+
+# Платформы на экране выбора: телефоны строкой, компьютеры строкой.
+PLATFORM_ROWS: tuple[tuple[DevicePlatform, ...], ...] = (("android", "ios"), ("windows", "macos", "linux"))
 
 # Ключи dialog_data
 _DEVICE = "awg_device"  # номер открытого устройства
@@ -356,9 +359,11 @@ async def get_name_data(dialog_manager: DialogManager, l10n: FluentLocalization,
 
 
 async def get_platform_data(l10n: FluentLocalization, **kwargs) -> dict[str, Any]:
+    mobile, desktop = PLATFORM_ROWS
     return {
         "text": l10n.format_value("vpn-awg-platform-question"),
-        "platforms": [(_platform_name(l10n, platform), platform) for platform in PLATFORMS],
+        "mobile_platforms": [(_platform_name(l10n, platform), platform) for platform in mobile],
+        "desktop_platforms": [(_platform_name(l10n, platform), platform) for platform in desktop],
     }
 
 
@@ -660,7 +665,7 @@ awg_windows = (
             on_click=on_restore,
             when=F["is_allowed"] & F["is_suspended"],
         ),
-        Column(
+        Group(
             Select(
                 Format("{item[0]}"),
                 id="awg_devices",
@@ -668,6 +673,7 @@ awg_windows = (
                 items="devices",
                 on_click=on_select_device,
             ),
+            width=2,
         ),
         Button(
             L10nFormat("vpn-awg-add-btn"),
@@ -676,9 +682,9 @@ awg_windows = (
             when=F["is_allowed"] & F["can_add"],
         ),
         # Конфиг 3.1 старые клиенты не импортируют или молча не подключаются - даём ссылки на свежие.
-        Column(
+        Row(
+            Url(L10nFormat("vpn-awg-wgtunnel-btn"), L10nFormat("vpn-awg-wgtunnel-url")),
             Url(L10nFormat("vpn-awg-android-btn"), L10nFormat("vpn-awg-android-url")),
-            Url(L10nFormat("vpn-awg-apk-btn"), L10nFormat("vpn-awg-apk-url")),
             Url(L10nFormat("vpn-awg-ios-btn"), L10nFormat("vpn-awg-ios-url")),
             when="is_allowed",
         ),
@@ -690,12 +696,10 @@ awg_windows = (
     Window(
         Format("{text}"),
         Button(L10nFormat("vpn-awg-get-config-btn"), id="awg_get_config", on_click=on_get_config, when="has_device"),
-        Button(L10nFormat("vpn-awg-rename-btn"), id="awg_rename", on_click=on_start_rename, when="has_device"),
-        Button(L10nFormat("vpn-awg-platform-btn"), id="awg_platform", on_click=on_start_platform, when="has_device"),
-        SwitchTo(
-            L10nFormat("vpn-awg-delete-btn"),
-            id="awg_delete",
-            state=ViewVpnSubscription.AWG_DELETE,
+        Row(
+            Button(L10nFormat("vpn-awg-rename-btn"), id="awg_rename", on_click=on_start_rename),
+            Button(L10nFormat("vpn-awg-platform-btn"), id="awg_platform", on_click=on_start_platform),
+            SwitchTo(L10nFormat("vpn-awg-delete-btn"), id="awg_delete", state=ViewVpnSubscription.AWG_DELETE),
             when="has_device",
         ),
         SwitchTo(L10nFormat("back-btn"), id="awg_device_back", state=ViewVpnSubscription.AWG),
@@ -718,12 +722,21 @@ awg_windows = (
     # --- Платформа ---
     Window(
         Format("{text}"),
-        Column(
+        Row(
             Select(
                 Format("{item[0]}"),
-                id="awg_platforms",
+                id="awg_platforms_mobile",
                 item_id_getter=lambda item: item[1],
-                items="platforms",
+                items="mobile_platforms",
+                on_click=on_platform_selected,
+            ),
+        ),
+        Row(
+            Select(
+                Format("{item[0]}"),
+                id="awg_platforms_desktop",
+                item_id_getter=lambda item: item[1],
+                items="desktop_platforms",
                 on_click=on_platform_selected,
             ),
         ),
@@ -735,14 +748,16 @@ awg_windows = (
     Window(
         DynamicMedia("media", when="show_media"),
         Format("{text}"),
-        Button(
-            L10nFormat("vpn-awg-show-qr-btn"),
-            id="awg_show_qr",
-            on_click=on_toggle_qr,
-            when=F["has_qr"] & ~F["show_qr"],
+        Row(
+            Button(
+                L10nFormat("vpn-awg-show-qr-btn"),
+                id="awg_show_qr",
+                on_click=on_toggle_qr,
+                when=F["has_qr"] & ~F["show_qr"],
+            ),
+            Button(L10nFormat("vpn-awg-show-file-btn"), id="awg_show_file", on_click=on_toggle_qr, when="show_qr"),
+            Button(L10nFormat("vpn-awg-done-btn"), id="awg_config_done", on_click=on_config_done),
         ),
-        Button(L10nFormat("vpn-awg-show-file-btn"), id="awg_show_file", on_click=on_toggle_qr, when="show_qr"),
-        Button(L10nFormat("vpn-awg-done-btn"), id="awg_config_done", on_click=on_config_done),
         MessageInput(on_config_message, content_types=ContentType.ANY),
         getter=get_config_data,
         state=ViewVpnSubscription.AWG_CONFIG,
@@ -750,8 +765,10 @@ awg_windows = (
     # --- Подтверждение удаления ---
     Window(
         Format("{text}"),
-        Button(L10nFormat("vpn-awg-delete-yes-btn"), id="awg_delete_yes", on_click=on_delete_confirmed),
-        SwitchTo(L10nFormat("back-btn"), id="awg_delete_back", state=ViewVpnSubscription.AWG_DEVICE),
+        Row(
+            Button(L10nFormat("vpn-awg-delete-yes-btn"), id="awg_delete_yes", on_click=on_delete_confirmed),
+            SwitchTo(L10nFormat("back-btn"), id="awg_delete_back", state=ViewVpnSubscription.AWG_DEVICE),
+        ),
         getter=get_delete_data,
         state=ViewVpnSubscription.AWG_DELETE,
     ),

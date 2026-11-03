@@ -63,3 +63,10 @@ def test_delete_with_closed_access_says_denied(monkeypatch):
     assert clb.answers == [("vpn-awg-denied-alert", True)]
     assert removed == []
     assert manager.state == ViewVpnSubscription.AWG
+
+
+def test_platform_rows_cover_every_platform_once():
+    from includes.awg import PLATFORMS
+
+    flat = [platform for row in vpn_awg.PLATFORM_ROWS for platform in row]
+    assert sorted(flat) == sorted(PLATFORMS)
