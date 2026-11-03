@@ -78,6 +78,30 @@ class ClientTraffic(BaseModel):
         return self.up + self.down
 
 
+class BulkSkip(BaseModel):
+    """Клиент, которого панель пропустила в ``bulkEnable``/``bulkDisable``, и причина."""
+
+    email: str
+    reason: str = ""
+
+
+class BulkSetEnableResult(BaseModel):
+    """Ответ ``POST /panel/api/clients/bulkEnable|bulkDisable`` (``service.BulkSetEnableResult``).
+
+    Провал по отдельному email панель не считает ошибкой запроса: ``success=true``, а email -
+    в ``skipped``. Для нас это неуспех именно этих клиентов.
+    """
+
+    changed: int = 0
+    skipped: list[BulkSkip] = Field(default_factory=list)
+
+    @field_validator("skipped", mode="before")
+    @classmethod
+    def null_is_empty(cls, value: Any) -> Any:
+        # skipped в Go с omitempty, но nil-слайс без него пришёл бы null.
+        return [] if value is None else value
+
+
 class ClientDetails(BaseModel):
     """Ответ ``GET /panel/api/clients/get/:email``: клиент и инбаунды, к которым он привязан.
 

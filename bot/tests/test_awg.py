@@ -1,5 +1,7 @@
+import asyncio
 import base64
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -15,6 +17,8 @@ from includes.awg import (
     render_config_qr,
 )
 from includes.vpn import ClientDetails, ClientTraffic
+from jobs import revoke_vpn, suspend_awg
+from tests.fakes import FakeBot, FakeL10n, FakeSessionMaker
 
 # Ответ GET /panel/api/clients/get/:email для устройства (ключи ненастоящие).
 CLIENT_OBJ = {
@@ -191,3 +195,69 @@ class TestQr:
         # Хэндлер ловит ValueError и шлёт только файл - проверяем, что segno кидает именно его.
         with pytest.raises(ValueError):
             render_config_qr("[Interface]\nI1 = <b 0x" + "ab" * 3000 + ">")
+
+
+def _access(person_id: int) -> SimpleNamespace:
+    person = SimpleNamespace(telegram_id=100 + person_id, full_name=f"Person {person_id}")
+    return SimpleNamespace(person_id=person_id, person=person, status="granted", disabled_at=None)
+
+
+class TestSuspendJob:
+    """Ночное отключение: сбой на одном человеке не откатывает и не повторяет остальных."""
+
+    # Что панель отвечает на выключение ключей человека: число найденных ключей или исключение.
+    PANEL = {
+        1: 2,
+        2: AwgError("skipped: traffic writer queue full"),
+        3: RuntimeError("неожиданный ответ"),
+        4: 1,  # ключи выключены, а коммит упал
+        5: 0,  # устройств нет - чиним запись молча
+        6: 1,
+    }
+
+    def _run(self, monkeypatch, sessions: FakeSessionMaker) -> FakeBot:
+        async def list_accesses_to_suspend(session):
+            # Загруженные строки привязаны к сессии: её коммит сохранит и все их правки.
+            accesses = [_access(person_id) for person_id in self.PANEL]
+            for access in accesses:
+                session.add(access)
+            return accesses
+
+        async def get_hr_id(session):
+            return 1
+
+        async def disable_peers(client, access):
+            result = self.PANEL[access.person_id]
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+        for module in (suspend_awg, revoke_vpn):
+            monkeypatch.setattr(module, "async_session", sessions)
+        monkeypatch.setattr(suspend_awg, "list_accesses_to_suspend", list_accesses_to_suspend)
+        monkeypatch.setattr(suspend_awg, "get_hr_id", get_hr_id)
+        monkeypatch.setattr(suspend_awg, "disable_peers", disable_peers)
+        monkeypatch.setattr(suspend_awg, "get_awg_client", lambda: None)
+
+        bot = FakeBot()
+        asyncio.run(suspend_awg.suspend_inactive_awg_access(bot, FakeL10n()))
+        return bot
+
+    def test_each_person_is_committed_before_notice(self, monkeypatch):
+        sessions = FakeSessionMaker(fail_commit=lambda row: row.person_id == 4)
+        bot = self._run(monkeypatch, sessions)
+
+        assert [row.person_id for row in sessions.committed] == [1, 5, 6]
+        assert all(row.status == "suspended" for row in sessions.committed)
+        notified = [chat_id for chat_id, _ in bot.sent if chat_id != 1]
+        assert notified == [101, 106]
+
+    def test_failures_go_to_report(self, monkeypatch):
+        bot = self._run(monkeypatch, FakeSessionMaker(fail_commit=lambda row: row.person_id == 4))
+
+        report = "\n".join(text for chat_id, text in bot.sent if chat_id == 1)
+        assert "'revoked': 2" in report
+        assert "'failed': 3" in report
+        assert "Person 2" in report
+        assert "Person 3" in report
+        assert "Person 4" in report

@@ -17,7 +17,7 @@ from structlog.typing import FilteringBoundLogger
 
 from env import settings
 from includes.vpn.exceptions import XuiAuthError, XuiClientNotFoundError, XuiError
-from includes.vpn.schemas import ClientDetails, ClientRecord, ClientTraffic, XuiClientPayload
+from includes.vpn.schemas import BulkSetEnableResult, ClientDetails, ClientRecord, ClientTraffic, XuiClientPayload
 
 if TYPE_CHECKING:
     # includes.awg сам импортирует этот модуль - во время выполнения тип не нужен.
@@ -169,11 +169,19 @@ class XuiClient:
         await self.set_enabled_many([email], enabled)
 
     async def set_enabled_many(self, emails: list[str], enabled: bool) -> None:
-        """Включить/выключить сразу нескольких клиентов. Тело клиента не пересылаем - ключи не трогаются."""
+        """Включить/выключить сразу нескольких клиентов. Тело клиента не пересылаем - ключи не трогаются.
+
+        Пропущенный панелью клиент - ``XuiError``: иначе джоб пометил бы его отключённым, а ключ
+        продолжил бы работать. Остальных панель к этому моменту уже переключила - повтор их не трогает.
+        """
         if not emails:
             return
         path = "/clients/bulkEnable" if enabled else "/clients/bulkDisable"
-        await self._request("POST", path, json={"emails": emails})
+        result = parse_obj(BulkSetEnableResult, await self._request("POST", path, json={"emails": emails}) or {})
+        if result.skipped:
+            skipped = "; ".join(f"{skip.email} ({skip.reason})" for skip in result.skipped)
+            await logger.awarning("xui-clients-set-enabled-skipped", skipped=skipped, enabled=enabled)
+            raise XuiError(f"Панель пропустила клиентов: {skipped}")
         await logger.ainfo("xui-clients-set-enabled", emails=emails, enabled=enabled)
 
     async def delete_client(self, email: str) -> None:

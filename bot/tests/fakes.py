@@ -1,6 +1,7 @@
 """Двойники внешних сервисов для тестов: без сети, без Redis и без Telegram."""
 
 from redis.exceptions import ConnectionError as RedisConnectionError
+from sqlalchemy.exc import OperationalError
 
 
 class FakeRedis:
@@ -50,3 +51,56 @@ class FakeRedis:
 
     async def aclose(self):
         pass
+
+
+class FakeSessionMaker:
+    """Замена ``async_session`` для джобов: помнит, что закоммичено, и умеет ронять коммит отдельной строки.
+
+    ``fail_commit`` - предикат по строке, добавленной в сессию: ``True`` - коммит падает, как упал бы
+    при сбое БД. Закоммиченные строки копятся в ``committed`` в порядке коммитов.
+    """
+
+    def __init__(self, fail_commit=lambda row: False) -> None:
+        self.fail_commit = fail_commit
+        self.committed: list = []
+
+    def __call__(self) -> "_FakeSession":
+        return _FakeSession(self)
+
+
+class _FakeSession:
+    def __init__(self, maker: FakeSessionMaker) -> None:
+        self._maker = maker
+        self._added: list = []
+
+    async def __aenter__(self) -> "_FakeSession":
+        return self
+
+    async def __aexit__(self, *exc) -> None:
+        self._added.clear()
+
+    def add(self, row) -> None:
+        self._added.append(row)
+
+    async def commit(self) -> None:
+        if any(self._maker.fail_commit(row) for row in self._added):
+            raise OperationalError("UPDATE", {}, Exception("connection lost"))
+        self._maker.committed.extend(self._added)
+        self._added.clear()
+
+
+class FakeBot:
+    """Записывает отправленные сообщения вместо Telegram."""
+
+    def __init__(self) -> None:
+        self.sent: list[tuple[int, str]] = []
+
+    async def send_message(self, chat_id: int, text: str) -> None:
+        self.sent.append((chat_id, text))
+
+
+class FakeL10n:
+    """Возвращает ключ и аргументы: тесты джобов проверяют, что ушло, а не тексты из .ftl."""
+
+    def format_value(self, key: str, args: dict | None = None) -> str:
+        return f"{key} {args or ''}"

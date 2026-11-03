@@ -2,7 +2,7 @@
 
 Пару ``revoke_vpn`` для VLESS: ключи устройств в панели не удаляем, а выключаем, разрешение
 помечаем ``suspended``. Вернувшийся мембер включает те же ключи кнопкой в боте, без участия админа.
-Ошибки панели не роняют прогон - они уходят в сводку VP4HR.
+Ошибки панели и БД не роняют прогон - они уходят в сводку VP4HR.
 """
 
 import structlog
@@ -13,7 +13,7 @@ from structlog.typing import FilteringBoundLogger
 from database.main import async_session
 from database.methods.awg_access import list_accesses_to_suspend, mark_suspended
 from includes.awg import AwgError, disable_peers, get_awg_client
-from jobs.revoke_vpn import notify
+from jobs.revoke_vpn import notify, save_mark
 from utils import escape_mdv2, split_message
 from utils.board import get_hr_id
 
@@ -27,28 +27,30 @@ async def suspend_inactive_awg_access(bot: Bot, l10n: FluentLocalization) -> Non
 
     async with async_session() as session:
         accesses = await list_accesses_to_suspend(session)
-
-        for access in accesses:
-            name = f"{access.person.full_name} (tg {access.person.telegram_id})"
-            try:
-                found = await disable_peers(client, access)
-            except AwgError as exc:
-                failed.append(f"{name}: {exc}")
-                await logger.aerror("awg-suspend-failed", person_id=access.person_id, error=str(exc))
-                continue
-
-            await mark_suspended(session, access)
-            if not found:
-                # Устройств не заводили (или ключи снесли руками) - выключать нечего, молча чиним запись.
-                await logger.ainfo("awg-suspend-no-peers", person_id=access.person_id)
-                continue
-
-            suspended.append(f"{name}: ключей {found}")
-            await notify(bot, access.person.telegram_id, l10n.format_value("vpn-awg-suspended-notice"))
-
-        await session.commit()
-
         hr_id = await get_hr_id(session)
+
+    for access in accesses:
+        name = f"{access.person.full_name} (tg {access.person.telegram_id})"
+        try:
+            found = await disable_peers(client, access)
+            await save_mark(mark_suspended, access)
+        except AwgError as exc:
+            failed.append(f"{name}: {exc}")
+            await logger.aerror("awg-suspend-failed", person_id=access.person_id, error=str(exc))
+            continue
+        except Exception as exc:
+            # Сбой БД или ошибка в коде на одном человеке не должны оставить остальных с работающими ключами.
+            failed.append(f"{name}: непредвиденная ошибка ({type(exc).__name__})")
+            await logger.aexception("awg-suspend-crashed", person_id=access.person_id)
+            continue
+
+        if not found:
+            # Устройств не заводили (или ключи снесли руками) - выключать нечего, запись молча починили.
+            await logger.ainfo("awg-suspend-no-peers", person_id=access.person_id)
+            continue
+
+        suspended.append(f"{name}: ключей {found}")
+        await notify(bot, access.person.telegram_id, l10n.format_value("vpn-awg-suspended-notice"))
 
     await logger.ainfo("awg-suspend-done", suspended=len(suspended), failed=len(failed))
 
