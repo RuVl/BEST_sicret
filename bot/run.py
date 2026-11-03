@@ -4,17 +4,18 @@ import structlog
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.storage.base import BaseStorage
+from aiogram.fsm.storage.memory import MemoryStorage, SimpleEventIsolation
 from aiogram.types import BotCommand, BotCommandScopeDefault
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from structlog.typing import FilteringBoundLogger
 
-from dialogs.user.vpn_awg import hide_leftover_configs
 from env import settings
 from handlers import register_handlers
 from includes import PickleRedisStorage, get_fluent_localization, get_redis_storage, setup_logging
 from includes.awg import excluded_apps
+from includes.config_hide import setup_config_hides
 from includes.pending_hides import close_pending_hides
 from includes.vpn import close_xui_client
 from jobs import revoke_inactive_subscriptions, suspend_inactive_awg_access
@@ -23,7 +24,7 @@ from middlewares import register_middlewares
 
 def _create_scheduler(bot: Bot) -> AsyncIOScheduler | None:
     """Планировщик фоновых задач. ``None``, если не настроены ни XUI, ни AmneziaWG."""
-    if not settings.xui.ENABLED and not settings.awg.ENABLED:
+    if not settings.xui.ENABLED and not settings.AWG_ENABLED:
         return None
 
     l10n = get_fluent_localization()
@@ -42,7 +43,7 @@ def _create_scheduler(bot: Bot) -> AsyncIOScheduler | None:
             id="revoke_inactive_vpn",
             replace_existing=True,
         )
-    if settings.awg.ENABLED:
+    if settings.AWG_ENABLED:
         scheduler.add_job(
             suspend_inactive_awg_access,
             trigger,
@@ -51,6 +52,18 @@ def _create_scheduler(bot: Bot) -> AsyncIOScheduler | None:
             replace_existing=True,
         )
     return scheduler
+
+
+def create_dispatcher(storage: BaseStorage) -> Dispatcher:
+    """Dispatcher бота. Апдейты одного человека обрабатываются строго по очереди.
+
+    Без изоляции aiogram-dialog читает контекст диалога до блокировки стека: второй клик, пришедший,
+    пока первый ещё ходит в панель, отрабатывает на устаревшем ``dialog_data`` и затирает результат
+    первого (двойное устройство, потерянный конфиг). Изоляция из ``setup_dialogs`` от этого не спасает -
+    ошибка библиотеки, https://github.com/Tishka17/aiogram_dialog/issues/537. Процесс бота один -
+    хватает локальных блокировок.
+    """
+    return Dispatcher(storage=storage, events_isolation=SimpleEventIsolation())
 
 
 async def main():
@@ -77,16 +90,15 @@ async def main():
         if not settings.project.DEBUG:
             await logger.aerror("You should use RedisStorage in production!")
 
-    # Init dispatcher
-    dp = Dispatcher(storage=storage)
+    dp = create_dispatcher(storage)
 
     # Register handlers and middlewares
     register_middlewares(dp)
-    bg_factory = register_handlers(dp)
+    register_handlers(dp)
 
-    # Конфиги AmneziaWG, которые не успели скрыть до перезапуска (там приватные ключи).
-    await hide_leftover_configs(bot, bg_factory)
-    if settings.awg.ENABLED:
+    # Конфиги AmneziaWG (приватные ключи): учёт отправленных копий и добор не скрытых до перезапуска.
+    setup_config_hides(dp)
+    if settings.AWG_ENABLED:
         # Список читается и проверяется сразу: проблема с файлом видна в логе старта, а не у первого человека.
         await logger.ainfo("AWG excluded apps loaded.", count=len(excluded_apps()))
 
@@ -94,7 +106,7 @@ async def main():
     scheduler = _create_scheduler(bot)
     if scheduler is not None:
         scheduler.start()
-        await logger.ainfo("VPN revoke jobs scheduled.", xui=settings.xui.ENABLED, awg=settings.awg.ENABLED)
+        await logger.ainfo("VPN revoke jobs scheduled.", xui=settings.xui.ENABLED, awg=settings.AWG_ENABLED)
     else:
         await logger.awarning("XUI and AWG settings are incomplete, VPN revoke jobs are disabled.")
 

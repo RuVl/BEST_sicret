@@ -20,6 +20,25 @@ CLIENT_RECORD_FIXTURE = {
     "reset": 30,
 }
 
+# Тот же клиент целиком, как его сериализует 3x-ui (model.ClientRecord): WireGuard-колонки - строки,
+# пустой reverse - null. Заведённый руками VLESS-клиент выглядит именно так.
+FULL_CLIENT_RECORD_FIXTURE = CLIENT_RECORD_FIXTURE | {
+    "password": "",
+    "auth": "",
+    "flow": "xtls-rprx-vision",
+    "security": "",
+    "reverse": None,
+    "privateKey": "",
+    "publicKey": "",
+    "allowedIPs": "",
+    "preSharedKey": "",
+    "keepAlive": 0,
+    "secret": "",
+    "adTag": "",
+    "createdAt": 1735680000000,
+    "updatedAt": 1735680000000,
+}
+
 # Ответ панели на GET /panel/api/clients/traffic/:email
 TRAFFIC_FIXTURE = {
     "id": 1,
@@ -69,6 +88,47 @@ class TestClientDetails:
         assert body["reverse"] == {"tag": "r1"}
         assert body["limitIp"] == 3
         assert body["enable"] is False
+
+    def test_update_body_matches_go_client_types(self):
+        # Панель разбирает тело в model.Client, где allowedIPs - []string: строка из GET даёт ошибку разбора.
+        details = ClientDetails.model_validate({"client": FULL_CLIENT_RECORD_FIXTURE, "inboundIds": [1]})
+
+        body = details.update_body(enable=False)
+
+        assert body["allowedIPs"] == []
+        assert body["reverse"] is None
+        assert body["enable"] is False
+
+    @pytest.mark.parametrize(
+        ("stored", "expected"),
+        [
+            ("10.70.0.2/32", ["10.70.0.2/32"]),
+            ("10.70.0.2/32,fd00::2/128", ["10.70.0.2/32", "fd00::2/128"]),
+            (" 10.70.0.2/32 , ", ["10.70.0.2/32"]),
+            (["10.70.0.2/32"], ["10.70.0.2/32"]),
+            (None, []),
+        ],
+    )
+    def test_update_body_splits_allowed_ips(self, stored, expected):
+        assert self._details(allowedIPs=stored).update_body()["allowedIPs"] == expected
+
+    def test_update_body_drops_reverse_that_is_not_an_object(self):
+        # Старое значение, которое панель отдала строкой, в *ClientReverse не разберётся.
+        body = self._details(reverse="legacy").update_body()
+
+        assert "reverse" not in body
+
+    def test_update_body_converts_changes_too(self):
+        assert self._details().update_body(allowedIPs="10.0.0.2/32")["allowedIPs"] == ["10.0.0.2/32"]
+
+    def test_null_collections_are_empty(self):
+        # Так Go сериализует nil-слайс и nil-map: «ничего нет», а не ошибка.
+        details = ClientDetails.model_validate(
+            {"client": CLIENT_RECORD_FIXTURE, "inboundIds": None, "tunnelAllowedIPs": None}
+        )
+
+        assert details.inbound_ids == []
+        assert details.tunnel_allowed_ips == {}
 
     def test_record_and_inbounds(self):
         details = self._details()

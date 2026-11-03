@@ -9,16 +9,16 @@ AmneziaWG - основной протокол, он открыт каждому 
 по нему статус и трафик из панели 3x-ui.
 
 Конфиг - это приватный ключ, поэтому он не уходит отдельными сообщениями: он показывается
-окном диалога (файл или QR-код с кнопками) и исчезает из чата, когда человек уходит из окна,
-жмёт «Готово» или истекает ``AWG_CONFIG_TTL_SECONDS``. Байты файла и QR лежат только в памяти
-бота (``includes.memory_media``) и удаляются оттуда вместе с окном. Таймеры записаны в Redis
-(``includes.pending_hides``): конфиг, который не успели скрыть до перезапуска, бот скроет при старте.
+окном диалога (файл или QR-код с кнопками) и исчезает из чата, когда человек жмёт «Готово»,
+открывает другой конфиг или истекает ``AWG_CONFIG_TTL_SECONDS``. Байты файла и QR лежат только
+в памяти бота (``includes.memory_media``). Каждое сообщение, в которое ушёл файл, учитывается,
+и скрытие удаляет их все (``includes.config_hide``); незавершённые скрытия записаны в Redis и
+добираются при старте бота.
 
 Как и окно VLESS, окна самодостаточны: членство и разрешение перепроверяются на каждой
 отрисовке и каждом клике - клавиатура у пользователя могла устареть.
 """
 
-import asyncio
 from datetime import datetime
 from typing import Any
 from uuid import uuid4
@@ -28,10 +28,10 @@ import structlog
 from aiogram import Bot, F
 from aiogram.exceptions import TelegramAPIError
 from aiogram.types import CallbackQuery, ContentType, Message
-from aiogram_dialog import BaseDialogManager, BgManagerFactory, DialogManager, ShowMode, Window
+from aiogram_dialog import DialogManager, ShowMode, Window
 from aiogram_dialog.api.entities import MediaAttachment
-from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
-from aiogram_dialog.widgets.kbd import Button, Column, Select, SwitchTo, Url
+from aiogram_dialog.widgets.input import ManagedTextInput, MessageInput, TextInput
+from aiogram_dialog.widgets.kbd import Button, Group, Row, Select, SwitchTo, Url
 from aiogram_dialog.widgets.media import DynamicMedia
 from aiogram_dialog.widgets.text import Format
 from fluent.runtime import FluentLocalization
@@ -46,11 +46,13 @@ from database.models import AwgAccess, AwgDevice, Person
 from env import settings
 from includes.awg import (
     MAX_DEVICE_LABEL_LEN,
-    PLATFORMS,
     AwgAccessRevokedError,
     AwgDeviceLimitError,
     AwgError,
     AwgPeer,
+    DeviceLabelError,
+    DevicePlatform,
+    IssuedConfig,
     add_device,
     device_limit,
     get_awg_client,
@@ -60,11 +62,10 @@ from includes.awg import (
     peers_by_name,
     remove_device,
     rename_device,
-    render_config_qr,
     restore_access,
 )
+from includes.config_hide import hide_now, schedule_hide, track_config
 from includes.memory_media import memory_media
-from includes.pending_hides import PendingHide, get_pending_hides
 from middlewares import L10N_FORMAT_KEY, LOGGING_KEY
 from state_machines.vpn import ViewVpnSubscription
 from utils import L10nFormat, current_member, escape_mdv2, format_traffic
@@ -73,6 +74,9 @@ logger: FilteringBoundLogger = structlog.get_logger("awg-dialog")
 
 # Время последнего подключения показываем по Москве - как и всё расписание бота.
 _DISPLAY_TZ = ZoneInfo("Europe/Moscow")
+
+# Платформы на экране выбора: телефоны строкой, компьютеры строкой.
+PLATFORM_ROWS: tuple[tuple[DevicePlatform, ...], ...] = (("android", "ios"), ("windows", "macos", "linux"))
 
 # Ключи dialog_data
 _DEVICE = "awg_device"  # номер открытого устройства
@@ -84,9 +88,6 @@ _CONFIG = "awg_config"  # memory://-ссылки на файл и QR откры�
 _SHOW_QR = "awg_show_qr"
 _HIDDEN = "awg_hidden"  # токен конфига, который убрал таймер
 
-# Таймеры автоскрытия: держим ссылки, иначе event loop может собрать задачу до срабатывания.
-_hide_tasks: set[asyncio.Task] = set()
-
 
 # ========== Общие помощники ==========
 def awg_allowed(access: AwgAccess | None) -> bool:
@@ -94,7 +95,7 @@ def awg_allowed(access: AwgAccess | None) -> bool:
 
     ``suspended`` тоже пускает: выключенные ключи оживают по кнопке «Включить ключи».
     """
-    return settings.awg.ENABLED and (access is None or access.status != "revoked")
+    return settings.AWG_ENABLED and (access is None or access.status != "revoked")
 
 
 async def _load_access(session: AsyncSession, telegram_id: int) -> tuple[Person, AwgAccess | None] | None:
@@ -167,8 +168,8 @@ def _middleware(dialog_manager: DialogManager) -> tuple[FluentLocalization, Filt
 
 
 def _awg_error_text(l10n: FluentLocalization, exc: Exception, access: AwgAccess | None) -> str:
-    # IntegrityError приходит из гонки двух событий одного человека (двойной клик, два названия
-    # подряд - апдейты не сериализуются): строка уже есть, человеку - обычная ошибка «попробуйте ещё».
+    # IntegrityError - строка уже есть (например, устройство завели из CLI или второй копией бота):
+    # человеку - обычная ошибка «попробуйте ещё». Свои апдейты человека Dispatcher сериализует (run.py).
     if isinstance(exc, AwgDeviceLimitError) and access is not None:
         return l10n.format_value(
             "vpn-awg-limit-alert", args={"used": len(access.devices), "limit": device_limit(access)}
@@ -186,68 +187,58 @@ async def _delete_quietly(bot: Bot, chat_id: int, message_id: int) -> None:
 
 
 # ========== Конфиг: показ из памяти и автоскрытие ==========
-def _forget_config(dialog_manager: DialogManager) -> None:
-    """Убрать конфиг из окна и из памяти бота."""
-    config = dialog_manager.dialog_data.pop(_CONFIG, None)
+def _forget_config(dialog_manager: DialogManager) -> str | None:
+    """Убрать конфиг из окна. Возвращает его токен - сообщения с ключом скрывает ``config_hide``."""
     dialog_manager.dialog_data.pop(_SHOW_QR, None)
-    if config is not None:
-        memory_media.drop(config["file"], config["qr"])
+    config = dialog_manager.dialog_data.pop(_CONFIG, None)
+    return config["token"] if config is not None else None
 
 
-async def _hide(bg: BaseDialogManager, token: str) -> None:
-    try:
-        # Окно конфига по этому токену поймёт, что пора убрать файл; другие окна ключ проигнорируют.
-        await bg.update({_HIDDEN: token})
-    except Exception as exc:
-        # Фоновая задача: исключение некому поймать, поэтому только пишем в лог.
-        await logger.awarning("awg-config-hide-failed", error=str(exc))
-
-
-async def _hide_later(bg: BaseDialogManager, token: str, urls: tuple[str | None, ...]) -> None:
-    try:
-        await asyncio.sleep(settings.awg.CONFIG_TTL_SECONDS)
-        await _hide(bg, token)
-    finally:
-        # Что бы ни случилось с окном, ключ в памяти бота дольше срока не живёт.
-        memory_media.drop(*urls)
-        await get_pending_hides().remove(token)
-
-
-async def hide_leftover_configs(bot: Bot, bg_factory: BgManagerFactory) -> None:
-    """При старте: скрыть конфиги, чьи таймеры оборвал перезапуск. Ждать срока незачем -
-    байтов конфига в памяти уже нет, и окно всё равно не сможет показать файл заново."""
-    hides = await get_pending_hides().take_all()
-    for hide in hides:
-        await _hide(bg_factory.bg(bot, hide.user_id, hide.chat_id, stack_id=hide.stack_id), hide.token)
-    if hides:
-        await logger.ainfo("awg-leftover-configs-hidden", count=len(hides))
-
-
-async def _open_config(dialog_manager: DialogManager, device: AwgDevice, name: str, config: str) -> None:
+async def _open_config(dialog_manager: DialogManager, device: AwgDevice, name: str, config: IssuedConfig) -> None:
     """Показать конфиг окном (файл и QR - из памяти, без лишних сообщений) и завести таймер скрытия."""
-    file_url = memory_media.put(config.encode(), f"{settings.awg.TUNNEL_NAME}-{device.number}.conf")
-    try:
-        qr_url = memory_media.put(render_config_qr(config), "amneziawg-qr.png")
-    except ValueError as exc:
-        # Конфиг с длинными I1-I5 может не влезть в QR - файла достаточно.
-        await logger.awarning("awg-qr-failed", number=device.number, error=str(exc))
-        qr_url = None
+    bot: Bot = dialog_manager.middleware_data["bot"]
+    previous = _forget_config(dialog_manager)
+    if previous is not None:
+        # Окно открывают повторно: прежний конфиг убираем сразу, а не по его таймеру.
+        await hide_now(bot, previous)
 
-    _forget_config(dialog_manager)  # прежний конфиг, если окно открывали повторно
     token = uuid4().hex
-    dialog_manager.dialog_data[_CONFIG] = {"token": token, "file": file_url, "qr": qr_url, "name": name}
+    file_name = f"{settings.awg.TUNNEL_NAME}-{device.number}.conf"
+    file_url = memory_media.put(config.text.encode(), file_name, owner=token)
+    qr_url = None
+    qr_apps: tuple[int, int] | None = None  # (вошло, всего) - если список исключений в QR урезан
+    if config.qr is None:
+        # Даже без исключений не влез (длинные I1-I5) - файла достаточно.
+        await logger.awarning("awg-qr-too-big", number=device.number)
+    else:
+        qr_url = memory_media.put(config.qr.png, "amneziawg-qr.png", owner=token)
+        if config.qr.truncated:
+            qr_apps = (config.qr.included, config.qr.total)
+
+    dialog_manager.dialog_data[_CONFIG] = {
+        "token": token,
+        "file": file_url,
+        "qr": qr_url,
+        "qr_apps": qr_apps,
+        "name": name,
+    }
     dialog_manager.dialog_data[_SHOW_QR] = False
 
-    # Привязка к стеку, а не к окну: если человек к тому времени закрыл диалог, обновление
-    # не упадёт с UnknownIntent (а его хэндлер сбросил бы человеку меню).
+    # Запись - до показа окна: менеджер сообщений учтёт уже первое сообщение с файлом.
     stack_id = dialog_manager.current_stack().id
-    bg = dialog_manager.bg(stack_id=stack_id)
     user = dialog_manager.middleware_data["event_from_user"]
     chat = dialog_manager.middleware_data["event_chat"]
-    await get_pending_hides().add(PendingHide(token=token, user_id=user.id, chat_id=chat.id, stack_id=stack_id))
-    task = asyncio.create_task(_hide_later(bg, token, (file_url, qr_url)))
-    _hide_tasks.add(task)
-    task.add_done_callback(_hide_tasks.discard)
+    await track_config(token, user_id=user.id, chat_id=chat.id, stack_id=stack_id)
+
+    # Привязка к стеку, а не к окну: если человек к тому времени закрыл диалог, перерисовка
+    # не упадёт с UnknownIntent (а его хэндлер сбросил бы человеку меню).
+    bg = dialog_manager.bg(stack_id=stack_id)
+
+    async def refresh() -> None:
+        # Сообщения уже удалены - окно конфига по токену поймёт, что показать «конфиг скрыт».
+        await bg.update({_HIDDEN: token})
+
+    schedule_hide(bot, token, settings.awg.CONFIG_TTL_SECONDS, refresh)
 
     # Текстовое сообщение в медиа не отредактировать - старое окно удаляем и шлём новое.
     await dialog_manager.switch_to(ViewVpnSubscription.AWG_CONFIG, show_mode=ShowMode.DELETE_AND_SEND)
@@ -378,9 +369,11 @@ async def get_name_data(dialog_manager: DialogManager, l10n: FluentLocalization,
 
 
 async def get_platform_data(l10n: FluentLocalization, **kwargs) -> dict[str, Any]:
+    mobile, desktop = PLATFORM_ROWS
     return {
         "text": l10n.format_value("vpn-awg-platform-question"),
-        "platforms": [(_platform_name(l10n, platform), platform) for platform in PLATFORMS],
+        "mobile_platforms": [(_platform_name(l10n, platform), platform) for platform in mobile],
+        "desktop_platforms": [(_platform_name(l10n, platform), platform) for platform in desktop],
     }
 
 
@@ -408,12 +401,16 @@ async def get_config_data(dialog_manager: DialogManager, l10n: FluentLocalizatio
         url=config["qr"] if show_qr else config["file"],
     )
     args = {"name": escape_mdv2(config["name"]), "minutes": max(1, settings.awg.CONFIG_TTL_SECONDS // 60)}
+    text = l10n.format_value("vpn-awg-qr-caption" if show_qr else "vpn-awg-config-caption", args=args)
+    if show_qr and config.get("qr_apps"):
+        included, total = config["qr_apps"]
+        text += "\n\n" + l10n.format_value("vpn-awg-qr-truncated", args={"included": included, "total": total})
     return {
         "show_media": True,
         "media": media,
         "has_qr": config["qr"] is not None,
         "show_qr": show_qr,
-        "text": l10n.format_value("vpn-awg-qr-caption" if show_qr else "vpn-awg-config-caption", args=args),
+        "text": text,
     }
 
 
@@ -509,7 +506,12 @@ async def on_delete_confirmed(clb: CallbackQuery, widget: Button, dialog_manager
     try:
         async with async_session() as session:
             loaded = await _load_access(session, clb.from_user.id)
-            access = loaded[1] if loaded else None
+            if loaded is None:
+                # Доступ закрыли, пока человек подтверждал: ничего не удалено - так и говорим.
+                await clb.answer(l10n.format_value("vpn-awg-denied-alert"), show_alert=True)
+                await dialog_manager.switch_to(ViewVpnSubscription.AWG)
+                return
+            access = loaded[1]
             device = _find_device(access, number)
             # Устройство могли уже удалить из другого окна - удалять нечего, просто возвращаемся.
             if access is not None and device is not None:
@@ -530,30 +532,22 @@ async def on_delete_confirmed(clb: CallbackQuery, widget: Button, dialog_manager
 async def on_name_entered(
     message: Message, widget: ManagedTextInput, dialog_manager: DialogManager, label: str
 ) -> None:
-    l10n, log = _middleware(dialog_manager)
     # Сообщение с названием убираем, чтобы окно диалога осталось последним и редактировалось на месте.
     await _delete_quietly(message.bot, message.chat.id, message.message_id)
     dialog_manager.show_mode = ShowMode.EDIT
 
     target = dialog_manager.dialog_data.get(_NAME_TARGET)
-    access: AwgAccess | None = None
-    try:
-        async with async_session() as session:
-            loaded = await _load_access(session, message.from_user.id)
-            if loaded is None:
-                await dialog_manager.switch_to(ViewVpnSubscription.AWG)
-                return
-            person, access = loaded
-
-            if target is not None:
-                device = _find_device(access, target)
-                if device is not None:
-                    await rename_device(session, device, label)
-                    await session.commit()
-    except (AwgError, IntegrityError) as exc:
-        await log.aerror("vpn-awg-name-failed", telegram_id=message.from_user.id, target=target, error=str(exc))
-        dialog_manager.dialog_data[_NAME_ERROR] = _awg_error_text(l10n, exc, access)
-        return
+    # Переименование - только подпись в нашей БД (панель не трогаем, уникальности нет): ошибок панели
+    # и гонок за строку здесь не бывает, сбой самой БД пусть идёт в общий обработчик ошибок.
+    async with async_session() as session:
+        loaded = await _load_access(session, message.from_user.id)
+        if loaded is None:
+            await dialog_manager.switch_to(ViewVpnSubscription.AWG)
+            return
+        device = _find_device(loaded[1], target) if target is not None else None
+        if device is not None:
+            await rename_device(session, device, label)
+            await session.commit()
 
     dialog_manager.dialog_data.pop(_NAME_ERROR, None)
     dialog_manager.dialog_data.pop(_NAME_TARGET, None)
@@ -571,8 +565,9 @@ async def on_name_error(message: Message, widget: ManagedTextInput, dialog_manag
     l10n, _ = _middleware(dialog_manager)
     await _delete_quietly(message.bot, message.chat.id, message.message_id)
     dialog_manager.show_mode = ShowMode.EDIT
+    problem = error.problem if isinstance(error, DeviceLabelError) else "empty"
     dialog_manager.dialog_data[_NAME_ERROR] = l10n.format_value(
-        "vpn-awg-name-invalid-part", args={"max": MAX_DEVICE_LABEL_LEN}
+        f"vpn-awg-name-{problem}-part", args={"max": MAX_DEVICE_LABEL_LEN}
     )
 
 
@@ -652,10 +647,17 @@ async def on_toggle_qr(clb: CallbackQuery, widget: Button, dialog_manager: Dialo
     dialog_manager.dialog_data[_SHOW_QR] = not dialog_manager.dialog_data.get(_SHOW_QR, False)
 
 
+async def on_config_message(message: Message, widget: MessageInput, dialog_manager: DialogManager) -> None:
+    # Без этого aiogram-dialog перерисовал бы окно новым сообщением под репликой - ещё одна копия ключа.
+    dialog_manager.show_mode = ShowMode.NO_UPDATE
+
+
 async def on_config_done(clb: CallbackQuery, widget: Button, dialog_manager: DialogManager) -> None:
-    # Без медиа окно не отредактировать - aiogram-dialog удалит сообщение с файлом и пришлёт карточку.
-    _forget_config(dialog_manager)
-    await dialog_manager.switch_to(ViewVpnSubscription.AWG_DEVICE)
+    token = _forget_config(dialog_manager)
+    if token is not None:
+        await hide_now(clb.bot, token)
+    # Сообщение с файлом уже удалено - карточку шлём новым сообщением.
+    await dialog_manager.switch_to(ViewVpnSubscription.AWG_DEVICE, show_mode=ShowMode.DELETE_AND_SEND)
 
 
 # ========== Окна ==========
@@ -669,7 +671,7 @@ awg_windows = (
             on_click=on_restore,
             when=F["is_allowed"] & F["is_suspended"],
         ),
-        Column(
+        Group(
             Select(
                 Format("{item[0]}"),
                 id="awg_devices",
@@ -677,6 +679,7 @@ awg_windows = (
                 items="devices",
                 on_click=on_select_device,
             ),
+            width=2,
         ),
         Button(
             L10nFormat("vpn-awg-add-btn"),
@@ -685,9 +688,9 @@ awg_windows = (
             when=F["is_allowed"] & F["can_add"],
         ),
         # Конфиг 3.1 старые клиенты не импортируют или молча не подключаются - даём ссылки на свежие.
-        Column(
+        Row(
+            Url(L10nFormat("vpn-awg-wgtunnel-btn"), L10nFormat("vpn-awg-wgtunnel-url")),
             Url(L10nFormat("vpn-awg-android-btn"), L10nFormat("vpn-awg-android-url")),
-            Url(L10nFormat("vpn-awg-apk-btn"), L10nFormat("vpn-awg-apk-url")),
             Url(L10nFormat("vpn-awg-ios-btn"), L10nFormat("vpn-awg-ios-url")),
             when="is_allowed",
         ),
@@ -699,12 +702,10 @@ awg_windows = (
     Window(
         Format("{text}"),
         Button(L10nFormat("vpn-awg-get-config-btn"), id="awg_get_config", on_click=on_get_config, when="has_device"),
-        Button(L10nFormat("vpn-awg-rename-btn"), id="awg_rename", on_click=on_start_rename, when="has_device"),
-        Button(L10nFormat("vpn-awg-platform-btn"), id="awg_platform", on_click=on_start_platform, when="has_device"),
-        SwitchTo(
-            L10nFormat("vpn-awg-delete-btn"),
-            id="awg_delete",
-            state=ViewVpnSubscription.AWG_DELETE,
+        Row(
+            Button(L10nFormat("vpn-awg-rename-btn"), id="awg_rename", on_click=on_start_rename),
+            Button(L10nFormat("vpn-awg-platform-btn"), id="awg_platform", on_click=on_start_platform),
+            SwitchTo(L10nFormat("vpn-awg-delete-btn"), id="awg_delete", state=ViewVpnSubscription.AWG_DELETE),
             when="has_device",
         ),
         SwitchTo(L10nFormat("back-btn"), id="awg_device_back", state=ViewVpnSubscription.AWG),
@@ -727,12 +728,21 @@ awg_windows = (
     # --- Платформа ---
     Window(
         Format("{text}"),
-        Column(
+        Row(
             Select(
                 Format("{item[0]}"),
-                id="awg_platforms",
+                id="awg_platforms_mobile",
                 item_id_getter=lambda item: item[1],
-                items="platforms",
+                items="mobile_platforms",
+                on_click=on_platform_selected,
+            ),
+        ),
+        Row(
+            Select(
+                Format("{item[0]}"),
+                id="awg_platforms_desktop",
+                item_id_getter=lambda item: item[1],
+                items="desktop_platforms",
                 on_click=on_platform_selected,
             ),
         ),
@@ -744,22 +754,27 @@ awg_windows = (
     Window(
         DynamicMedia("media", when="show_media"),
         Format("{text}"),
-        Button(
-            L10nFormat("vpn-awg-show-qr-btn"),
-            id="awg_show_qr",
-            on_click=on_toggle_qr,
-            when=F["has_qr"] & ~F["show_qr"],
+        Row(
+            Button(
+                L10nFormat("vpn-awg-show-qr-btn"),
+                id="awg_show_qr",
+                on_click=on_toggle_qr,
+                when=F["has_qr"] & ~F["show_qr"],
+            ),
+            Button(L10nFormat("vpn-awg-show-file-btn"), id="awg_show_file", on_click=on_toggle_qr, when="show_qr"),
+            Button(L10nFormat("vpn-awg-done-btn"), id="awg_config_done", on_click=on_config_done),
         ),
-        Button(L10nFormat("vpn-awg-show-file-btn"), id="awg_show_file", on_click=on_toggle_qr, when="show_qr"),
-        Button(L10nFormat("vpn-awg-done-btn"), id="awg_config_done", on_click=on_config_done),
+        MessageInput(on_config_message, content_types=ContentType.ANY),
         getter=get_config_data,
         state=ViewVpnSubscription.AWG_CONFIG,
     ),
     # --- Подтверждение удаления ---
     Window(
         Format("{text}"),
-        Button(L10nFormat("vpn-awg-delete-yes-btn"), id="awg_delete_yes", on_click=on_delete_confirmed),
-        SwitchTo(L10nFormat("back-btn"), id="awg_delete_back", state=ViewVpnSubscription.AWG_DEVICE),
+        Row(
+            Button(L10nFormat("vpn-awg-delete-yes-btn"), id="awg_delete_yes", on_click=on_delete_confirmed),
+            SwitchTo(L10nFormat("back-btn"), id="awg_delete_back", state=ViewVpnSubscription.AWG_DEVICE),
+        ),
         getter=get_delete_data,
         state=ViewVpnSubscription.AWG_DELETE,
     ),

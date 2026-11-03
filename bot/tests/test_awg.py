@@ -1,5 +1,7 @@
+import asyncio
 import base64
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -14,7 +16,10 @@ from includes.awg import (
     normalize_device_label,
     render_config_qr,
 )
+from includes.awg import service as awg_service
 from includes.vpn import ClientDetails, ClientTraffic
+from jobs import revoke_vpn, suspend_awg
+from tests.fakes import FakeBot, FakeL10n, FakeSessionMaker
 
 # Ответ GET /panel/api/clients/get/:email для устройства (ключи ненастоящие).
 CLIENT_OBJ = {
@@ -191,3 +196,147 @@ class TestQr:
         # Хэндлер ловит ValueError и шлёт только файл - проверяем, что segno кидает именно его.
         with pytest.raises(ValueError):
             render_config_qr("[Interface]\nI1 = <b 0x" + "ab" * 3000 + ">")
+
+
+def _access(person_id: int) -> SimpleNamespace:
+    person = SimpleNamespace(telegram_id=100 + person_id, full_name=f"Person {person_id}")
+    return SimpleNamespace(person_id=person_id, person=person, status="granted", disabled_at=None)
+
+
+class TestSuspendJob:
+    """Ночное отключение: сбой на одном человеке не откатывает и не повторяет остальных."""
+
+    # Что панель отвечает на выключение ключей человека: число найденных ключей или исключение.
+    PANEL = {
+        1: 2,
+        2: AwgError("skipped: traffic writer queue full"),
+        3: RuntimeError("неожиданный ответ"),
+        4: 1,  # ключи выключены, а коммит упал
+        5: 0,  # устройств нет - чиним запись молча
+        6: 1,
+    }
+
+    def _run(self, monkeypatch, sessions: FakeSessionMaker) -> FakeBot:
+        async def list_accesses_to_suspend(session):
+            # Загруженные строки привязаны к сессии: её коммит сохранит и все их правки.
+            accesses = [_access(person_id) for person_id in self.PANEL]
+            for access in accesses:
+                session.add(access)
+            return accesses
+
+        async def get_hr_id(session):
+            return 1
+
+        async def disable_peers(client, access):
+            result = self.PANEL[access.person_id]
+            if isinstance(result, Exception):
+                raise result
+            return result
+
+        for module in (suspend_awg, revoke_vpn):
+            monkeypatch.setattr(module, "async_session", sessions)
+        monkeypatch.setattr(suspend_awg, "list_accesses_to_suspend", list_accesses_to_suspend)
+        monkeypatch.setattr(suspend_awg, "get_hr_id", get_hr_id)
+        monkeypatch.setattr(suspend_awg, "disable_peers", disable_peers)
+        monkeypatch.setattr(suspend_awg, "get_awg_client", lambda: None)
+
+        bot = FakeBot()
+        asyncio.run(suspend_awg.suspend_inactive_awg_access(bot, FakeL10n()))
+        return bot
+
+    def test_each_person_is_committed_before_notice(self, monkeypatch):
+        sessions = FakeSessionMaker(fail_commit=lambda row: row.person_id == 4)
+        bot = self._run(monkeypatch, sessions)
+
+        assert [row.person_id for row in sessions.committed] == [1, 5, 6]
+        assert all(row.status == "suspended" for row in sessions.committed)
+        notified = [chat_id for chat_id, _ in bot.sent if chat_id != 1]
+        assert notified == [101, 106]
+
+    def test_failures_go_to_report(self, monkeypatch):
+        bot = self._run(monkeypatch, FakeSessionMaker(fail_commit=lambda row: row.person_id == 4))
+
+        report = "\n".join(text for chat_id, text in bot.sent if chat_id == 1)
+        assert "'revoked': 2" in report
+        assert "'failed': 3" in report
+        assert "Person 2" in report
+        assert "Person 3" in report
+        assert "Person 4" in report
+
+
+class _UniqueEmailPanel:
+    """Панель с уникальным email: повторное добавление того же email - «email already in use», как в 3x-ui."""
+
+    def __init__(self, existing: set[str] = frozenset()) -> None:
+        self.clients = set(existing)
+        self.created: list[str] = []
+
+    async def find_peer(self, name: str) -> AwgPeer | None:
+        if name not in self.clients:
+            return None
+        return AwgPeer(email=name, privateKey="k", address="10.70.0.2/32")
+
+    async def create_peer(self, name: str, comment: str, telegram_id: int) -> None:
+        if name in self.clients:
+            raise AwgError(f"email already in use: {name}")
+        self.clients.add(name)
+        self.created.append(name)
+
+    async def set_disabled(self, names: list[str], disabled: bool) -> None:
+        pass
+
+
+class TestEnsurePeer:
+    """Переезд устройства на новое имя клиента не застревает, если первая попытка оборвалась."""
+
+    PERSON = SimpleNamespace(
+        id=5,
+        telegram_id=100,
+        full_name="Ivan",
+        lbg_member=SimpleNamespace(best_email="ivan@best-eu.org", full_name_ru="Иван"),
+    )
+    NEW_NAME = "awg-1-ivan@best-eu.org"
+
+    @pytest.fixture(autouse=True)
+    def _db(self, monkeypatch):
+        async def get_device_by_client_name(session, name):
+            return None
+
+        async def set_device_client_name(session, device, name):
+            device.client_name = name
+
+        monkeypatch.setattr(awg_service, "get_device_by_client_name", get_device_by_client_name)
+        monkeypatch.setattr(awg_service, "set_device_client_name", set_device_client_name)
+
+    def _ensure(self, panel: _UniqueEmailPanel) -> tuple[SimpleNamespace, AwgPeer]:
+        # Строка, как её грузит из БД каждая попытка: переименование прошлой попытки откатилось.
+        device = SimpleNamespace(number=1, client_name="awg-lbg5-1")
+        peer = asyncio.run(awg_service.ensure_peer(None, panel, device, self.PERSON))
+        return device, peer
+
+    def test_retry_after_rollback_adopts_client(self):
+        panel = _UniqueEmailPanel()
+        self._ensure(panel)  # клиент создан, а дальше выдача упала и сессия откатилась
+
+        device, peer = self._ensure(panel)
+
+        assert peer.email == self.NEW_NAME
+        assert device.client_name == self.NEW_NAME
+        assert panel.created == [self.NEW_NAME]
+
+    def test_client_left_under_new_name_is_adopted(self):
+        panel = _UniqueEmailPanel(existing={self.NEW_NAME})
+
+        device, peer = self._ensure(panel)
+
+        assert peer.email == self.NEW_NAME
+        assert device.client_name == self.NEW_NAME
+        assert panel.created == []
+
+    def test_missing_client_is_created_under_new_name(self):
+        panel = _UniqueEmailPanel()
+
+        device, peer = self._ensure(panel)
+
+        assert peer.email == self.NEW_NAME
+        assert panel.created == [self.NEW_NAME]

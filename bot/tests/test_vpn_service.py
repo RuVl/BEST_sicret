@@ -1,12 +1,12 @@
 import asyncio
-import json
 from types import SimpleNamespace
 
 import pytest
 
-from includes.pending_hides import PendingHide, PendingHides
-from includes.vpn import ClientDetails, XuiClient, XuiError
+from includes.vpn import ClientDetails, XuiClient, XuiClientNotFoundError, XuiError
 from includes.vpn import service as vpn_service
+from jobs import revoke_vpn
+from tests.fakes import FakeBot, FakeL10n, FakeSessionMaker
 from utils import split_message
 
 
@@ -27,6 +27,158 @@ class TestPanelTimeout:
 
         with pytest.raises(XuiError, match="не ответила"):
             asyncio.run(client.get_client_details("ivan@best-eu.org"))
+
+
+class _CannedPanel(XuiClient):
+    """Клиент панели, у которого вместо сети - заранее заготовленные ``obj`` по префиксу пути."""
+
+    def __init__(self, responses: dict[str, object]):
+        super().__init__("https://panel", "token", "https://sub")
+        self._responses = responses
+        self.requests: list[tuple[str, object]] = []
+
+    async def _request(self, method, path, json=None):
+        self.requests.append((path, json))
+        for prefix, obj in self._responses.items():
+            if path.startswith(prefix):
+                return obj
+        raise AssertionError(f"неожиданный запрос {path}")
+
+
+_CLIENT = {"email": "ivan@best-eu.org", "uuid": "u1", "subId": "s1", "privateKey": "secret-key"}
+
+
+class TestPanelResponseValidation:
+    @pytest.mark.parametrize(
+        "obj",
+        [
+            {"client": _CLIENT, "inboundIds": [3], "tunnelAllowedIPs": {"3": None}},
+            {"client": _CLIENT, "inboundIds": "3"},
+            {"client": "не объект"},
+            ["не", "объект"],
+        ],
+    )
+    def test_malformed_client_is_a_panel_error(self, obj):
+        # Иначе pydantic.ValidationError пролетает мимо except XuiError/AwgError в диалогах и джобах.
+        panel = _CannedPanel({"/clients/get/": obj})
+
+        with pytest.raises(XuiError, match="не по схеме"):
+            asyncio.run(panel.get_client_details("ivan@best-eu.org"))
+
+    def test_error_does_not_leak_client_secrets(self):
+        panel = _CannedPanel({"/clients/get/": {"client": _CLIENT, "inboundIds": [3], "tunnelAllowedIPs": {"3": None}}})
+
+        with pytest.raises(XuiError) as caught:
+            asyncio.run(panel.get_client_details("ivan@best-eu.org"))
+
+        assert "secret-key" not in str(caught.value)
+
+    def test_null_tunnel_addresses_are_tolerated(self):
+        panel = _CannedPanel({"/clients/get/": {"client": _CLIENT, "inboundIds": [3], "tunnelAllowedIPs": None}})
+
+        details = asyncio.run(panel.get_client_details("ivan@best-eu.org"))
+
+        assert details is not None
+        assert details.tunnel_allowed_ips == {}
+
+    def test_malformed_traffic_is_a_panel_error(self):
+        panel = _CannedPanel({"/clients/traffic/": {"up": "много"}})
+
+        with pytest.raises(XuiError, match="не по схеме"):
+            asyncio.run(panel.get_traffic("ivan@best-eu.org"))
+
+
+class TestBulkSetEnabled:
+    def test_skipped_emails_are_an_error(self):
+        # 3x-ui на per-email провал отвечает success=true и перечисляет пропущенных в skipped.
+        skipped = [{"email": "b@best-eu.org", "reason": "traffic writer queue full"}]
+        panel = _CannedPanel({"/clients/bulkDisable": {"changed": 1, "skipped": skipped}})
+
+        with pytest.raises(XuiError, match=r"b@best-eu\.org \(traffic writer queue full\)"):
+            asyncio.run(panel.set_enabled_many(["a@best-eu.org", "b@best-eu.org"], False))
+
+    @pytest.mark.parametrize(
+        "obj", [{"changed": 2}, {"changed": 2, "skipped": None}, {"changed": 2, "skipped": []}, None]
+    )
+    def test_nothing_skipped_is_success(self, obj):
+        panel = _CannedPanel({"/clients/bulkEnable": obj})
+
+        asyncio.run(panel.set_enabled_many(["a@best-eu.org", "b@best-eu.org"], True))
+
+        assert panel.requests == [("/clients/bulkEnable", {"emails": ["a@best-eu.org", "b@best-eu.org"]})]
+
+    def test_skipped_single_client_is_an_error(self):
+        panel = _CannedPanel(
+            {
+                "/clients/get/": {"client": _CLIENT, "inboundIds": [1]},
+                "/clients/bulkDisable": {"changed": 0, "skipped": [{"email": "ivan@best-eu.org", "reason": "x"}]},
+            }
+        )
+
+        with pytest.raises(XuiError):
+            asyncio.run(panel.set_enabled("ivan@best-eu.org", False))
+
+
+class _RevokePanel:
+    """Панель для джоба отзыва: ``broken`` - отключение падает, ``missing`` - клиента уже нет."""
+
+    def __init__(self, broken: set[str] = frozenset(), missing: set[str] = frozenset()):
+        self._broken = broken
+        self._missing = missing
+
+    async def set_enabled(self, email: str, enabled: bool) -> None:
+        if email in self._missing:
+            raise XuiClientNotFoundError(email)
+        if email in self._broken:
+            raise XuiError("skipped")
+
+
+def _subscription(n: int) -> SimpleNamespace:
+    person = SimpleNamespace(telegram_id=100 + n, full_name=f"Person {n}")
+    return SimpleNamespace(id=n, xui_email=f"p{n}@best-eu.org", person=person, status="active")
+
+
+def _run_revoke(monkeypatch, subscriptions, panel, sessions: FakeSessionMaker) -> FakeBot:
+    async def list_subscriptions_to_revoke(session):
+        # Загруженные строки привязаны к сессии: её коммит сохранит и все их правки.
+        for subscription in subscriptions:
+            session.add(subscription)
+        return subscriptions
+
+    async def get_hr_id(session):
+        return 1
+
+    monkeypatch.setattr(revoke_vpn, "async_session", sessions)
+    monkeypatch.setattr(revoke_vpn, "list_subscriptions_to_revoke", list_subscriptions_to_revoke)
+    monkeypatch.setattr(revoke_vpn, "get_hr_id", get_hr_id)
+    monkeypatch.setattr(revoke_vpn, "get_xui_client", lambda: panel)
+
+    bot = FakeBot()
+    asyncio.run(revoke_vpn.revoke_inactive_subscriptions(bot, FakeL10n()))
+    return bot
+
+
+class TestRevokeJob:
+    def test_one_failure_does_not_undo_the_others(self, monkeypatch):
+        # Панель отказала на p2, БД - на p3: остальные закоммичены каждый сам и уведомлены ровно по разу.
+        subs = [_subscription(n) for n in range(1, 6)]
+        sessions = FakeSessionMaker(fail_commit=lambda row: row.id == 3)
+        panel = _RevokePanel(broken={"p2@best-eu.org"}, missing={"p5@best-eu.org"})
+        bot = _run_revoke(monkeypatch, subs, panel, sessions)
+
+        assert [row.id for row in sessions.committed] == [1, 4, 5]
+        notified = [chat_id for chat_id, _ in bot.sent if chat_id != 1]
+        assert notified == [101, 104]
+        report = "\n".join(text for chat_id, text in bot.sent if chat_id == 1)
+        assert "'revoked': 2" in report
+        assert "'failed': 2" in report
+
+    def test_notice_is_sent_only_after_commit(self, monkeypatch):
+        # Уведомили, а статус не сохранился - следующей ночью человеку пришло бы второе уведомление.
+        sessions = FakeSessionMaker(fail_commit=lambda row: True)
+        bot = _run_revoke(monkeypatch, [_subscription(1)], _RevokePanel(), sessions)
+
+        assert all(chat_id == 1 for chat_id, _ in bot.sent)
 
 
 def _details(**client) -> ClientDetails:
@@ -94,49 +246,3 @@ class TestSplitMessage:
         parts = split_message("ab\\.cd", limit=3)
         assert all(not part.endswith("\\") for part in parts)
         assert "".join(parts) == "ab\\.cd"
-
-
-class _FakeRedis:
-    def __init__(self):
-        self.data: dict[str, dict[str, str]] = {}
-
-    async def hset(self, key, field, value):
-        self.data.setdefault(key, {})[field] = value
-
-    async def hdel(self, key, field):
-        self.data.get(key, {}).pop(field, None)
-
-    async def hgetall(self, key):
-        return dict(self.data.get(key, {}))
-
-    async def delete(self, key):
-        self.data.pop(key, None)
-
-
-class TestPendingHides:
-    def test_survives_restart_until_taken(self):
-        redis = _FakeRedis()
-        hide = PendingHide(token="t1", user_id=1, chat_id=2, stack_id="s")
-
-        asyncio.run(PendingHides(redis).add(hide))
-        # Новый процесс - новый объект, но записи в Redis на месте.
-        assert asyncio.run(PendingHides(redis).take_all()) == [hide]
-        assert asyncio.run(PendingHides(redis).take_all()) == []
-
-    def test_finished_timer_is_forgotten(self):
-        redis = _FakeRedis()
-        registry = PendingHides(redis)
-        asyncio.run(registry.add(PendingHide(token="t1", user_id=1, chat_id=2, stack_id="s")))
-        asyncio.run(registry.remove("t1"))
-        assert asyncio.run(registry.take_all()) == []
-
-    def test_broken_record_is_skipped(self):
-        redis = _FakeRedis()
-        good = json.dumps({"token": "ok", "user_id": 1, "chat_id": 2, "stack_id": "s"})
-        redis.data["awg:pending-hides"] = {"bad": "{}", "ok": good}
-        assert [hide.token for hide in asyncio.run(PendingHides(redis).take_all())] == ["ok"]
-
-    def test_without_redis_nothing_is_stored(self):
-        registry = PendingHides(None)
-        asyncio.run(registry.add(PendingHide(token="t1", user_id=1, chat_id=2, stack_id="s")))
-        assert asyncio.run(registry.take_all()) == []

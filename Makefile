@@ -150,13 +150,19 @@ awg-list: ## У кого заведён AmneziaWG и сколько устрой
 awg-grant: ## Вернуть отозванный AmneziaWG или сменить лимит: make awg-grant who=@username [devices=3] [notify=0]
 	$(COMPOSE) exec telegram_bot python3 -m cli.awg grant "$(who)" $(if $(devices),--devices "$(devices)") $(if $(filter 0,$(notify)),--no-notify)
 
-.PHONY: awg-announce
-awg-announce: ## Разослать мемберам, что AmneziaWG - основной: make awg-announce [dry=1]
-	$(COMPOSE) exec telegram_bot python3 -m cli.awg announce $(if $(filter 1,$(dry)),--dry-run)
-
 .PHONY: awg-revoke
 awg-revoke: ## Забрать AmneziaWG: make awg-revoke who=@username [delete=1]
 	$(COMPOSE) exec telegram_bot python3 -m cli.awg revoke "$(who)" $(if $(filter 1,$(delete)),--delete)
+
+# --- Рассылка ---------------------------------------------------------------
+# Текст - файл на хосте в MarkdownV2. Копируем его в контейнер, а не подаём через stdin:
+# терминал нужен команде для подтверждения [y/n] (поэтому и exec без -T).
+
+.PHONY: broadcast
+broadcast: ## Рассылка из файла: make broadcast file=msg.txt [group=all,members,board,awg,vless] [to=@ivan,123]
+	$(if $(file),,$(error Укажите файл с текстом: make broadcast file=msg.txt group=all))
+	$(COMPOSE) cp "$(file)" telegram_bot:/tmp/broadcast.txt
+	$(COMPOSE) exec telegram_bot python3 -m cli.broadcast /tmp/broadcast.txt $(if $(group),--group "$(group)") $(if $(to),--to "$(to)")
 
 # --- Логи -------------------------------------------------------------------
 

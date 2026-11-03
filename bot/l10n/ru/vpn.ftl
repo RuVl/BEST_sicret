@@ -62,11 +62,11 @@ vpn-access-denied = Доступ к VPN только для активных м�
 # Один конфиг - одно устройство, поэтому ключи заводятся по устройствам.
 
 vpn-awg-hint = *AmneziaWG — основной протокол*
-    Откройте «AmneziaWG» и добавьте устройство — бот пришлёт файл и QR\-код\. Если AmneziaWG не подключается, выпустите VLESS\-подписку ниже\.
+    Откройте «AmneziaWG» и добавьте устройство — бот пришлёт файл и QR\-код для WG Tunnel \(Android\) или AmneziaWG \(iPhone, компьютер\)\. Если AmneziaWG не подключается, выпустите VLESS\-подписку ниже\.
 
 vpn-awg-devices = *AmneziaWG*
     { "" }
-    Нужно приложение AmneziaWG последней версии — ссылки на него под списком\. Старые версии к серверу не подключатся\.
+    Нужно свежее приложение: на Android — WG Tunnel \(или AmneziaWG\), на iPhone и iPad — AmneziaWG\. Ссылки под списком, старые версии к серверу не подключатся\.
     { "" }
     Один конфиг — одно устройство: на двух устройствах сразу он работать не будет\. Для телефона и ноутбука добавьте два устройства\.
     { "" }
@@ -94,19 +94,24 @@ vpn-awg-name-rename = *Переименование*
     { "" }
     Напишите новое название для «{ $name }» \(до { $max } символов\)\.
 
-vpn-awg-name-invalid-part = Название должно быть от 1 до { $max } символов, попробуйте ещё раз.
+vpn-awg-name-empty-part = Название не может быть пустым, попробуйте ещё раз.
+vpn-awg-name-too-long-part = Название длиннее { $max } символов (эмодзи может занимать несколько), попробуйте покороче.
+vpn-awg-name-bad-chars-part = В названии есть служебные символы, напишите его обычным текстом.
 
 vpn-awg-config-caption = *{ $name }* — конфиг AmneziaWG
     { "" }
-    Импортируйте файл в приложение AmneziaWG или AmneziaVPN\. Один конфиг — одно устройство\.
+    Импортируйте файл в WG Tunnel, AmneziaWG или AmneziaVPN\. Один конфиг — одно устройство\.
     { "" }
     Это ваш личный ключ: сообщение исчезнет через { $minutes } мин или по кнопке «Готово»\.
 
 vpn-awg-qr-caption = *{ $name }* — QR\-код конфига
     { "" }
-    Отсканируйте его приложением AmneziaWG на телефоне\.
+    Отсканируйте его в WG Tunnel или AmneziaWG на телефоне\.
     { "" }
     Это ваш личный ключ: сообщение исчезнет через { $minutes } мин или по кнопке «Готово»\.
+
+# Список приложений мимо VPN целиком в QR не помещается - в QR его начало (банки, госсервисы...).
+vpn-awg-qr-truncated = В QR\-коде только { $included } из { $total } приложений, которые идут мимо VPN\. Полный список — в файле: на Android лучше импортировать его\.
 
 vpn-awg-config-hidden = *Конфиг скрыт*
     { "" }
@@ -128,12 +133,6 @@ vpn-awg-granted-notice = *Вам открыт AmneziaWG*
     Это основной VPN\-протокол бота\.
     Откройте /start → «VPN\-подписка» → «AmneziaWG» и добавьте устройство\. Один конфиг — одно устройство, всего можно завести { $limit }\.
 
-vpn-awg-announce = *AmneziaWG — новый основной VPN*
-    { "" }
-    В боте появился AmneziaWG: он работает там, где VLESS не подключается\. Откройте /start → «VPN\-подписка» → «AmneziaWG», добавьте устройство и импортируйте файл или QR\-код в приложение AmneziaWG последней версии\. Один конфиг — одно устройство, всего можно завести { $limit }\.
-    { "" }
-    Если у вас уже был конфиг AmneziaWG, он больше не работает — получите новый в карточке устройства\.
-
 vpn-awg-suspended-notice = Ваши ключи AmneziaWG отключены: вы больше не активный мембер LBG\.
     { "" }
     Если это ошибка — напишите VP4HR\.
@@ -144,6 +143,10 @@ vpn-awg-suspend-report = *Автоотключение ключей AmneziaWG*
     Ошибок: { $failed }
     { "" }
     { $details }
+
+# Строки сводок джобов - обычный текст, экранирует код
+vpn-awg-suspend-line-part = { $who }: ключей { $count }
+job-unexpected-error-part = { $who }: непредвиденная ошибка ({ $error })
 
 # Строки списка и карточки - обычный текст, экранирует код
 vpn-awg-device-line-part = { $name }: { $status }
@@ -170,7 +173,7 @@ vpn-awg-btn = AmneziaWG
 vpn-awg-add-btn = Добавить устройство
 vpn-awg-get-config-btn = Получить конфиг
 vpn-awg-rename-btn = Переименовать
-vpn-awg-platform-btn = Сменить платформу
+vpn-awg-platform-btn = Платформа
 vpn-awg-delete-btn = Удалить
 vpn-awg-delete-yes-btn = Да, удалить
 vpn-awg-restore-btn = Включить ключи
@@ -178,12 +181,13 @@ vpn-awg-show-qr-btn = Показать QR-код
 vpn-awg-show-file-btn = Показать файл
 vpn-awg-done-btn = Готово
 
-# Клиенты AmneziaWG: нужна версия с поддержкой AWG 3.1 (Android 3.1.20260814+, iOS с «AWG 3.1 support»)
-vpn-awg-android-btn = Android (Google Play)
+# Клиенты: нужна поддержка AWG 3.1. Android - WG Tunnel 5.7.5+ (основной: легче официального и понимает
+# ExcludedApplications) или AmneziaWG 3.1.20260814+; iOS - AmneziaWG с «AWG 3.1 support».
+vpn-awg-wgtunnel-btn = WG Tunnel
+vpn-awg-wgtunnel-url = https://play.google.com/store/apps/details?id=com.zaneschepke.wireguardautotunnel
+vpn-awg-android-btn = AmneziaWG
 vpn-awg-android-url = https://play.google.com/store/apps/details?id=org.amnezia.awg
-vpn-awg-apk-btn = Android (APK без Google Play)
-vpn-awg-apk-url = https://github.com/amnezia-vpn/amneziawg-android/releases/latest
-vpn-awg-ios-btn = iPhone и iPad (App Store)
+vpn-awg-ios-btn = App Store
 vpn-awg-ios-url = https://apps.apple.com/app/amneziawg/id6478942365
 
 # Уведомления и ошибки

@@ -38,16 +38,27 @@ def _value(lines: list[str], key: str) -> str | None:
 def _check_endpoint(endpoint: str | None, email: str) -> None:
     """Endpoint должен вести на сервер снаружи. Без Listen IP / Share address инбаунда панель
     подставляет адрес, по которому к ней пришёл запрос, - для бота это внутренний адрес."""
-    host = (endpoint or "").rpartition(":")[0].strip("[]")
-    if not host or host == "localhost":
+    host = (endpoint or "").rpartition(":")[0].strip("[]").lower()
+    if not host:
         raise AwgError(f"В конфиге {email} нет адреса сервера: задайте Listen IP или Share address инбаунда")
     try:
         address = ip_address(host)
     except ValueError:
-        # Домен пропускаем: проксирует ли его Cloudflare (UDP тогда не дойдёт), отсюда не понять.
+        if _is_internal_name(host):
+            raise AwgError(f"В конфиге {email} внутреннее имя сервера {host}: задайте Listen IP инбаунда") from None
+        # Публичный домен пропускаем: проксирует ли его Cloudflare (UDP тогда не дойдёт), отсюда не понять.
         return
     if address.is_loopback or address.is_unspecified or address.is_private:
         raise AwgError(f"В конфиге {email} внутренний адрес сервера {host}: задайте Listen IP инбаунда")
+
+
+# Имена, которые резолвятся только внутри хоста или сети docker: снаружи устройство по ним не подключится.
+_INTERNAL_SUFFIXES = (".internal", ".local", ".localhost", ".lan")
+
+
+def _is_internal_name(host: str) -> bool:
+    # Имя без точки - сервис compose или имя машины (``xui``, ``3x-ui``), снаружи его не знает никто.
+    return host == "localhost" or "." not in host or host.endswith(_INTERNAL_SUFFIXES)
 
 
 def extract_device_config(links: list[str], peer: AwgPeer) -> str:

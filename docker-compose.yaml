@@ -12,7 +12,8 @@ services:
       - postgres/.env
     networks:
       - backend
-    # Веб-панель AmneziaWG крутится на хосте: host-gateway - адрес бриджа docker0.
+    # Панель 3x-ui может крутиться на том же хосте: тогда XUI_BASE_URL=http://host.docker.internal:<порт>,
+    # host-gateway - адрес бриджа docker0. Внутреннее имя годится только боту, не в Endpoint конфигов.
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

@@ -10,6 +10,9 @@ AmneziaWG-инбаунда в 3x-ui) на каждое устройство, в 
 именем в 3x-ui нет, и бот при первой выдаче конфига заводит его уже под именем с почтой.
 """
 
+import asyncio
+from dataclasses import dataclass
+
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 from structlog.typing import FilteringBoundLogger
@@ -29,6 +32,7 @@ from includes.awg.client import AwgClient
 from includes.awg.exceptions import AwgAccessRevokedError, AwgDeviceLimitError, AwgError
 from includes.awg.identity import device_client_name, fallback_device_client_name, free_device_number
 from includes.awg.platform import DevicePlatform, excluded_apps, personalize_config
+from includes.awg.qr import FittedQr, fit_config_qr
 from includes.awg.schemas import AwgPeer
 from includes.vpn.service import person_comment
 
@@ -69,14 +73,23 @@ async def ensure_peer(session: AsyncSession, client: AwgClient, device: AwgDevic
 
     Клиента под именем устройства в панели нет - значит, имя ещё ничего не держит, и устройство
     получает актуальное (старые ``awg-lbg<id>-<n>``, сменившаяся почта) прямо перед созданием.
+
+    Клиент под новым именем может уже быть: переименование в БД откатывается вместе с сессией,
+    если выдача упала после ``create_peer``, а клиент в панели остаётся. Его подхватываем -
+    повторное создание панель отвергла бы («email already in use») на каждой следующей попытке.
     """
     peer = await client.find_peer(device.client_name)
 
     if peer is None:
         name = await _device_client_name(session, person, device.number, current=device)
         if name != device.client_name:
-            await logger.ainfo("awg-device-renamed", person_id=person.id, old=device.client_name, new=name)
+            peer = await client.find_peer(name)
+            await logger.ainfo(
+                "awg-device-renamed", person_id=person.id, old=device.client_name, new=name, adopted=peer is not None
+            )
             await set_device_client_name(session, device, name)
+
+    if peer is None:
         await client.create_peer(device.client_name, person_comment(person, person.lbg_member), person.telegram_id)
         peer = await client.find_peer(device.client_name)
         if peer is None:
@@ -108,26 +121,40 @@ async def _ensure_usable(session: AsyncSession, client: AwgClient, access: AwgAc
         await restore_access(session, client, access)
 
 
+@dataclass(frozen=True)
+class IssuedConfig:
+    """Выданный конфиг: файл - всегда полный; QR - сколько влезло (``None`` - не влез совсем)."""
+
+    text: str
+    qr: FittedQr | None
+
+
 async def issue_device_config(
     session: AsyncSession,
     client: AwgClient,
     access: AwgAccess,
     device: AwgDevice,
     person: Person,
-) -> str:
-    """Конфиг устройства для отправки человеку. Коммит - на вызывающей стороне."""
+) -> IssuedConfig:
+    """Конфиг устройства для отправки человеку. Коммит - на вызывающей стороне.
+
+    Исключения Android целиком в QR не влезают: в QR идёт начало списка (порядок файла - приоритет),
+    полный список - в файле.
+    """
     await _ensure_usable(session, client, access)
 
     peer = await ensure_peer(session, client, device, person)
-    config = personalize_config(
-        await client.get_config(peer),
-        device.platform,
-        name=settings.awg.CONFIG_NAME,
-        excluded=excluded_apps(),
-    )
+    raw = await client.get_config(peer)
+    apps = excluded_apps() if device.platform == "android" else ()
+
+    def build(count: int) -> str:
+        return personalize_config(raw, device.platform, name=settings.awg.CONFIG_NAME, excluded=apps[:count])
+
+    # Подбор QR - несколько кодирований по ~десятку мс: не держим ими event loop.
+    qr = await asyncio.to_thread(fit_config_qr, build, len(apps))
 
     await mark_issued(session, device)
-    return config
+    return IssuedConfig(text=build(len(apps)), qr=qr)
 
 
 async def add_device(
@@ -137,7 +164,7 @@ async def add_device(
     person: Person,
     label: str | None = None,
     platform: DevicePlatform | None = None,
-) -> tuple[AwgDevice, str]:
+) -> tuple[AwgDevice, IssuedConfig]:
     """Завести новое устройство и вернуть его конфиг. Коммит - на вызывающей стороне.
 
     Сначала строка в БД, потом пир: если коммит не доедет, следующий заход получит тот же

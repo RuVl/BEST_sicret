@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 
 class AwgAccess(Base):
-    """Разрешение на AmneziaWG: бот заводит его сам активному мемберу - с первым устройством или рассылкой.
+    """Разрешение на AmneziaWG: бот заводит его сам активному мемберу с первым устройством.
 
     В отличие от VLESS, один ключ AmneziaWG - одно устройство: на двух устройствах сразу
     они перебивают друг другу endpoint. Поэтому разрешение - это лимит устройств, а сами
@@ -69,11 +69,6 @@ class AwgAccess(Base):
         DateTime(timezone=True),
         nullable=True,
         comment="Когда ключи выключены (выбыл из LBG или отозван админом)",
-    )
-    announced_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-        comment="Когда человеку ушла рассылка о переезде AmneziaWG (повторно не шлём)",
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

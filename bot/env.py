@@ -116,9 +116,14 @@ class XuiConfig(_Section):
         return value
 
     @property
+    def HAS_PANEL(self) -> bool:
+        """До панели есть чем достучаться - это нужно и VLESS, и AmneziaWG."""
+        return bool(self.BASE_URL and self.API_TOKEN)
+
+    @property
     def ENABLED(self) -> bool:
         """VPN-функциональность работает только при полностью заполненной секции."""
-        return bool(self.BASE_URL and self.API_TOKEN and self.SUB_BASE_URL and self.INBOUND_IDS)
+        return self.HAS_PANEL and bool(self.SUB_BASE_URL and self.INBOUND_IDS)
 
 
 class AwgConfig(_Section):
@@ -141,9 +146,7 @@ class AwgConfig(_Section):
     # Сколько секунд сообщение с конфигом (приватным ключом) висит в чате, прежде чем бот его уберёт.
     CONFIG_TTL_SECONDS: int = Field(300, alias="AWG_CONFIG_TTL_SECONDS")
 
-    @property
-    def ENABLED(self) -> bool:
-        return self.INBOUND_ID > 0
+    # Включён ли AmneziaWG, решает ``GlobalSettings.AWG_ENABLED``: без панели (секция xui) он не работает.
 
 
 class LoggerConfig(_Section):
@@ -168,6 +171,12 @@ class GlobalSettings(_Section):
     xui: XuiConfig = Field(default_factory=XuiConfig)
     awg: AwgConfig = Field(default_factory=AwgConfig)
     logger: LoggerConfig = Field(default_factory=LoggerConfig)
+
+    @property
+    def AWG_ENABLED(self) -> bool:
+        """Инбаунд AmneziaWG задан и до панели есть чем достучаться (``XUI_BASE_URL``/``XUI_API_TOKEN``):
+        иначе кнопка и ночной джоб работали бы впустую."""
+        return self.awg.INBOUND_ID > 0 and self.xui.HAS_PANEL
 
 
 # Инициализируем глобальный синглтон настроек
