@@ -75,25 +75,25 @@
 
 ## Phase 5: `person-username` + `cli-admin`
 
-- [ ] **Task 10: уникальный ник** (M)
+- [x] **Task 10: уникальный ник** (M)
   - Acceptance: миграция обнуляет дубли (без учёта регистра) и создаёт частичный уникальный индекс `lower(telegram_username)`; `claim_username()` в репозитории снимает ник с других и ставит текущему; `get_or_create_person` пишет и `None`; `find_person_by_handle()` — `@username`/ID.
   - Verify: `make migration`-ревизия руками проверена; `make migrate` на локальной БД с подготовленными дублями; `make downgrade` возвращает индекс как был; unit-тест разбора handle.
   - Files: `packages/db/best_db/models/person.py`, `packages/db/best_db/migrations/versions/<rev>_unique_person_username.py`, `bot/database/methods/person/{get,set,__init__}.py`
   - Depends: —
 
-- [ ] **Task 11: CLI-каркас и подтверждение** (M)
+- [x] **Task 11: CLI-каркас и подтверждение** (M)
   - Acceptance: `cli/common.py` (CliError, describe `ФИО (tg …)`/`tg …`, `confirm`, `send_bot`, `run`); `awg-grant`/`awg-revoke` печатают, что сделают, и спрашивают `Вы уверены [y/n]: `; `n`/EOF — без изменений; «Уведомление отправлено» — только при успехе.
   - Verify: тесты `describe` и `confirm` (y, yes, n, пусто, EOF); ручной прогон в контейнере.
   - Files: `bot/cli/common.py` (новый), `bot/cli/awg.py`, `bot/tests/test_cli.py`
   - Depends: 10
 
-- [ ] **Task 12: убрать `awg-announce`** (S)
+- [x] **Task 12: убрать `awg-announce`** (S)
   - Acceptance: удалены `cmd_announce`, `mark_announced`, `vpn-awg-announce`, цель Makefile; миграция удаляет `awg_access.announced_at` (downgrade возвращает колонку).
   - Verify: `make migrate` / `make downgrade`; `test_l10n_keys.py` зелёный; `grep announce` пуст.
   - Files: `bot/cli/awg.py`, `bot/database/methods/awg_access/{set,__init__}.py`, `packages/db/best_db/models/awg_access.py`, `packages/db/best_db/migrations/versions/<rev>_drop_awg_announced_at.py`, `Makefile`, `bot/l10n/ru/vpn.ftl`
   - Depends: 11
 
-- [ ] **Task 13: `make broadcast`** (M)
+- [x] **Task 13: `make broadcast`** (M)
   - Acceptance: `group=` (all/members/board/awg/vless, объединение) и `to=` (`@username`/ID вперемешку), без обоих — подсказка; превью текста и списка, `[y/n]`; ошибка разметки на первом сообщении — стоп; не дошедшие — строкой для `to=`; ≤10 сообщений/с; Makefile копирует файл через `docker compose cp`.
   - Verify: тесты разбора `group`/`to`, объединения без дублей, неизвестной группы; ручная рассылка себе (`to=<свой id>`).
   - Files: `bot/database/methods/person/audiences.py` (новый), `bot/cli/broadcast.py` (новый), `Makefile`, `bot/tests/test_cli.py`

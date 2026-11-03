@@ -89,18 +89,22 @@ class _FakeSession:
         self._added.clear()
 
 
-class FakeBot:
-    """Записывает отправленные сообщения вместо Telegram."""
-
-    def __init__(self) -> None:
-        self.sent: list[tuple[int, str]] = []
-
-    async def send_message(self, chat_id: int, text: str) -> None:
-        self.sent.append((chat_id, text))
-
-
 class FakeL10n:
     """Возвращает ключ и аргументы: тесты джобов проверяют, что ушло, а не тексты из .ftl."""
 
     def format_value(self, key: str, args: dict | None = None) -> str:
         return f"{key} {args or ''}"
+
+
+class FakeBot:
+    """Подмножество ``aiogram.Bot`` для отправки: запоминает отправленное, ошибки - по chat_id."""
+
+    def __init__(self, errors: dict[int, Exception] | None = None) -> None:
+        self.errors = errors or {}
+        self.sent: list[tuple[int, str]] = []
+
+    async def send_message(self, chat_id: int, text: str, **kwargs):
+        error = self.errors.get(chat_id)
+        if error is not None:
+            raise error
+        self.sent.append((chat_id, text))
