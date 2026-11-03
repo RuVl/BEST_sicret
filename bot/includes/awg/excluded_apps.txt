@@ -190,16 +190,55 @@ ru.urentbike.app
 ru.utair.android
 youdrive.today
 
-# Медиа и видео
+# Медиа и видео (многие ставятся и на Android TV тем же пакетом: Okko, Иви, КИОН, PREMIER и др.)
+com.amdteka
+com.infolink.limeiptv
 com.ipspirates.ort
+com.match.club
+com.spbtv.rosing
 com.vgtrk.smotrim
+com.viju.android.app
 com.zvooq.openplay
 gpm.tnt_premier
+info.goodline.btv
+rtb.mobile.android
+ru.ag.a24htv
+ru.amediateka
+ru.cn.tv
 ru.ivi.client
 ru.litres.android
 ru.more.play
+ru.ntv.client
 ru.rutube.app
 ru.start.androidmobile
+tv.lfstrm.smotreshka
+tv.ntvplus.app
+tv.ntvplus.app1
+
+# Android TV: отдельные ТВ-версии приложений (проверено 2026-11-03)
+ag.tv.a24h
+com.ctcmediagroup.ctc.rustoretv
+com.ertelecom.domrutvstb
+com.gsgroup.tricoloronline
+com.gsgroup.tricoloronlineforstb
+com.matchtv.rustore
+com.vgtrk.smotrim.tv
+com.vk.tv
+com.yandex.browser.tv
+limehd.ru.ctv.tv
+limehd.ru.ctvshka.tv
+limehd.ru.lite.tv
+one.premier.rustoretv
+ru.imult.multtv
+ru.kinopoisk.tv
+ru.ntv.client.tv
+ru.rt.video.app.tv
+ru.rutube.app.tv
+ru.start.androidtv
+ru.tv1.android.tv
+ru.tvigle.tvapp
+tv.bolshoe.tv
+tv.okko.androidtv
 
 # Прочее российское
 com.avito.android
