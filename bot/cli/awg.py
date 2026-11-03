@@ -185,7 +185,7 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str]) -> int:
     args = _parser().parse_args(argv)
-    if not settings.awg.ENABLED:
+    if not settings.AWG_ENABLED:
         print("AWG_INBOUND_ID не задан - AmneziaWG в боте выключен.", file=sys.stderr)
         return 2
     return asyncio.run(run(args.handler(args), expected=(AwgError,)))

@@ -69,7 +69,7 @@ def normalize_device_label(value: str) -> str:
     ``DeviceLabelError`` (``ValueError``) - сигнал ``TextInput`` показать подсказку и спросить ещё раз.
     """
     label = " ".join(value.split())
-    if not label:
+    if not label or all(char in _EMOJI_JOINERS for char in label.replace(" ", "")):
         raise DeviceLabelError("empty")
     if any(not char.isprintable() and char not in _EMOJI_JOINERS for char in label):
         raise DeviceLabelError("bad-chars")

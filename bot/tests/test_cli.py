@@ -9,9 +9,8 @@ from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.methods import SendMessage
 
 from cli import broadcast as broadcast_cli
-from cli.broadcast import broadcast, parse_groups, parse_handles, send_all, unique_recipients
+from cli.broadcast import AUDIENCES, broadcast, parse_groups, parse_handles, send_all, unique_recipients
 from cli.common import CONFIRM_PROMPT, CliError, confirm, describe_person
-from database.methods.person import AUDIENCES
 from database.models import LbgMember, Person
 from tests.fakes import FakeBot
 

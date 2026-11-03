@@ -119,7 +119,11 @@ class PendingHides:
             except (TypeError, ValueError) as exc:
                 # Неразборчивую запись не скрыть никогда - убираем, чтобы она не всплывала на каждом старте.
                 await logger.aerror("pending-hide-broken", token=token, error=str(exc))
-                await self._redis.hdel(_KEY, token)
+                try:
+                    await self._redis.hdel(_KEY, token)
+                except RedisError as redis_exc:
+                    # Старт бота важнее чистки: запись уберём на следующем старте.
+                    await logger.awarning("pending-hide-broken-remove-failed", error=str(redis_exc))
                 continue
             hides.setdefault(hide.token, hide)
         return list(hides.values())

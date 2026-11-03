@@ -95,7 +95,7 @@ def awg_allowed(access: AwgAccess | None) -> bool:
 
     ``suspended`` тоже пускает: выключенные ключи оживают по кнопке «Включить ключи».
     """
-    return settings.awg.ENABLED and (access is None or access.status != "revoked")
+    return settings.AWG_ENABLED and (access is None or access.status != "revoked")
 
 
 async def _load_access(session: AsyncSession, telegram_id: int) -> tuple[Person, AwgAccess | None] | None:

@@ -2,22 +2,24 @@
 
 import pytest
 
-from env import AwgConfig
+from env import AwgConfig, GlobalSettings, TelegramConfig, XuiConfig
 from includes.awg import AwgError
 from includes.awg.share_link import _check_endpoint
 
 
-def _awg(monkeypatch, **env: str) -> AwgConfig:
+def _settings(monkeypatch, **env: str) -> GlobalSettings:
     for name in ("AWG_INBOUND_ID", "XUI_BASE_URL", "XUI_API_TOKEN"):
         monkeypatch.delenv(name, raising=False)
     for name, value in env.items():
         monkeypatch.setenv(name, value)
-    return AwgConfig(_env_file=None)
+    return GlobalSettings(
+        awg=AwgConfig(_env_file=None), xui=XuiConfig(_env_file=None), telegram=TelegramConfig(_env_file=None)
+    )
 
 
 class TestEnabled:
     def test_inbound_and_panel(self, monkeypatch):
-        assert _awg(monkeypatch, AWG_INBOUND_ID="3", XUI_BASE_URL="https://p", XUI_API_TOKEN="t").ENABLED
+        assert _settings(monkeypatch, AWG_INBOUND_ID="3", XUI_BASE_URL="https://p", XUI_API_TOKEN="t").AWG_ENABLED
 
     @pytest.mark.parametrize(
         "env",
@@ -28,7 +30,7 @@ class TestEnabled:
         ],
     )
     def test_disabled_without_inbound_or_panel(self, monkeypatch, env):
-        assert not _awg(monkeypatch, **env).ENABLED
+        assert not _settings(monkeypatch, **env).AWG_ENABLED
 
 
 class TestEndpoint:

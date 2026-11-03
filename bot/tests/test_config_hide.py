@@ -14,19 +14,22 @@ CHAT = 10
 
 
 class FakeBot:
-    """Чат глазами человека: какие сообщения в нём остались."""
+    """Чат глазами человека: какие сообщения в нём остались. ``fail_with`` - ошибки на ближайшие вызовы."""
 
     def __init__(self, messages: set[int]) -> None:
         self.chat = set(messages)
         self.fail_with: Exception | None = None
+        self.fail_times: int | None = None  # None - всегда, число - столько вызовов подряд
+        self.calls = 0
 
-    async def delete_message(self, chat_id: int, message_id: int) -> bool:
-        if self.fail_with is not None:
+    async def delete_messages(self, chat_id: int, message_ids: list[int]) -> bool:
+        self.calls += 1
+        if self.fail_with is not None and (self.fail_times is None or self.fail_times > 0):
+            if self.fail_times is not None:
+                self.fail_times -= 1
             raise self.fail_with
-        if message_id not in self.chat:
-            method = DeleteMessage(chat_id=chat_id, message_id=message_id)
-            raise TelegramBadRequest(method, "message to delete not found")
-        self.chat.discard(message_id)
+        # Как Bot API: ненайденные сообщения deleteMessages просто пропускает.
+        self.chat -= set(message_ids)
         return True
 
 
@@ -82,6 +85,27 @@ class TestHide:
         asyncio.run(config_hide.hide_leftover_configs(bot))
         assert bot.chat == set()
         assert asyncio.run(pending_hides.get_pending_hides().load_all()) == []
+
+    def test_one_request_for_all_copies(self, redis):
+        bot = FakeBot({100, 101, 102})
+
+        async def scenario():
+            await show_config("t", [100, 101, 102])
+            await config_hide.hide_now(bot, "t")
+
+        asyncio.run(scenario())
+        assert bot.calls == 1
+
+    def test_cannot_be_deleted_is_final(self, redis):
+        bot = FakeBot({100})
+        method = DeleteMessage(chat_id=CHAT, message_id=0)
+        bot.fail_with = TelegramBadRequest(method, "message can't be deleted")
+
+        async def scenario():
+            await show_config("t", [100])
+            return await config_hide.hide_now(bot, "t")
+
+        assert asyncio.run(scenario()) is True
 
     def test_already_deleted_is_success(self, redis):
         bot = FakeBot(set())  # человек сам удалил сообщения
@@ -154,6 +178,24 @@ class TestTimer:
         asyncio.run(scenario())
         assert bot.chat == set()
         assert refreshed == [True]
+
+    def test_timer_retries_transient_failure(self, redis, monkeypatch):
+        """Telegram временно не дал удалить - таймер повторяет, а не ждёт рестарта бота."""
+        bot = FakeBot({100})
+        bot.fail_with = TelegramNetworkError(DeleteMessage(chat_id=CHAT, message_id=0), "timeout")
+        bot.fail_times = 2
+        monkeypatch.setattr(config_hide, "_timers", {})
+        monkeypatch.setattr(config_hide, "_RETRY_FIRST_SECONDS", 0.001)
+
+        async def scenario():
+            await show_config("t", [100])
+            config_hide.schedule_hide(bot, "t", delay=0)
+            await asyncio.sleep(0.05)
+
+        asyncio.run(scenario())
+        assert bot.chat == set()
+        assert bot.calls == 3
+        assert asyncio.run(pending_hides.get_pending_hides().load_all()) == []
 
     def test_timer_error_is_logged_not_raised(self, redis, monkeypatch):
         bot = FakeBot({100})

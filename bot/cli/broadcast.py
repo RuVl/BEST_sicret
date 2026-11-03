@@ -11,18 +11,36 @@
 import argparse
 import asyncio
 import sys
-from collections.abc import Iterable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramRetryAfter
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from cli.common import CliError, confirm, describe_person, run, send_bot
 from database.main import async_session
-from database.methods.person import AUDIENCES, find_person_by_handle
+from database.methods.person import (
+    find_person_by_handle,
+    list_active_member_persons,
+    list_all_persons,
+    list_awg_persons,
+    list_board_persons,
+    list_vless_persons,
+)
 from database.models import Person
 from utils import parse_person_handle
+
+# Группы получателей вычисляются из данных, без ручной разметки. Новая группа - запрос
+# в ``database/methods/person/list.py`` и строка здесь.
+AUDIENCES: dict[str, Callable[[AsyncSession], Awaitable[list[Person]]]] = {
+    "all": list_all_persons,
+    "members": list_active_member_persons,
+    "board": list_board_persons,
+    "awg": list_awg_persons,
+    "vless": list_vless_persons,
+}
 
 # Telegram режет рассылку больше ~30 сообщений в секунду - идём с запасом.
 SEND_INTERVAL = 0.1

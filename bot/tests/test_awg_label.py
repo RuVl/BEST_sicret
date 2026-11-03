@@ -31,9 +31,11 @@ class TestDeviceLabel:
         ("value", "problem"),
         [
             ("   ", "empty"),
+            ("\u200d\u200d", "empty"),  # одни невидимые соединители
+            ("\u200d \u200c", "empty"),
             ("a" * (MAX_DEVICE_LABEL_LEN + 1), "too-long"),
             ("tab\u0007bell", "bad-chars"),
-            ("скрытый​пробел", "bad-chars"),
+            ("скрытый\u200bпробел", "bad-chars"),
         ],
     )
     def test_problem_is_named(self, value, problem):

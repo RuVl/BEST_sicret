@@ -24,7 +24,7 @@ from middlewares import register_middlewares
 
 def _create_scheduler(bot: Bot) -> AsyncIOScheduler | None:
     """Планировщик фоновых задач. ``None``, если не настроены ни XUI, ни AmneziaWG."""
-    if not settings.xui.ENABLED and not settings.awg.ENABLED:
+    if not settings.xui.ENABLED and not settings.AWG_ENABLED:
         return None
 
     l10n = get_fluent_localization()
@@ -43,7 +43,7 @@ def _create_scheduler(bot: Bot) -> AsyncIOScheduler | None:
             id="revoke_inactive_vpn",
             replace_existing=True,
         )
-    if settings.awg.ENABLED:
+    if settings.AWG_ENABLED:
         scheduler.add_job(
             suspend_inactive_awg_access,
             trigger,
@@ -96,7 +96,7 @@ async def main():
 
     # Конфиги AmneziaWG (приватные ключи): учёт отправленных копий и добор не скрытых до перезапуска.
     setup_config_hides(dp)
-    if settings.awg.ENABLED:
+    if settings.AWG_ENABLED:
         # Список читается и проверяется сразу: проблема с файлом видна в логе старта, а не у первого человека.
         await logger.ainfo("AWG excluded apps loaded.", count=len(excluded_apps()))
 
@@ -104,7 +104,7 @@ async def main():
     scheduler = _create_scheduler(bot)
     if scheduler is not None:
         scheduler.start()
-        await logger.ainfo("VPN revoke jobs scheduled.", xui=settings.xui.ENABLED, awg=settings.awg.ENABLED)
+        await logger.ainfo("VPN revoke jobs scheduled.", xui=settings.xui.ENABLED, awg=settings.AWG_ENABLED)
     else:
         await logger.awarning("XUI and AWG settings are incomplete, VPN revoke jobs are disabled.")
 

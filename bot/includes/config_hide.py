@@ -24,8 +24,13 @@ logger: FilteringBoundLogger = structlog.get_logger("config-hide")
 
 # Сообщения старше этого Telegram удалить не даёт - запись дольше держать бессмысленно.
 _DELETE_WINDOW_SECONDS = 48 * 3600
-# Ответы deleteMessage, после которых повторять нечего.
-_FINAL_DELETE_ERRORS = ("message to delete not found", "message can't be deleted")
+# deleteMessages пропускает ненайденные сообщения сам; «нельзя удалить» - навсегда (старше 48 часов).
+_FINAL_DELETE_ERRORS = ("message can't be deleted", "message to delete not found")
+# Bot API удаляет не больше 100 сообщений за вызов.
+_DELETE_BATCH = 100
+# Повтор скрытия по таймеру, если Telegram временно не дал удалить: от минуты, удваивая, до часа.
+_RETRY_FIRST_SECONDS = 60
+_RETRY_MAX_SECONDS = 3600
 
 Refresh = Callable[[], Awaitable[None]]
 
@@ -58,10 +63,16 @@ async def hide_config(bot: Bot, hide: PendingHide) -> bool:
     registry = get_pending_hides()
     memory_media.drop_owned(hide.token)  # ключ в памяти бота больше не нужен ни при каком исходе
 
+    messages = sorted(await registry.messages(hide.token))
+    if not messages and hide.created_at == 0:
+        # Запись прежнего формата (до учёта сообщений): что удалять, неизвестно - нужен человек.
+        await logger.aerror("config-hide-legacy-record", chat_id=hide.chat_id, user_id=hide.user_id)
+
     pending = False
-    for message_id in sorted(await registry.messages(hide.token)):
+    for start in range(0, len(messages), _DELETE_BATCH):
+        batch = messages[start : start + _DELETE_BATCH]
         try:
-            await bot.delete_message(hide.chat_id, message_id)
+            await bot.delete_messages(hide.chat_id, batch)
         except TelegramBadRequest as exc:
             if not _is_final(exc):
                 pending = True
@@ -69,11 +80,12 @@ async def hide_config(bot: Bot, hide: PendingHide) -> bool:
                 continue
             await logger.ainfo("config-hide-already-gone", chat_id=hide.chat_id, error=exc.message)
         except TelegramAPIError as exc:
-            # Сеть, RetryAfter, бот заблокирован: попробуем на следующем старте.
+            # Сеть, RetryAfter, бот заблокирован: повторит таймер или следующий старт.
             pending = True
             await logger.awarning("config-hide-delete-failed", chat_id=hide.chat_id, error=str(exc))
             continue
-        await registry.forget_message(hide.token, message_id)
+        for message_id in batch:
+            await registry.forget_message(hide.token, message_id)
 
     if pending and time.time() - hide.created_at < _DELETE_WINDOW_SECONDS:
         return False
@@ -88,16 +100,19 @@ async def hide_config(bot: Bot, hide: PendingHide) -> bool:
 async def _hide_later(bot: Bot, token: str, delay: float, refresh: Refresh | None) -> None:
     # CancelledError (остановка бота) пролетает мимо: запись остаётся для следующего старта.
     await asyncio.sleep(delay)
-    hide = get_pending_hides().get(token)
-    if hide is None:
-        return
-    try:
-        hidden = await hide_config(bot, hide)
-        if hidden and refresh is not None:
-            await refresh()
-    except Exception as exc:
-        # Фоновая задача: исключение иначе ушло бы в «Task exception was never retrieved».
-        await logger.aerror("config-hide-timer-failed", token=token, error=str(exc))
+    retry = _RETRY_FIRST_SECONDS
+    while (hide := get_pending_hides().get(token)) is not None:
+        try:
+            if await hide_config(bot, hide):
+                if refresh is not None:
+                    await refresh()
+                return
+        except Exception as exc:
+            # Фоновая задача: исключение иначе ушло бы в «Task exception was never retrieved».
+            await logger.aerror("config-hide-timer-failed", token=token, error=str(exc))
+        # Telegram не дал удалить сейчас - пробуем ещё, пока не удалим или не выйдет окно в 48 часов.
+        await asyncio.sleep(retry)
+        retry = min(retry * 2, _RETRY_MAX_SECONDS)
 
 
 def schedule_hide(bot: Bot, token: str, delay: float, refresh: Refresh | None = None) -> None:
