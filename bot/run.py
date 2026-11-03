@@ -4,7 +4,8 @@ import structlog
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.storage.base import BaseStorage
+from aiogram.fsm.storage.memory import MemoryStorage, SimpleEventIsolation
 from aiogram.types import BotCommand, BotCommandScopeDefault
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -53,6 +54,16 @@ def _create_scheduler(bot: Bot) -> AsyncIOScheduler | None:
     return scheduler
 
 
+def create_dispatcher(storage: BaseStorage) -> Dispatcher:
+    """Dispatcher бота. Апдейты одного человека обрабатываются строго по очереди.
+
+    Без изоляции aiogram-dialog читает контекст диалога до блокировки стека: второй клик, пришедший,
+    пока первый ещё ходит в панель, отрабатывает на устаревшем ``dialog_data`` и затирает результат
+    первого (двойное устройство, потерянный конфиг). Процесс бота один - хватает локальных блокировок.
+    """
+    return Dispatcher(storage=storage, events_isolation=SimpleEventIsolation())
+
+
 async def main():
     # Init logging
     setup_logging()
@@ -77,8 +88,7 @@ async def main():
         if not settings.project.DEBUG:
             await logger.aerror("You should use RedisStorage in production!")
 
-    # Init dispatcher
-    dp = Dispatcher(storage=storage)
+    dp = create_dispatcher(storage)
 
     # Register handlers and middlewares
     register_middlewares(dp)
