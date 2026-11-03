@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, ForeignKey, Integer, String
+from sqlalchemy import BigInteger, ForeignKey, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from best_db.models.base import Base
@@ -15,7 +15,17 @@ if TYPE_CHECKING:
 
 class Person(Base):
     __tablename__ = "persons"
-    __table_args__ = {"comment": "Человек"}
+    __table_args__ = (
+        # Ник в Telegram принадлежит одному человеку: по нему CLI ищет человека, а members_sync
+        # связывает Person с LbgMember - чужой устаревший ник связал бы не того. Регистр Telegram не различает.
+        Index(
+            "uq_persons_telegram_username_lower",
+            text("lower(telegram_username)"),
+            unique=True,
+            postgresql_where=text("telegram_username IS NOT NULL"),
+        ),
+        {"comment": "Человек"},
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     telegram_id: Mapped[int] = mapped_column(
