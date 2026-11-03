@@ -44,13 +44,13 @@
 
 ## Phase 3: `panel-client`
 
-- [ ] **Task 6: тело update и валидация ответов** (S)
+- [x] **Task 6: тело update и валидация ответов** (S)
   - Acceptance: `update_body()` шлёт поля в типах `model.Client` 3x-ui (`allowedIPs` — список; сверить остальные поля с исходником из `scratchpad/xui`); `ValidationError` в `get_client_details`/`get_traffic` → `XuiError`.
   - Verify: `test_vpn_schemas.py` — фикстура с реальным строковым `allowedIPs`; тест на `null` в `tunnelAllowedIPs` → `XuiError`.
   - Files: `bot/includes/vpn/schemas.py`, `bot/includes/vpn/client.py`, `bot/tests/test_vpn_schemas.py`, `bot/tests/test_vpn_service.py`
   - Depends: —
 
-- [ ] **Task 7: `skipped` и суспенд-джоб** (S)
+- [x] **Task 7: `skipped` и суспенд-джоб** (S)
   - Acceptance: непустой `skipped` в ответе bulk → `XuiError` с перечнем; пропущенные не помечаются `revoked`/`suspended`; суспенд-джоб коммитит каждого до уведомления, ошибка одного не обрывает прогон.
   - Verify: тесты клиента (ответ с `skipped`) и джоба (fake клиент: один падает, остальные помечены и уведомлены по разу).
   - Files: `bot/includes/vpn/client.py`, `bot/jobs/suspend_awg.py`, `bot/tests/test_vpn_service.py`, `bot/tests/test_awg.py`
@@ -58,7 +58,7 @@
 
 ## Phase 4: `device-identity`
 
-- [ ] **Task 8: `ensure_peer` подхватывает клиента** (S)
+- [x] **Task 8: `ensure_peer` подхватывает клиента** (S)
   - Acceptance: при смене имени сначала ищется клиент под новым именем и подхватывается; сбой после `create_peer` + повтор → конфиг, а не «email already in use».
   - Verify: `test_awg.py` — сценарий `sim_ensure_peer.py` (fake клиент, откат сессии между попытками).
   - Files: `bot/includes/awg/service.py`, `bot/tests/test_awg.py`

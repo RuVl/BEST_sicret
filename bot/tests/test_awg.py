@@ -16,6 +16,7 @@ from includes.awg import (
     normalize_device_label,
     render_config_qr,
 )
+from includes.awg import service as awg_service
 from includes.vpn import ClientDetails, ClientTraffic
 from jobs import revoke_vpn, suspend_awg
 from tests.fakes import FakeBot, FakeL10n, FakeSessionMaker
@@ -261,3 +262,81 @@ class TestSuspendJob:
         assert "Person 2" in report
         assert "Person 3" in report
         assert "Person 4" in report
+
+
+class _UniqueEmailPanel:
+    """Панель с уникальным email: повторное добавление того же email - «email already in use», как в 3x-ui."""
+
+    def __init__(self, existing: set[str] = frozenset()) -> None:
+        self.clients = set(existing)
+        self.created: list[str] = []
+
+    async def find_peer(self, name: str) -> AwgPeer | None:
+        if name not in self.clients:
+            return None
+        return AwgPeer(email=name, privateKey="k", address="10.70.0.2/32")
+
+    async def create_peer(self, name: str, comment: str, telegram_id: int) -> None:
+        if name in self.clients:
+            raise AwgError(f"email already in use: {name}")
+        self.clients.add(name)
+        self.created.append(name)
+
+    async def set_disabled(self, names: list[str], disabled: bool) -> None:
+        pass
+
+
+class TestEnsurePeer:
+    """Переезд устройства на новое имя клиента не застревает, если первая попытка оборвалась."""
+
+    PERSON = SimpleNamespace(
+        id=5,
+        telegram_id=100,
+        full_name="Ivan",
+        lbg_member=SimpleNamespace(best_email="ivan@best-eu.org", full_name_ru="Иван"),
+    )
+    NEW_NAME = "awg-1-ivan@best-eu.org"
+
+    @pytest.fixture(autouse=True)
+    def _db(self, monkeypatch):
+        async def get_device_by_client_name(session, name):
+            return None
+
+        async def set_device_client_name(session, device, name):
+            device.client_name = name
+
+        monkeypatch.setattr(awg_service, "get_device_by_client_name", get_device_by_client_name)
+        monkeypatch.setattr(awg_service, "set_device_client_name", set_device_client_name)
+
+    def _ensure(self, panel: _UniqueEmailPanel) -> tuple[SimpleNamespace, AwgPeer]:
+        # Строка, как её грузит из БД каждая попытка: переименование прошлой попытки откатилось.
+        device = SimpleNamespace(number=1, client_name="awg-lbg5-1")
+        peer = asyncio.run(awg_service.ensure_peer(None, panel, device, self.PERSON))
+        return device, peer
+
+    def test_retry_after_rollback_adopts_client(self):
+        panel = _UniqueEmailPanel()
+        self._ensure(panel)  # клиент создан, а дальше выдача упала и сессия откатилась
+
+        device, peer = self._ensure(panel)
+
+        assert peer.email == self.NEW_NAME
+        assert device.client_name == self.NEW_NAME
+        assert panel.created == [self.NEW_NAME]
+
+    def test_client_left_under_new_name_is_adopted(self):
+        panel = _UniqueEmailPanel(existing={self.NEW_NAME})
+
+        device, peer = self._ensure(panel)
+
+        assert peer.email == self.NEW_NAME
+        assert device.client_name == self.NEW_NAME
+        assert panel.created == []
+
+    def test_missing_client_is_created_under_new_name(self):
+        panel = _UniqueEmailPanel()
+
+        device, peer = self._ensure(panel)
+
+        assert peer.email == self.NEW_NAME
+        assert panel.created == [self.NEW_NAME]

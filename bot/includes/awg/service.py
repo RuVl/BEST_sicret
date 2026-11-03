@@ -69,14 +69,23 @@ async def ensure_peer(session: AsyncSession, client: AwgClient, device: AwgDevic
 
     Клиента под именем устройства в панели нет - значит, имя ещё ничего не держит, и устройство
     получает актуальное (старые ``awg-lbg<id>-<n>``, сменившаяся почта) прямо перед созданием.
+
+    Клиент под новым именем может уже быть: переименование в БД откатывается вместе с сессией,
+    если выдача упала после ``create_peer``, а клиент в панели остаётся. Его подхватываем -
+    повторное создание панель отвергла бы («email already in use») на каждой следующей попытке.
     """
     peer = await client.find_peer(device.client_name)
 
     if peer is None:
         name = await _device_client_name(session, person, device.number, current=device)
         if name != device.client_name:
-            await logger.ainfo("awg-device-renamed", person_id=person.id, old=device.client_name, new=name)
+            peer = await client.find_peer(name)
+            await logger.ainfo(
+                "awg-device-renamed", person_id=person.id, old=device.client_name, new=name, adopted=peer is not None
+            )
             await set_device_client_name(session, device, name)
+
+    if peer is None:
         await client.create_peer(device.client_name, person_comment(person, person.lbg_member), person.telegram_id)
         peer = await client.find_peer(device.client_name)
         if peer is None:
