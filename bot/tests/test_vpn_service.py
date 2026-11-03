@@ -1,10 +1,8 @@
 import asyncio
-import json
 from types import SimpleNamespace
 
 import pytest
 
-from includes.pending_hides import PendingHide, PendingHides
 from includes.vpn import ClientDetails, XuiClient, XuiError
 from includes.vpn import service as vpn_service
 from utils import split_message
@@ -94,49 +92,3 @@ class TestSplitMessage:
         parts = split_message("ab\\.cd", limit=3)
         assert all(not part.endswith("\\") for part in parts)
         assert "".join(parts) == "ab\\.cd"
-
-
-class _FakeRedis:
-    def __init__(self):
-        self.data: dict[str, dict[str, str]] = {}
-
-    async def hset(self, key, field, value):
-        self.data.setdefault(key, {})[field] = value
-
-    async def hdel(self, key, field):
-        self.data.get(key, {}).pop(field, None)
-
-    async def hgetall(self, key):
-        return dict(self.data.get(key, {}))
-
-    async def delete(self, key):
-        self.data.pop(key, None)
-
-
-class TestPendingHides:
-    def test_survives_restart_until_taken(self):
-        redis = _FakeRedis()
-        hide = PendingHide(token="t1", user_id=1, chat_id=2, stack_id="s")
-
-        asyncio.run(PendingHides(redis).add(hide))
-        # Новый процесс - новый объект, но записи в Redis на месте.
-        assert asyncio.run(PendingHides(redis).take_all()) == [hide]
-        assert asyncio.run(PendingHides(redis).take_all()) == []
-
-    def test_finished_timer_is_forgotten(self):
-        redis = _FakeRedis()
-        registry = PendingHides(redis)
-        asyncio.run(registry.add(PendingHide(token="t1", user_id=1, chat_id=2, stack_id="s")))
-        asyncio.run(registry.remove("t1"))
-        assert asyncio.run(registry.take_all()) == []
-
-    def test_broken_record_is_skipped(self):
-        redis = _FakeRedis()
-        good = json.dumps({"token": "ok", "user_id": 1, "chat_id": 2, "stack_id": "s"})
-        redis.data["awg:pending-hides"] = {"bad": "{}", "ok": good}
-        assert [hide.token for hide in asyncio.run(PendingHides(redis).take_all())] == ["ok"]
-
-    def test_without_redis_nothing_is_stored(self):
-        registry = PendingHides(None)
-        asyncio.run(registry.add(PendingHide(token="t1", user_id=1, chat_id=2, stack_id="s")))
-        assert asyncio.run(registry.take_all()) == []
