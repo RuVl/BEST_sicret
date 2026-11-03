@@ -12,6 +12,7 @@ from urllib.parse import quote
 
 import aiohttp
 import structlog
+from pydantic import BaseModel, ValidationError
 from structlog.typing import FilteringBoundLogger
 
 from env import settings
@@ -37,6 +38,19 @@ def unwrap_envelope(payload: Any) -> Any:
         raise XuiError(payload.get("msg") or "Панель вернула ошибку без описания")
 
     return payload.get("obj")
+
+
+def parse_obj[M: BaseModel](model: type[M], obj: Any) -> M:
+    """Разобрать ``obj`` ответа панели в модель; ответ не по схеме - такая же ошибка панели, как и прочие.
+
+    ``ValidationError`` наследует ``ValueError`` и пролетела бы мимо ``except XuiError`` в диалогах
+    и джобах. В текст идут только пути полей: значения могут быть ключами клиента.
+    """
+    try:
+        return model.model_validate(obj)
+    except ValidationError as exc:
+        fields = ", ".join(".".join(map(str, error["loc"])) or "obj" for error in exc.errors())
+        raise XuiError(f"Панель вернула {model.__name__} не по схеме: {fields}") from exc
 
 
 class XuiClient:
@@ -102,9 +116,9 @@ class XuiClient:
                 return None
             raise
 
-        if not obj or not obj.get("client"):
+        if not obj or (isinstance(obj, dict) and not obj.get("client")):
             return None
-        return ClientDetails.model_validate(obj)
+        return parse_obj(ClientDetails, obj)
 
     async def get_client(self, email: str) -> ClientRecord | None:
         """Вернуть клиента панели или ``None``, если его нет."""
@@ -115,7 +129,7 @@ class XuiClient:
         obj = await self._request("GET", f"/clients/traffic/{quote(email, safe='')}")
         if obj is None:
             return None
-        return ClientTraffic.model_validate(obj)
+        return parse_obj(ClientTraffic, obj)
 
     async def get_links(self, email: str) -> list[str]:
         """Ссылки клиента во всех его инбаундах (``vless://``, ``vpn://``...) - то же, что в его подписке."""

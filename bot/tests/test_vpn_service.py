@@ -27,6 +27,65 @@ class TestPanelTimeout:
             asyncio.run(client.get_client_details("ivan@best-eu.org"))
 
 
+class _CannedPanel(XuiClient):
+    """Клиент панели, у которого вместо сети - заранее заготовленные ``obj`` по префиксу пути."""
+
+    def __init__(self, responses: dict[str, object]):
+        super().__init__("https://panel", "token", "https://sub")
+        self._responses = responses
+        self.requests: list[tuple[str, object]] = []
+
+    async def _request(self, method, path, json=None):
+        self.requests.append((path, json))
+        for prefix, obj in self._responses.items():
+            if path.startswith(prefix):
+                return obj
+        raise AssertionError(f"неожиданный запрос {path}")
+
+
+_CLIENT = {"email": "ivan@best-eu.org", "uuid": "u1", "subId": "s1", "privateKey": "secret-key"}
+
+
+class TestPanelResponseValidation:
+    @pytest.mark.parametrize(
+        "obj",
+        [
+            {"client": _CLIENT, "inboundIds": [3], "tunnelAllowedIPs": {"3": None}},
+            {"client": _CLIENT, "inboundIds": "3"},
+            {"client": "не объект"},
+            ["не", "объект"],
+        ],
+    )
+    def test_malformed_client_is_a_panel_error(self, obj):
+        # Иначе pydantic.ValidationError пролетает мимо except XuiError/AwgError в диалогах и джобах.
+        panel = _CannedPanel({"/clients/get/": obj})
+
+        with pytest.raises(XuiError, match="не по схеме"):
+            asyncio.run(panel.get_client_details("ivan@best-eu.org"))
+
+    def test_error_does_not_leak_client_secrets(self):
+        panel = _CannedPanel({"/clients/get/": {"client": _CLIENT, "inboundIds": [3], "tunnelAllowedIPs": {"3": None}}})
+
+        with pytest.raises(XuiError) as caught:
+            asyncio.run(panel.get_client_details("ivan@best-eu.org"))
+
+        assert "secret-key" not in str(caught.value)
+
+    def test_null_tunnel_addresses_are_tolerated(self):
+        panel = _CannedPanel({"/clients/get/": {"client": _CLIENT, "inboundIds": [3], "tunnelAllowedIPs": None}})
+
+        details = asyncio.run(panel.get_client_details("ivan@best-eu.org"))
+
+        assert details is not None
+        assert details.tunnel_allowed_ips == {}
+
+    def test_malformed_traffic_is_a_panel_error(self):
+        panel = _CannedPanel({"/clients/traffic/": {"up": "много"}})
+
+        with pytest.raises(XuiError, match="не по схеме"):
+            asyncio.run(panel.get_traffic("ivan@best-eu.org"))
+
+
 def _details(**client) -> ClientDetails:
     return ClientDetails.model_validate({"client": {"email": "ivan@best-eu.org", "uuid": "u1", "subId": "s1"} | client})
 
