@@ -141,9 +141,14 @@ class AwgConfig(_Section):
     # Сколько секунд сообщение с конфигом (приватным ключом) висит в чате, прежде чем бот его уберёт.
     CONFIG_TTL_SECONDS: int = Field(300, alias="AWG_CONFIG_TTL_SECONDS")
 
+    # Те же переменные, что у VLESS: AmneziaWG без панели работать не может, и секция видит это сама.
+    PANEL_URL: str = Field("", alias="XUI_BASE_URL")
+    PANEL_TOKEN: str = Field("", alias="XUI_API_TOKEN")
+
     @property
     def ENABLED(self) -> bool:
-        return self.INBOUND_ID > 0
+        """Инбаунд задан и до панели есть чем достучаться: иначе кнопка и ночной джоб работали бы впустую."""
+        return self.INBOUND_ID > 0 and bool(self.PANEL_URL and self.PANEL_TOKEN)
 
 
 class LoggerConfig(_Section):

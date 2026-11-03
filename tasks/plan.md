@@ -16,7 +16,7 @@
 6. **CLI-каркас `bot/cli/common.py`:** поиск человека, описание `ФИО (tg …)`, `confirm()` (`[y/n]`, без терминала — «нет»), бот для отправки, обёртка запуска. `cli/awg.py` и новый `cli/broadcast.py` — только команды.
 7. **Группы рассылки — реестр `имя → запрос`** в репозитории (`database/methods/person/audiences.py`): `all`, `members`, `board`, `awg`, `vless`. Новая группа — одна функция и строка в словаре.
 8. **QR Android с урезанным списком:** сервис возвращает `IssuedConfig` (текст файла, PNG QR или `None`, сколько исключений вошло в QR из скольких); подбор префикса `excluded_apps()` — двоичным поиском по факту «влезает ли в QR v40-L».
-9. **`settings.awg.ENABLED`** учитывает `XUI_BASE_URL`/`XUI_API_TOKEN` через валидатор на `GlobalSettings` (секции не видят друг друга).
+9. **`settings.awg.ENABLED`** учитывает `XUI_BASE_URL`/`XUI_API_TOKEN`: секция `AwgConfig` сама читает эти переменные (`PANEL_URL`/`PANEL_TOKEN`) — зависимость объявлена явно в секции, без связывания секций валидатором.
 
 ## Task List
 
