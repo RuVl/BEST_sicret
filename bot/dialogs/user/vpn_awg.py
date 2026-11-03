@@ -52,6 +52,7 @@ from includes.awg import (
     AwgPeer,
     DeviceLabelError,
     DevicePlatform,
+    IssuedConfig,
     add_device,
     device_limit,
     get_awg_client,
@@ -61,7 +62,6 @@ from includes.awg import (
     peers_by_name,
     remove_device,
     rename_device,
-    render_config_qr,
     restore_access,
 )
 from includes.config_hide import hide_now, schedule_hide, track_config
@@ -194,7 +194,7 @@ def _forget_config(dialog_manager: DialogManager) -> str | None:
     return config["token"] if config is not None else None
 
 
-async def _open_config(dialog_manager: DialogManager, device: AwgDevice, name: str, config: str) -> None:
+async def _open_config(dialog_manager: DialogManager, device: AwgDevice, name: str, config: IssuedConfig) -> None:
     """Показать конфиг окном (файл и QR - из памяти, без лишних сообщений) и завести таймер скрытия."""
     bot: Bot = dialog_manager.middleware_data["bot"]
     previous = _forget_config(dialog_manager)
@@ -203,15 +203,25 @@ async def _open_config(dialog_manager: DialogManager, device: AwgDevice, name: s
         await hide_now(bot, previous)
 
     token = uuid4().hex
-    file_url = memory_media.put(config.encode(), f"{settings.awg.TUNNEL_NAME}-{device.number}.conf", owner=token)
-    try:
-        qr_url = memory_media.put(render_config_qr(config), "amneziawg-qr.png", owner=token)
-    except ValueError as exc:
-        # Конфиг с длинными I1-I5 может не влезть в QR - файла достаточно.
-        await logger.awarning("awg-qr-failed", number=device.number, error=str(exc))
-        qr_url = None
+    file_name = f"{settings.awg.TUNNEL_NAME}-{device.number}.conf"
+    file_url = memory_media.put(config.text.encode(), file_name, owner=token)
+    qr_url = None
+    qr_apps: tuple[int, int] | None = None  # (вошло, всего) - если список исключений в QR урезан
+    if config.qr is None:
+        # Даже без исключений не влез (длинные I1-I5) - файла достаточно.
+        await logger.awarning("awg-qr-too-big", number=device.number)
+    else:
+        qr_url = memory_media.put(config.qr.png, "amneziawg-qr.png", owner=token)
+        if config.qr.truncated:
+            qr_apps = (config.qr.included, config.qr.total)
 
-    dialog_manager.dialog_data[_CONFIG] = {"token": token, "file": file_url, "qr": qr_url, "name": name}
+    dialog_manager.dialog_data[_CONFIG] = {
+        "token": token,
+        "file": file_url,
+        "qr": qr_url,
+        "qr_apps": qr_apps,
+        "name": name,
+    }
     dialog_manager.dialog_data[_SHOW_QR] = False
 
     # Запись - до показа окна: менеджер сообщений учтёт уже первое сообщение с файлом.
@@ -391,12 +401,16 @@ async def get_config_data(dialog_manager: DialogManager, l10n: FluentLocalizatio
         url=config["qr"] if show_qr else config["file"],
     )
     args = {"name": escape_mdv2(config["name"]), "minutes": max(1, settings.awg.CONFIG_TTL_SECONDS // 60)}
+    text = l10n.format_value("vpn-awg-qr-caption" if show_qr else "vpn-awg-config-caption", args=args)
+    if show_qr and config.get("qr_apps"):
+        included, total = config["qr_apps"]
+        text += "\n\n" + l10n.format_value("vpn-awg-qr-truncated", args={"included": included, "total": total})
     return {
         "show_media": True,
         "media": media,
         "has_qr": config["qr"] is not None,
         "show_qr": show_qr,
-        "text": l10n.format_value("vpn-awg-qr-caption" if show_qr else "vpn-awg-config-caption", args=args),
+        "text": text,
     }
 
 

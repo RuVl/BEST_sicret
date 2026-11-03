@@ -13,6 +13,7 @@ from .platform import PLATFORMS, DevicePlatform, excluded_apps, is_platform, per
 from .qr import render_config_qr
 from .schemas import AwgClientPayload, AwgPeer
 from .service import (
+    IssuedConfig,
     add_device,
     device_limit,
     disable_peers,
@@ -52,6 +53,7 @@ __all__ = [
     "is_valid_client_name",
     "DeviceLabelError",
     "normalize_device_label",
+    "IssuedConfig",
     "issue_device_config",
     "peers_by_name",
     "remove_device",
