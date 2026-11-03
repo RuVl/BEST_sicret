@@ -30,8 +30,8 @@
 - [ ] На тестовом боте: конфиг → реплика → нет второй копии; `make up` в течение TTL → конфиг исчез; `docker kill` → бот стартует и скрывает конфиг; имя в профиле не стёрто
 
 ### Phase 2: `dialog-races`
-- [ ] Task 4: изоляция событий в `Dispatcher`
-- [ ] Task 5: «Да, удалить» без доступа; ревизия идемпотентности EDIT-хэндлеров
+- [x] Task 4: изоляция событий в `Dispatcher`
+- [x] Task 5: «Да, удалить» без доступа; ревизия идемпотентности EDIT-хэндлеров
 
 ### Phase 3: `panel-client`
 - [ ] Task 6: тело `/clients/update` в типах панели; `ValidationError` → `XuiError`
@@ -42,7 +42,7 @@
 
 ### Phase 4: `device-identity`
 - [ ] Task 8: `ensure_peer` подхватывает клиента под новым именем
-- [ ] Task 9: `\` в `escape_mdv2`; ZWJ-эмодзи и честные ошибки названия
+- [x] Task 9: `\` в `escape_mdv2`; ZWJ-эмодзи и честные ошибки названия
 
 ### Phase 5: `person-username` + `cli-admin`
 - [ ] Task 10: уникальный ник (миграция + репозиторий + `/start`)
@@ -54,14 +54,14 @@
 - [ ] `make migrate` на локальной БД с подготовленными дублями ников; `make awg-revoke`/`awg-grant`/`broadcast` вручную (отказ `n`, согласие `y`, неизвестная группа, ненайденный ник)
 
 ### Phase 6: `settings-qr`
-- [ ] Task 14: `ENABLED` с проверкой панели; `_check_endpoint` и комментарий compose
-- [ ] Task 15: урезанный QR для Android
+- [x] Task 14: `ENABLED` с проверкой панели; `_check_endpoint` и комментарий compose
+- [x] Task 15: урезанный QR для Android
 
 ### Phase 7: `ui-compact`
-- [ ] Task 16: раскладка кнопок, WG Tunnel, тексты
+- [x] Task 16: раскладка кнопок, WG Tunnel, тексты
 
 ### Phase 8: `cleanup`
-- [ ] Task 17: мелочи из ревью
+- [x] Task 17: мелочи из ревью
 
 ### Checkpoint: Complete
 - [ ] `make test-bot`, `make lint`; `code-review high` по ветке без блокеров

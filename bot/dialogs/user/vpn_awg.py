@@ -532,30 +532,22 @@ async def on_delete_confirmed(clb: CallbackQuery, widget: Button, dialog_manager
 async def on_name_entered(
     message: Message, widget: ManagedTextInput, dialog_manager: DialogManager, label: str
 ) -> None:
-    l10n, log = _middleware(dialog_manager)
     # Сообщение с названием убираем, чтобы окно диалога осталось последним и редактировалось на месте.
     await _delete_quietly(message.bot, message.chat.id, message.message_id)
     dialog_manager.show_mode = ShowMode.EDIT
 
     target = dialog_manager.dialog_data.get(_NAME_TARGET)
-    access: AwgAccess | None = None
-    try:
-        async with async_session() as session:
-            loaded = await _load_access(session, message.from_user.id)
-            if loaded is None:
-                await dialog_manager.switch_to(ViewVpnSubscription.AWG)
-                return
-            person, access = loaded
-
-            if target is not None:
-                device = _find_device(access, target)
-                if device is not None:
-                    await rename_device(session, device, label)
-                    await session.commit()
-    except (AwgError, IntegrityError) as exc:
-        await log.aerror("vpn-awg-name-failed", telegram_id=message.from_user.id, target=target, error=str(exc))
-        dialog_manager.dialog_data[_NAME_ERROR] = _awg_error_text(l10n, exc, access)
-        return
+    # Переименование - только подпись в нашей БД (панель не трогаем, уникальности нет): ошибок панели
+    # и гонок за строку здесь не бывает, сбой самой БД пусть идёт в общий обработчик ошибок.
+    async with async_session() as session:
+        loaded = await _load_access(session, message.from_user.id)
+        if loaded is None:
+            await dialog_manager.switch_to(ViewVpnSubscription.AWG)
+            return
+        device = _find_device(loaded[1], target) if target is not None else None
+        if device is not None:
+            await rename_device(session, device, label)
+            await session.commit()
 
     dialog_manager.dialog_data.pop(_NAME_ERROR, None)
     dialog_manager.dialog_data.pop(_NAME_TARGET, None)

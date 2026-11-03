@@ -30,13 +30,13 @@
 
 ## Phase 2: `dialog-races`
 
-- [ ] **Task 4: изоляция событий в `Dispatcher`** (S)
+- [x] **Task 4: изоляция событий в `Dispatcher`** (S)
   - Acceptance: `Dispatcher` создаётся фабрикой с `events_isolation=SimpleEventIsolation()`; два одновременных клика по кнопке одного окна обрабатываются последовательно на свежем контексте. Комментарий «апдейты не сериализуются» исправлен.
   - Verify: `tests/test_event_isolation.py` — два параллельных клика через `aiogram_dialog.test_tools.BotClient` и хранилище с копированием данных (как Redis) дают оба обновления; тот же тест без изоляции падает.
   - Files: `bot/run.py`, `bot/dialogs/user/vpn_awg.py`, `bot/tests/test_event_isolation.py`
   - Depends: —
 
-- [ ] **Task 5: удаление без доступа; идемпотентность EDIT-хэндлеров** (S)
+- [x] **Task 5: удаление без доступа; идемпотентность EDIT-хэндлеров** (S)
   - Acceptance: «Да, удалить» при закрытом доступе → `vpn-awg-denied-alert` и выход в список; повторный вызов `on_delete_confirmed`, `on_toggle_qr`, `on_restore` безопасен.
   - Verify: тест хэндлера с fake `DialogManager`.
   - Files: `bot/dialogs/user/vpn_awg.py`, `bot/tests/test_awg_dialog.py`
@@ -64,7 +64,7 @@
   - Files: `bot/includes/awg/service.py`, `bot/tests/test_awg.py`
   - Depends: 7
 
-- [ ] **Task 9: экранирование и названия** (S)
+- [x] **Task 9: экранирование и названия** (S)
   - Acceptance: `escape_mdv2` экранирует `\`; все вызывающие проверены (`grep escape_mdv2`); ZWJ/вариационные селекторы в названии разрешены, лимит — в кодовых точках (колонка `String(32)`); ошибки «длина» и «недопустимые символы» — разными текстами.
   - Verify: тесты на `PC\-1`, `Ноут\`, `👨‍💻 Работа`, 33 символа, управляющий символ.
   - Files: `bot/utils/escape.py`, `bot/includes/awg/identity.py`, `bot/dialogs/user/vpn_awg.py`, `bot/l10n/ru/vpn.ftl`, `bot/tests/test_awg.py`
@@ -104,13 +104,13 @@
 
 ## Phase 6: `settings-qr`
 
-- [ ] **Task 14: `ENABLED` и endpoint** (S)
+- [x] **Task 14: `ENABLED` и endpoint** (S)
   - Acceptance: `settings.awg.ENABLED` ложно без `XUI_BASE_URL`/`XUI_API_TOKEN` (лог старта предупреждает); `_check_endpoint` отклоняет `localhost`, `host.docker.internal`, имена без точки; комментарий у `extra_hosts` актуален.
   - Verify: тесты настроек (env через monkeypatch) и `_check_endpoint`.
   - Files: `bot/env.py`, `bot/includes/awg/<модуль с _check_endpoint>`, `docker-compose.yaml`, `bot/tests/test_awg.py`
   - Depends: —
 
-- [ ] **Task 15: урезанный QR для Android** (M)
+- [x] **Task 15: урезанный QR для Android** (M)
   - Acceptance: `IssuedConfig(text, qr_png, qr_excluded, excluded_total)`; файл — полный список; QR — максимальный префикс, который влезает; подпись QR «в QR только N из M исключений, полный список — в файле» при урезании; кнопка QR у Android есть всегда.
   - Verify: тест на реальном `excluded_apps()` — QR строится, N < M, N максимально (N+1 не влезает); iOS — без урезания.
   - Files: `bot/includes/awg/qr.py`, `bot/includes/awg/service.py`, `bot/dialogs/user/vpn_awg.py`, `bot/l10n/ru/vpn.ftl`, `bot/tests/test_awg_platform.py`
@@ -118,7 +118,7 @@
 
 ## Phase 7: `ui-compact`
 
-- [ ] **Task 16: раскладка и клиенты** (S)
+- [x] **Task 16: раскладка и клиенты** (S)
   - Acceptance: раскладка из спецификации; ссылки WG Tunnel / AmneziaWG / App Store (ссылка WG Tunnel проверена), APK убран; `vpn-awg-hint` под WG Tunnel.
   - Verify: `test_l10n_keys.py`; скриншоты окон с тестового бота в PR.
   - Files: `bot/dialogs/user/vpn_awg.py`, `bot/l10n/ru/vpn.ftl`
@@ -126,7 +126,7 @@
 
 ## Phase 8: `cleanup`
 
-- [ ] **Task 17: мелочи из ревью** (S)
+- [x] **Task 17: мелочи из ревью** (S)
   - Acceptance: общий помощник «выбыл из LBG»; `notify()` — в `includes/notify.py` с ключом лога `notify-failed`; строки сводки суспенд-джоба — через Fluent; мёртвый `try/except` и неиспользуемые ключи `dialog_data` убраны.
   - Verify: `make test-bot`, `make lint`, `grep vpn-revoke-notify-failed` пуст.
   - Files: `bot/includes/notify.py` (новый), `bot/jobs/{revoke_vpn,suspend_awg}.py`, `bot/dialogs/user/vpn_awg.py`, `bot/l10n/ru/vpn.ftl`

@@ -144,6 +144,10 @@ vpn-awg-suspend-report = *Автоотключение ключей AmneziaWG*
     { "" }
     { $details }
 
+# Строки сводок джобов - обычный текст, экранирует код
+vpn-awg-suspend-line-part = { $who }: ключей { $count }
+job-unexpected-error-part = { $who }: непредвиденная ошибка ({ $error })
+
 # Строки списка и карточки - обычный текст, экранирует код
 vpn-awg-device-line-part = { $name }: { $status }
 vpn-awg-device-default-name-part = Устройство { $number }

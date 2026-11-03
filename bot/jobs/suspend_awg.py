@@ -13,7 +13,8 @@ from structlog.typing import FilteringBoundLogger
 from database.main import async_session
 from database.methods.awg_access import list_accesses_to_suspend, mark_suspended
 from includes.awg import AwgError, disable_peers, get_awg_client
-from jobs.revoke_vpn import notify, save_mark
+from includes.notify import notify
+from jobs.revoke_vpn import save_mark
 from utils import escape_mdv2, split_message
 from utils.board import get_hr_id
 
@@ -40,7 +41,8 @@ async def suspend_inactive_awg_access(bot: Bot, l10n: FluentLocalization) -> Non
             continue
         except Exception as exc:
             # Сбой БД или ошибка в коде на одном человеке не должны оставить остальных с работающими ключами.
-            failed.append(f"{name}: непредвиденная ошибка ({type(exc).__name__})")
+            error = {"who": name, "error": type(exc).__name__}
+            failed.append(l10n.format_value("job-unexpected-error-part", args=error))
             await logger.aexception("awg-suspend-crashed", person_id=access.person_id)
             continue
 
@@ -49,7 +51,7 @@ async def suspend_inactive_awg_access(bot: Bot, l10n: FluentLocalization) -> Non
             await logger.ainfo("awg-suspend-no-peers", person_id=access.person_id)
             continue
 
-        suspended.append(f"{name}: ключей {found}")
+        suspended.append(l10n.format_value("vpn-awg-suspend-line-part", args={"who": name, "count": found}))
         await notify(bot, access.person.telegram_id, l10n.format_value("vpn-awg-suspended-notice"))
 
     await logger.ainfo("awg-suspend-done", suspended=len(suspended), failed=len(failed))

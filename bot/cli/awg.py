@@ -39,7 +39,7 @@ from includes.awg import (
     remove_peers,
     restore_access,
 )
-from jobs.revoke_vpn import notify
+from includes.notify import notify
 from utils.access import current_member
 
 

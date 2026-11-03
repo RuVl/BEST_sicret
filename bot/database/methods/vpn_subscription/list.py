@@ -1,7 +1,8 @@
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from database.methods.member.predicates import left_lbg
 from database.models import LbgMember, Person, VpnSubscription
 
 
@@ -19,13 +20,7 @@ async def list_subscriptions_to_revoke(session: AsyncSession) -> list[VpnSubscri
         .join(Person, VpnSubscription.person_id == Person.id)
         .outerjoin(LbgMember, Person.lbg_member_id == LbgMember.id)
         .where(VpnSubscription.status == "active")
-        .where(
-            or_(
-                Person.lbg_member_id.is_(None),
-                LbgMember.is_excluded.is_(True),
-                LbgMember.removed_from_sheet_at.is_not(None),
-            )
-        )
+        .where(left_lbg())
         .options(joinedload(VpnSubscription.person))
     )
     return list(await session.scalars(query))

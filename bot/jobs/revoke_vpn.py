@@ -12,30 +12,18 @@ from collections.abc import Awaitable, Callable
 
 import structlog
 from aiogram import Bot
-from aiogram.exceptions import TelegramAPIError
 from fluent.runtime import FluentLocalization
 from sqlalchemy.ext.asyncio import AsyncSession
 from structlog.typing import FilteringBoundLogger
 
 from database.main import async_session
 from database.methods.vpn_subscription import list_subscriptions_to_revoke, mark_revoked
+from includes.notify import notify
 from includes.vpn import XuiClient, XuiClientNotFoundError, XuiError, get_xui_client
 from utils import escape_mdv2, split_message
 from utils.board import get_hr_id
 
 logger: FilteringBoundLogger = structlog.get_logger("vpn-revoke")
-
-
-async def notify(bot: Bot, chat_id: int, text: str) -> bool:
-    """Уведомление не должно ронять джоб: человек мог заблокировать бота. ``True`` - сообщение ушло."""
-    if not chat_id:
-        return False
-    try:
-        await bot.send_message(chat_id, text)
-    except TelegramAPIError as exc:
-        await logger.awarning("vpn-revoke-notify-failed", chat_id=chat_id, error=str(exc))
-        return False
-    return True
 
 
 async def save_mark[Row](mark: Callable[[AsyncSession, Row], Awaitable[None]], row: Row) -> None:
@@ -80,7 +68,8 @@ async def revoke_inactive_subscriptions(bot: Bot, l10n: FluentLocalization) -> N
             continue
         except Exception as exc:
             # Сбой БД или ошибка в коде на одном человеке не должны оставить остальных с работающим ключом.
-            failed.append(f"{email}: непредвиденная ошибка ({type(exc).__name__})")
+            error = {"who": email, "error": type(exc).__name__}
+            failed.append(l10n.format_value("job-unexpected-error-part", args=error))
             await logger.aexception("vpn-revoke-crashed", email=email)
             continue
 
