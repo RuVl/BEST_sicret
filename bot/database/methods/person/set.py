@@ -1,4 +1,4 @@
-from sqlalchemy import func, or_, update
+from sqlalchemy import func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import Person
@@ -17,7 +17,7 @@ async def release_lbg_members(session: AsyncSession, lbg_member_ids: list[int], 
     await session.execute(
         update(Person)
         .where(Person.lbg_member_id.in_(lbg_member_ids))
-        .where(or_(Person.telegram_username.is_(None), func.lower(Person.telegram_username) != username))
+        .where(func.lower(Person.telegram_username).is_distinct_from(username))
         .values(lbg_member_id=None)
     )
 
