@@ -64,5 +64,6 @@ def generate_document(template_name: str, data: dict) -> DocxTemplate:
         raise FileNotFoundError(f"Template file {template_path} not found")
 
     doc = DocxTemplate(template_path)
-    doc.render(data)
+    # Без экранирования `&` и `<` из ответа ломают XML документа, и часть текста молча пропадает.
+    doc.render(data, autoescape=True)
     return doc
