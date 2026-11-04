@@ -9,6 +9,19 @@ async def set_lbg_member(session: AsyncSession, person: Person, lbg_member_id: i
     person.lbg_member_id = lbg_member_id
 
 
+async def release_lbg_members(session: AsyncSession, lbg_member_ids: list[int], username: str) -> None:
+    """Снять этих участников со всех Person, кроме владельца ника: иначе /start его к ним не привяжет.
+
+    ``username`` - в нижнем регистре. Коммит - на вызывающей стороне.
+    """
+    await session.execute(
+        update(Person)
+        .where(Person.lbg_member_id.in_(lbg_member_ids))
+        .where(func.lower(Person.telegram_username).is_distinct_from(username))
+        .values(lbg_member_id=None)
+    )
+
+
 async def claim_username(session: AsyncSession, person: Person, username: str | None) -> None:
     """Закрепить ник Telegram за человеком; ``None`` - человек убрал ник, забываем и мы.
 

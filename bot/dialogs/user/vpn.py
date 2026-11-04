@@ -28,6 +28,7 @@ from database.methods.person import get_person_with_member
 from database.methods.vpn_subscription import get_subscription_by_person
 from database.models import VpnSubscription
 from dialogs.user.vpn_awg import awg_allowed, awg_windows
+from env import settings
 from includes.vpn import PANEL_ERRORS, ensure_subscription, get_xui_api, panel_error_text, subscription_url
 from middlewares import L10N_FORMAT_KEY, LOGGING_KEY
 from state_machines.vpn import ViewVpnSubscription
@@ -56,7 +57,19 @@ async def get_vpn_data(
             "text": l10n.format_value("vpn-access-denied"),
         }
 
-    data = {"can_restore": False} | await _get_subscription_data(subscription, person.id, l10n, log)
+    if settings.xui.ENABLED:
+        data = {"can_issue": True, "can_restore": False} | await _get_subscription_data(
+            subscription, person.id, l10n, log
+        )
+    else:
+        # Панель не настроена: в неё не ходим и выпустить ничего не предлагаем.
+        data = {
+            "is_allowed": True,
+            "has_subscription": False,
+            "can_issue": False,
+            "can_restore": False,
+            "text": l10n.format_value("vpn-not-configured"),
+        }
 
     data["awg_allowed"] = awg_allowed(access)
     if data["awg_allowed"]:
@@ -120,6 +133,11 @@ async def on_issue(
     l10n: FluentLocalization = dialog_manager.middleware_data[L10N_FORMAT_KEY]
     log: FilteringBoundLogger = dialog_manager.middleware_data[LOGGING_KEY]
 
+    # Клавиатура могла устареть: кнопку нарисовали до того, как панель отключили в настройках.
+    if not settings.xui.ENABLED:
+        await clb.answer(l10n.format_value("vpn-not-configured-alert"), show_alert=True)
+        return
+
     try:
         async with async_session() as session:
             person = await get_person_with_member(session, clb.from_user.id)
@@ -157,7 +175,7 @@ vpn_dialog = Dialog(
             L10nFormat("vpn-issue-btn"),
             id="issue_vpn",
             on_click=on_issue,
-            when=F["is_allowed"] & ~F["has_subscription"],
+            when=F["is_allowed"] & F["can_issue"] & ~F["has_subscription"],
         ),
         # Тот же ensure_subscription: он и включает отключённого джобом клиента по прежней ссылке.
         Button(

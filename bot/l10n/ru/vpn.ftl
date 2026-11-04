@@ -56,6 +56,8 @@ vpn-restored-alert = Подписка снова включена
 vpn-error-alert = Панель VPN недоступна. Попробуйте позже или напишите VP4HR.
 vpn-error = Панель VPN недоступна\. Попробуйте позже или напишите VP4HR\.
 vpn-access-denied-alert = Доступ к VPN только для активных мемберов LBG
+vpn-not-configured = VLESS\-подписка сейчас недоступна: панель VPN не настроена\.
+vpn-not-configured-alert = VLESS-подписка сейчас недоступна: панель VPN не настроена.
 vpn-access-denied = Доступ к VPN только для активных мемберов LBG\.
 
 # === AmneziaWG (основной протокол, открыт всем активным мемберам) ===

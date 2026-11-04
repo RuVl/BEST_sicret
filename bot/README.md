@@ -7,7 +7,8 @@ aiogram 3 + aiogram-dialog 2, Python 3.12. Схема БД живёт в общ�
 
 ```bash
 make install-bot   # зависимости
-make env           # создать .env (docker) и dev.env (локально), затем заполнить bot/.env и bot/dev.env
+make env           # создать .env (docker) и dev.env (локально), затем вписать TG_API_TOKEN в bot/.env
+make dev-member who=@ник  # стать участником в локальной БД, иначе меню будет пустым
 make run-bot       # бот локально, postgres и redis в docker
 make test-bot      # тесты
 ```

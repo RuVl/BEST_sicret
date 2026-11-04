@@ -31,6 +31,7 @@ PG_USER ?= $(shell $(PY) -c "import pathlib; p=pathlib.Path('postgres/.env'); va
 PG_DB   ?= $(shell $(PY) -c "import pathlib; p=pathlib.Path('postgres/.env'); vals=[l.split('=',1)[1].strip() for l in (p.read_text(encoding='utf-8').splitlines() if p.exists() else []) if l.startswith('POSTGRES_DB=')]; print(vals[0] if vals else 'database')")
 DUMP    ?= backups/dump.sql
 rev     ?= -1
+DB_WAIT ?= 60
 
 .DEFAULT_GOAL := help
 
@@ -48,7 +49,7 @@ init: ## Подготовить окружение с нуля (deps → .env �
 	$(MAKE) pre-commit-install
 	$(MAKE) infra
 	$(MAKE) migrate
-	@echo "OK: окружение готово. Запуск бота: make run-bot"
+	@echo "OK: окружение готово. Дальше: впишите TG_API_TOKEN в bot/.env, затем make dev-member who=@ник и make run-bot"
 
 .PHONY: check-deps
 check-deps: ## Проверить наличие uv и docker compose
@@ -58,7 +59,8 @@ check-deps: ## Проверить наличие uv и docker compose
 .PHONY: env
 env: ## Создать .env (docker) и dev.env (локальный запуск) из *.dist, где их нет
 	@$(PY) -c "import os, shutil; [(shutil.copyfile(t+'.dist', t), print('created', t)) for t in ('bot/.env','members_sync/.env','postgres/.env','redis/.env','bot/dev.env','members_sync/dev.env','packages/db/dev.env') if os.path.isfile(t+'.dist') and not os.path.isfile(t)]"
-	@echo "Заполните .env (docker/podman) и dev.env (локальный запуск)!"
+	@echo "Для старта нужно одно значение: TG_API_TOKEN в bot/.env - токен своего бота от @BotFather в Telegram."
+	@echo "Остальные значения уже подходят для локального запуска, менять их не нужно."
 
 # --- Установка зависимостей (все venv) -------------------------------------
 
@@ -80,8 +82,15 @@ install-sync: ## venv members_sync (+ best_db editable, + dev: pytest)
 # --- Запуск -----------------------------------------------------------------
 
 .PHONY: infra
-infra: ## Поднять только postgres + redis в docker (порты на host)
+infra: ## Поднять только postgres + redis в docker (порты на host) и дождаться готовности БД
 	$(COMPOSE_DEV) up -d
+	$(MAKE) wait-db
+
+# Проверка по TCP: пока initdb держит временный сервер, он слушает только unix-сокет.
+# Цикл на Python: `up --wait` есть не у всех compose (podman-compose), а make кроссплатформенный.
+.PHONY: wait-db
+wait-db: ## Дождаться, пока postgres начнёт принимать подключения (не дольше DB_WAIT секунд)
+	@$(PY) -c "import subprocess, sys, time; cmd='$(COMPOSE_DEV) exec -T postgres pg_isready -q -h 127.0.0.1'.split(); ready=any(subprocess.run(cmd, capture_output=True).returncode == 0 or time.sleep(1) for _ in range($(DB_WAIT))); sys.exit(0 if ready else 'postgres не готов за $(DB_WAIT) с. Логи контейнера: $(COMPOSE_DEV) logs postgres')"
 
 .PHONY: infra-down
 infra-down: ## Остановить локальную инфраструктуру
@@ -89,13 +98,20 @@ infra-down: ## Остановить локальную инфраструкту�
 
 .PHONY: run-bot
 run-bot: ## Бот локально (dev.env) + postgres/redis в docker
-	$(COMPOSE_DEV) up -d
+	$(MAKE) infra
 	cd bot && $(UV) run --env-file dev.env python run.py
 
 .PHONY: run-sync
 run-sync: ## members_sync локально (dev.env) + postgres в docker (RUN_MODE из .env)
 	$(COMPOSE_DEV) up -d postgres
+	$(MAKE) wait-db
 	cd members_sync && $(UV) run --env-file dev.env python run.py
+
+# Инфраструктуру сознательно не поднимаем: при DEBUG=False команда обязана только отказаться.
+.PHONY: dev-member
+dev-member: ## Сделать себя участником LBG в локальной БД: make dev-member who=@ник
+	$(if $(who),,$(error Укажите ник: make dev-member who=@ник))
+	cd bot && $(UV) run --env-file dev.env python -m cli.dev_member "$(who)"
 
 .PHONY: run-sync-dry
 run-sync-dry: ## members_sync: парсинг боевых данных в JSON без записи в БД (dry-run, postgres не нужен)

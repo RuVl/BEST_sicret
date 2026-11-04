@@ -31,6 +31,13 @@ async def find_member_by_username(session: AsyncSession, username: str | None) -
     return None
 
 
+async def list_members_by_username(session: AsyncSession, username: str) -> list[LbgMember]:
+    """Все участники с этим ником, в том числе уже связанные (их ``find_member_by_username`` не видит)."""
+    target = normalize_telegram_handle(username)
+    query = select(LbgMember).where(LbgMember.telegram.is_not(None))
+    return [member for member in await session.scalars(query) if normalize_telegram_handle(member.telegram) == target]
+
+
 async def resolve_board_role(session: AsyncSession, role: str) -> Person | None:
     """Найти Person текущего носителя board-роли (president/treasurer/hr).
 
