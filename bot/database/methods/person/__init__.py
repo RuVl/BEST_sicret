@@ -6,7 +6,7 @@ from .list import (
     list_board_persons,
     list_vless_persons,
 )
-from .set import claim_username, set_lbg_member
+from .set import claim_username, release_lbg_members, set_lbg_member
 
 __all__ = [
     "claim_username",
@@ -18,5 +18,6 @@ __all__ = [
     "list_awg_persons",
     "list_board_persons",
     "list_vless_persons",
+    "release_lbg_members",
     "set_lbg_member",
 ]

@@ -1,12 +1,15 @@
 import asyncio
+import sys
 
 import structlog
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramUnauthorizedError
 from aiogram.fsm.storage.base import BaseStorage
 from aiogram.fsm.storage.memory import MemoryStorage, SimpleEventIsolation
 from aiogram.types import BotCommand, BotCommandScopeDefault
+from aiogram.utils.token import TokenValidationError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from structlog.typing import FilteringBoundLogger
@@ -19,6 +22,12 @@ from includes.config_hide import setup_config_hides
 from includes.pending_hides import close_pending_hides
 from jobs import revoke_inactive_subscriptions, suspend_inactive_awg_access
 from middlewares import register_middlewares
+
+BAD_TOKEN_HELP = (
+    "Telegram не принял токен из TG_API_TOKEN в bot/.env: там заглушка или неверное значение.\n"
+    "Создайте своего бота у @BotFather в Telegram (команда /newbot), впишите выданный токен в bot/.env "
+    "и запустите снова: make run-bot"
+)
 
 
 def _create_scheduler(bot: Bot) -> AsyncIOScheduler | None:
@@ -76,10 +85,15 @@ async def main():
         default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN_V2),
     )
     # Единственная команда: остальное - кнопки меню, доступные только мемберам.
-    await bot.set_my_commands(
-        [BotCommand(command="start", description="Профиль и меню")],
-        scope=BotCommandScopeDefault(),
-    )
+    try:
+        await bot.set_my_commands(
+            [BotCommand(command="start", description="Профиль и меню")],
+            scope=BotCommandScopeDefault(),
+        )
+    except TelegramUnauthorizedError:
+        # Первое обращение к Telegram. Незакрытая сессия дала бы предупреждение asyncio поверх подсказки.
+        await bot.session.close()
+        raise
 
     # Get storage with proper configuration for dialogs
     if settings.redis.USE_REDIS:
@@ -126,6 +140,14 @@ async def main():
         await logger.ainfo("Bot stopped.")
 
 
+def start() -> None:
+    """Запуск из консоли: ошибка с токеном - первое, на что натыкается новичок, поэтому подсказка вместо трейсбэка."""
+    try:
+        asyncio.run(main())
+    except (TokenValidationError, TelegramUnauthorizedError):
+        sys.exit(BAD_TOKEN_HELP)
+
+
 # Start bot
 if __name__ == "__main__":
-    asyncio.run(main())
+    start()

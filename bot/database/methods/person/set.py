@@ -1,4 +1,4 @@
-from sqlalchemy import func, update
+from sqlalchemy import func, or_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import Person
@@ -7,6 +7,19 @@ from database.models import Person
 async def set_lbg_member(session: AsyncSession, person: Person, lbg_member_id: int) -> None:
     """Привязать Person к участнику LBG. Коммит - на вызывающей стороне."""
     person.lbg_member_id = lbg_member_id
+
+
+async def release_lbg_members(session: AsyncSession, lbg_member_ids: list[int], username: str) -> None:
+    """Снять этих участников со всех Person, кроме владельца ника: иначе /start его к ним не привяжет.
+
+    ``username`` - в нижнем регистре. Коммит - на вызывающей стороне.
+    """
+    await session.execute(
+        update(Person)
+        .where(Person.lbg_member_id.in_(lbg_member_ids))
+        .where(or_(Person.telegram_username.is_(None), func.lower(Person.telegram_username) != username))
+        .values(lbg_member_id=None)
+    )
 
 
 async def claim_username(session: AsyncSession, person: Person, username: str | None) -> None:

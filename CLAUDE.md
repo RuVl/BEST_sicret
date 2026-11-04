@@ -20,6 +20,7 @@ Telegram bot for the SPb BEST student organization: internal documents (прик
 make init                    # full bootstrap
 make install                 # all venvs (or install-db, install-bot, install-sync)
 make run-bot                 # bot locally + postgres/redis in docker
+make dev-member who=@nick    # local LbgMember so /start opens the full menu (refuses when DEBUG=False)
 make run-sync                # members_sync locally + postgres in docker
 make run-sync-dry            # parse live data to JSON, no DB write
 make up / down / build / ps  # full stack in docker
@@ -31,7 +32,7 @@ make test                    # both suites (make test-bot, make test-sync)
 
 **Env files:** `.env` is for docker/podman (hosts = compose service names); `dev.env` holds local overrides (e.g. `POSTGRES_HOST=localhost`). Never read `*.env` files — use the matching `.env.dist` and the `env.py` code.
 
-**Tooling:** `uv` for venvs and running, `uvx ruff@0.15.12` for lint/format, `uvx pre-commit` for hooks. Line length is **120**. Pre-commit runs ruff only, and there is no CI: run `make test` yourself.
+**Tooling:** `uv` for venvs and running, `uvx ruff@0.15.12` for lint/format, `uvx pre-commit` for hooks. Line length is **120**. Pre-commit runs ruff only; GitHub Actions run `make lint` and `make test` on every PR to `dev` and `main`.
 
 ## Architecture
 
@@ -45,7 +46,7 @@ make test                    # both suites (make test-bot, make test-sync)
 - **`state_machines/`** — one `StatesGroup` per flow.
 - **`dialogs/`** — `Dialog`/`Window` definitions, aggregated on `user_dialog_router` in `dialogs/user/__init__.py`. Unknown-state errors reset the stack.
 - **`includes/templates/`** — **the core domain engine.** `create_context()` turns a JSON Schema (draft-07) into a tree of `BaseContext` subclasses (`ObjectContext`, `ArrayContext`, `PrimitiveContext`). Each node renders its view and keyboards, accepts typed input, and tracks required fields; `generate_context` produces the dict for `docxtpl`. Context objects are **pickled into Redis FSM state**: bump `BaseContext.__version__` when their shape changes.
-- **Document templates** — `bot/resources/templates/<Name>.docx` + `<Name>.json` (JSON Schema with `question`, `short_description`). Adding a document needs no code change. Other schemas are in `resources/equipments/` and `resources/refunds/`.
+- **Document templates** — `bot/resources/templates/<Name>.docx` + `<Name>.json` (JSON Schema with `question`, `short_description`). Adding a document needs no code change. Real templates are not in git; local runs use the fictional one from `resources/demo_templates/` via `TEMPLATES_DIR` in `dev.env`. Other schemas are in `resources/equipments/` and `resources/refunds/`.
 - **`includes/vpn/`, `includes/awg/`** — VPN over the 3x-ui panel through the `py3xui` library (fork RuVl/py3xui, pinned to a tag). `vpn/panel.py` holds only bot decisions; `service.py` holds the domain operations; `AwgClient` maps panel errors to `AwgError` for the AmneziaWG dialogs.
 - **`database/`** — async SQLAlchemy 2.0 + asyncpg. `database/main.py` has the bot's `engine` and `async_session`. Models live in `best_db.models`, `database/models/__init__.py` re-exports them. Queries are small async functions in `database/methods/<entity>/`.
 - **`middlewares/`** — registered in `middlewares/main.py`. Localization (`L10nMw`, key `l10n`) is an outer middleware; then empty-callback dropping; then logging (`LoggingMw`, key `log`).

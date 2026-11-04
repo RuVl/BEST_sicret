@@ -31,3 +31,6 @@ Dockerfile
 resources/refund_bills/
 resources/templates/
 resources/resources/
+
+# демо-шаблон только для локального запуска: в образе ему делать нечего
+resources/demo_templates/
