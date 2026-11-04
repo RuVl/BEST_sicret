@@ -20,8 +20,8 @@ dependencies = [
     "fuzzywuzzy>=0.18.0",
     "httpx>=0.28.1",
     "jsonschema>=4.26.0",
-    # Форк: в PyPI оригинал без нужных API. Закреплён на теге, а не на ветке.
-    "py3xui @ git+https://github.com/RuVl/py3xui@v0.7.0-ruvl.2",
+    # Форк: в PyPI оригинал без нужных API. Архив тега: в образе не нужен git.
+    "py3xui @ https://github.com/RuVl/py3xui/archive/refs/tags/v0.7.0-ruvl.2.tar.gz",
     "pycares>=5.0.1",
     "pydantic-settings>=2.14.1",
     "python-levenshtein>=0.27.3",

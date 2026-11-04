@@ -1,5 +1,5 @@
 from .client import AwgClient, get_awg_client
-from .exceptions import AwgAccessRevokedError, AwgAuthError, AwgDeviceLimitError, AwgError
+from .exceptions import AwgAccessRevokedError, AwgDeviceLimitError, AwgError
 from .identity import (
     MAX_DEVICE_LABEL_LEN,
     DeviceLabelError,
@@ -35,7 +35,6 @@ __all__ = [
     "personalize_config",
     "MAX_DEVICE_LABEL_LEN",
     "AwgAccessRevokedError",
-    "AwgAuthError",
     "AwgClient",
     "AwgDeviceLimitError",
     "AwgError",

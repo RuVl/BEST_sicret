@@ -17,10 +17,10 @@ from py3xui import AsyncApi, Client
 from structlog.typing import FilteringBoundLogger
 
 from env import settings
-from includes.awg.exceptions import AwgAuthError, AwgError
+from includes.awg.exceptions import AwgError
 from includes.awg.schemas import DEFAULT_KEEPALIVE, AwgPeer
 from includes.awg.share_link import extract_device_config
-from includes.vpn import PANEL_ERRORS, get_xui_api, is_auth_error, panel_error_text, set_clients_enabled
+from includes.vpn import PANEL_ERRORS, get_xui_api, panel_error_text, set_clients_enabled
 
 logger: FilteringBoundLogger = structlog.get_logger("awg")
 
@@ -30,8 +30,7 @@ def _panel_errors() -> Iterator[None]:
     try:
         yield
     except PANEL_ERRORS as exc:
-        error = AwgAuthError if is_auth_error(exc) else AwgError
-        raise error(panel_error_text(exc)) from exc
+        raise AwgError(panel_error_text(exc)) from exc
 
 
 class AwgClient:

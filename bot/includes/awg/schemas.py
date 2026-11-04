@@ -1,14 +1,10 @@
-"""Схемы клиента AmneziaWG-инбаунда панели 3x-ui (v3.11+).
-
-Поля повторяют Go-структуру панели ``model.ClientRecord``: ключи и адрес устройства.
-Параметры сервера и обфускации бот не читает - готовый конфиг собирает сама панель.
-"""
+"""Устройство AmneziaWG глазами бота. Параметры сервера и обфускации бот не читает: конфиг собирает панель."""
 
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal
+from typing import Literal
 
 from py3xui import ClientDetails, ClientTraffic
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel
 
 # 3x-ui отмечает клиента онлайн по трафику, а keepalive у нас 25 с - три минуты тишины значат «не в сети».
 ONLINE_WINDOW = timedelta(minutes=3)
@@ -18,30 +14,17 @@ ConnectionStatus = Literal["online", "inactive", "never", "disabled"]
 
 
 class AwgPeer(BaseModel):
-    """Клиент панели в AmneziaWG-инбаунде - одно устройство: ключи, адрес и счётчики трафика."""
-
-    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+    """Клиент панели в AmneziaWG-инбаунде - одно устройство: ключ, адрес и счётчики трафика."""
 
     email: str
     enable: bool = True
-    private_key: str = Field("", alias="privateKey")
-    public_key: str = Field("", alias="publicKey")
-    preshared_key: str = Field("", alias="preSharedKey")
+    private_key: str = ""
     # Адрес устройства в туннеле (``10.70.0.2/32``); несколько адресов - через запятую.
     address: str = ""
-    keep_alive: str = Field("", alias="keepAlive")
     # Счётчики 3x-ui глазами клиента: up - отправлено устройством, down - скачано им.
     up: int = 0
     down: int = 0
     last_online_at: datetime | None = None
-
-    @field_validator("keep_alive", mode="before")
-    @classmethod
-    def keep_alive_to_str(cls, value: Any) -> str:
-        # Число (25) или диапазон AWG 3.x (``20-30``); 0 - keepalive выключен.
-        if value in (None, 0, "0"):
-            return ""
-        return str(value)
 
     @property
     def disabled(self) -> bool:
@@ -74,9 +57,6 @@ class AwgPeer(BaseModel):
             email=client.email,
             enable=client.enable,
             private_key=client.private_key,
-            public_key=client.public_key,
-            preshared_key=client.pre_shared_key,
-            keep_alive=client.keep_alive,
             address=address,
             up=traffic.up if traffic else 0,
             down=traffic.down if traffic else 0,

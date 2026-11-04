@@ -135,8 +135,7 @@ async def on_issue(
     except (*PANEL_ERRORS, IntegrityError) as exc:
         # IntegrityError - двойной клик или чужая строка с теми же идентификаторами: сессия
         # откатится сама, а человек получит ответ вместо зависшей кнопки.
-        error = str(exc) if isinstance(exc, IntegrityError) else panel_error_text(exc)
-        await log.aerror("vpn-issue-failed", telegram_id=clb.from_user.id, error=error)
+        await log.aerror("vpn-issue-failed", telegram_id=clb.from_user.id, error=panel_error_text(exc))
         await clb.answer(l10n.format_value("vpn-error-alert"), show_alert=True)
         return
 

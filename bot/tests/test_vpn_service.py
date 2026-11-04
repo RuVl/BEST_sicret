@@ -6,35 +6,20 @@ from py3xui import BulkResult, BulkSkip, ClientDetails
 
 from includes.vpn import service as vpn_service
 from jobs import revoke_vpn
-from tests.fakes import FakeBot, FakeL10n, FakeSessionMaker
+from tests.fakes import FakeBot, FakeL10n, FakeSessionMaker, fake_panel_api
 from utils import split_message
 
 
-class _RevokePanel:
+def _revoke_panel(broken: set[str] = frozenset(), missing: set[str] = frozenset()) -> SimpleNamespace:
     """Панель для джоба отзыва: ``broken`` - панель пропускает клиента, ``missing`` - клиента уже нет."""
 
-    def __init__(
-        self,
-        broken: set[str] = frozenset(),
-        missing: set[str] = frozenset(),
-        error: Exception | None = None,
-    ):
-        self._broken = broken
-        self._missing = missing
-        self._error = error
+    def bulk_disable(emails: list[str]) -> BulkResult:
+        return BulkResult(skipped=[BulkSkip(email=email, reason="skipped") for email in emails if email in broken])
 
-    @property
-    def client(self) -> "_RevokePanel":
-        return self
-
-    async def get_details(self, email: str) -> ClientDetails | None:
-        if self._error is not None:
-            raise self._error
-        return None if email in self._missing else _details(email=email)
-
-    async def bulk_disable(self, emails: list[str]) -> BulkResult:
-        broken = [email for email in emails if email in self._broken]
-        return BulkResult(skipped=[BulkSkip(email=email, reason="skipped") for email in broken])
+    return fake_panel_api(
+        get_details=lambda email: None if email in missing else _details(email=email),
+        bulk_disable=bulk_disable,
+    )
 
 
 def _subscription(n: int) -> SimpleNamespace:
@@ -67,7 +52,7 @@ class TestRevokeJob:
         # Панель отказала на p2, БД - на p3: остальные закоммичены каждый сам и уведомлены ровно по разу.
         subs = [_subscription(n) for n in range(1, 6)]
         sessions = FakeSessionMaker(fail_commit=lambda row: row.id == 3)
-        panel = _RevokePanel(broken={"p2@best-eu.org"}, missing={"p5@best-eu.org"})
+        panel = _revoke_panel(broken={"p2@best-eu.org"}, missing={"p5@best-eu.org"})
         bot = _run_revoke(monkeypatch, subs, panel, sessions)
 
         assert [row.id for row in sessions.committed] == [1, 4, 5]
@@ -80,7 +65,7 @@ class TestRevokeJob:
     def test_notice_is_sent_only_after_commit(self, monkeypatch):
         # Уведомили, а статус не сохранился - следующей ночью человеку пришло бы второе уведомление.
         sessions = FakeSessionMaker(fail_commit=lambda row: True)
-        bot = _run_revoke(monkeypatch, [_subscription(1)], _RevokePanel(), sessions)
+        bot = _run_revoke(monkeypatch, [_subscription(1)], _revoke_panel(), sessions)
 
         assert all(chat_id == 1 for chat_id, _ in bot.sent)
 
@@ -90,7 +75,7 @@ class TestRevokeJob:
         request = httpx.Request("GET", "https://panel/wrong/panel/api/clients/get/x")
         not_found = httpx.HTTPStatusError("404", request=request, response=httpx.Response(404, request=request))
         sessions = FakeSessionMaker()
-        bot = _run_revoke(monkeypatch, [_subscription(1)], _RevokePanel(error=not_found), sessions)
+        bot = _run_revoke(monkeypatch, [_subscription(1)], fake_panel_api(get_details=not_found), sessions)
 
         assert sessions.committed == []
         report = "\n".join(text for chat_id, text in bot.sent if chat_id == 1)
@@ -103,18 +88,6 @@ def _details(**client) -> ClientDetails:
     return ClientDetails.model_validate({"client": base | client})
 
 
-class _Panel:
-    def __init__(self, clients: dict[str, ClientDetails]):
-        self._clients = clients
-
-    @property
-    def client(self) -> "_Panel":
-        return self
-
-    async def get_details(self, email: str) -> ClientDetails | None:
-        return self._clients.get(email)
-
-
 def _resolve(monkeypatch, known_person_id: int | None, **client) -> str:
     async def get_subscription_by_email(session, email):
         return None if known_person_id is None else SimpleNamespace(person_id=known_person_id)
@@ -122,7 +95,8 @@ def _resolve(monkeypatch, known_person_id: int | None, **client) -> str:
     monkeypatch.setattr(vpn_service, "get_subscription_by_email", get_subscription_by_email)
     person = SimpleNamespace(id=7, telegram_id=100, full_name="Иванов Иван")
     member = SimpleNamespace(best_email="ivan@best-eu.org", full_name_ru="Иванов Иван")
-    panel = _Panel({"ivan@best-eu.org": _details(**client)})
+    clients = {"ivan@best-eu.org": _details(**client)}
+    panel = fake_panel_api(get_details=clients.get)
     email, _ = asyncio.run(vpn_service._resolve_target(None, panel, person, member))
     return email
 

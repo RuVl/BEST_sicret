@@ -33,11 +33,6 @@ def get_xui_api() -> AsyncApi:
     return _api
 
 
-def is_auth_error(exc: Exception) -> bool:
-    """Панель не приняла API-токен."""
-    return isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code in (401, 403)
-
-
 def panel_error_text(exc: Exception) -> str:
     """Текст ошибки панели для логов и сводок.
 

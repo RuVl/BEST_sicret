@@ -420,7 +420,7 @@ requires-dist = [
     { name = "fuzzywuzzy", specifier = ">=0.18.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "jsonschema", specifier = ">=4.26.0" },
-    { name = "py3xui", git = "https://github.com/RuVl/py3xui?rev=v0.7.0-ruvl.2" },
+    { name = "py3xui", url = "https://github.com/RuVl/py3xui/archive/refs/tags/v0.7.0-ruvl.2.tar.gz" },
     { name = "pycares", specifier = ">=5.0.1" },
     { name = "pydantic-settings", specifier = ">=2.14.1" },
     { name = "python-levenshtein", specifier = ">=0.27.3" },
@@ -1516,11 +1516,19 @@ wheels = [
 [[package]]
 name = "py3xui"
 version = "0.7.0"
-source = { git = "https://github.com/RuVl/py3xui?rev=v0.7.0-ruvl.2#26c2b2d43fe046ffccd231fdf4d4d472c46cae71" }
+source = { url = "https://github.com/RuVl/py3xui/archive/refs/tags/v0.7.0-ruvl.2.tar.gz" }
 dependencies = [
     { name = "httpx" },
     { name = "pydantic" },
     { name = "requests" },
+]
+sdist = { hash = "sha256:6d61b3d3912e6b10188ee50608799968701cc4be6e18f4e388008e8ea316c75d" }
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.20.0" },
+    { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "requests", specifier = ">=2.0.0" },
 ]
 
 [[package]]
