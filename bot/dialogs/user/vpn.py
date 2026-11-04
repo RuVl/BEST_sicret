@@ -28,7 +28,7 @@ from database.methods.person import get_person_with_member
 from database.methods.vpn_subscription import get_subscription_by_person
 from database.models import VpnSubscription
 from dialogs.user.vpn_awg import awg_allowed, awg_windows
-from includes.vpn import XuiError, ensure_subscription, get_xui_client
+from includes.vpn import PANEL_ERRORS, ensure_subscription, get_xui_api, panel_error_text, subscription_url
 from middlewares import L10N_FORMAT_KEY, LOGGING_KEY
 from state_machines.vpn import ViewVpnSubscription
 from utils import L10nFormat, current_member, escape_mdv2, format_traffic
@@ -79,11 +79,10 @@ async def _get_subscription_data(
             "text": l10n.format_value("vpn-none"),
         }
 
-    client = get_xui_client()
     try:
-        traffic = await client.get_traffic(subscription.xui_email)
-    except XuiError as exc:
-        await log.aerror("vpn-status-failed", person_id=person_id, error=str(exc))
+        traffic = await get_xui_api().client.get_traffic(subscription.xui_email)
+    except PANEL_ERRORS as exc:
+        await log.aerror("vpn-status-failed", person_id=person_id, error=panel_error_text(exc))
         return {"is_allowed": True, "has_subscription": True, "text": l10n.format_value("vpn-error")}
 
     if traffic is None:
@@ -103,8 +102,9 @@ async def _get_subscription_data(
     text = l10n.format_value(
         f"vpn-{state}",
         args={
-            "url": escape_mdv2(client.build_subscription_url(subscription.sub_id)),
-            "traffic": escape_mdv2(format_traffic(traffic.used_bytes)),
+            "url": escape_mdv2(subscription_url(subscription.sub_id)),
+            # Счётчики с последнего сброса: панель обнуляет их раз в XUI_TRAFFIC_RESET_DAYS дней.
+            "traffic": escape_mdv2(format_traffic(traffic.up + traffic.down)),
         },
     )
     return {"is_allowed": True, "has_subscription": True, "can_restore": can_restore, "text": text}
@@ -120,8 +120,6 @@ async def on_issue(
     l10n: FluentLocalization = dialog_manager.middleware_data[L10N_FORMAT_KEY]
     log: FilteringBoundLogger = dialog_manager.middleware_data[LOGGING_KEY]
 
-    client = get_xui_client()
-
     try:
         async with async_session() as session:
             person = await get_person_with_member(session, clb.from_user.id)
@@ -132,12 +130,12 @@ async def on_issue(
                 return
 
             # Всё сведение расхождений с панелью - внутри ensure_subscription.
-            await ensure_subscription(session, client, person, member)
+            await ensure_subscription(session, get_xui_api(), person, member)
             await session.commit()
-    except (XuiError, IntegrityError) as exc:
+    except (*PANEL_ERRORS, IntegrityError) as exc:
         # IntegrityError - двойной клик или чужая строка с теми же идентификаторами: сессия
         # откатится сама, а человек получит ответ вместо зависшей кнопки.
-        await log.aerror("vpn-issue-failed", telegram_id=clb.from_user.id, error=str(exc))
+        await log.aerror("vpn-issue-failed", telegram_id=clb.from_user.id, error=panel_error_text(exc))
         await clb.answer(l10n.format_value("vpn-error-alert"), show_alert=True)
         return
 

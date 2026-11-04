@@ -1,5 +1,5 @@
 from .client import AwgClient, get_awg_client
-from .exceptions import AwgAccessRevokedError, AwgAuthError, AwgDeviceLimitError, AwgError
+from .exceptions import AwgAccessRevokedError, AwgDeviceLimitError, AwgError
 from .identity import (
     MAX_DEVICE_LABEL_LEN,
     DeviceLabelError,
@@ -11,7 +11,7 @@ from .identity import (
 )
 from .platform import PLATFORMS, DevicePlatform, excluded_apps, is_platform, personalize_config
 from .qr import render_config_qr
-from .schemas import AwgClientPayload, AwgPeer
+from .schemas import AwgPeer
 from .service import (
     IssuedConfig,
     add_device,
@@ -35,9 +35,7 @@ __all__ = [
     "personalize_config",
     "MAX_DEVICE_LABEL_LEN",
     "AwgAccessRevokedError",
-    "AwgAuthError",
     "AwgClient",
-    "AwgClientPayload",
     "AwgDeviceLimitError",
     "AwgError",
     "AwgPeer",

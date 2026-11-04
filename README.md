@@ -1,49 +1,27 @@
 # BEST_sicret
 
-Монорепозиторий сервисов СПб BEST. Включает Telegram-бота для работы с внутренними
-документами и сервис синхронизации участников из Google Sheets в Postgres.
+Монорепозиторий сервисов СПб BEST: Telegram-бот для внутренних документов, имущества, возмещений и VPN и сервис
+синхронизации участников из Google Sheets в Postgres.
 
-## Структура
+| Каталог               | Что это                                                            |
+|-----------------------|--------------------------------------------------------------------|
+| `bot/`                | Telegram-бот на aiogram 3 и aiogram-dialog 2 ([README](bot/README.md)) |
+| `members_sync/`       | Ежедневная синхронизация участников ([README](members_sync/README.md)) |
+| `packages/db/`        | `best_db`: все модели и единый alembic ([README](packages/db/README.md)) |
+| `postgres/`, `redis/` | Конфиги `.env` для docker-compose                                  |
 
-| Каталог               | Что это                                                                                                        |
-|-----------------------|----------------------------------------------------------------------------------------------------------------|
-| `bot/`                | Telegram-бот (aiogram 3 + aiogram-dialog 2): приказы, имущество, возмещения. См. `bot/README.md`.              |
-| `members_sync/`       | Сервис ежедневной синхронизации участников из Google Sheets. См. `members_sync/README.md` и `ARCHITECTURE.md`. |
-| `packages/db/`        | `best_db` — единственный владелец схемы Postgres: все модели + единый alembic. См. `packages/db/README.md`.    |
-| `postgres/`, `redis/` | Конфиги (`.env`) сервисов БД и кэша для docker-compose.                                                        |
-
-Каждый сервис — отдельный проект (своя venv/зависимости, свой engine), общая только
-схема БД (пакет `best_db`, подключается как зависимость). Единые команды разработки
-собраны в корневом `Makefile` (`make help`).
+Каждый сервис - отдельный проект со своим venv и engine, общая только схема БД.
 
 ## Быстрый старт
 
+Нужны `uv` и `docker compose`.
+
 ```bash
-# Подготовить окружение с нуля (проверка зависимостей, .env, venv, хуки, миграции)
-make init
-
-# Весь стек (bot + members_sync + postgres + redis) в контейнерах
-make up                  # = docker compose up -d --build
-
-# Только postgres + redis для локальной разработки
-make infra
-
-# Локальный запуск сервисов (на dev.env; конфиги создаются через `make env`)
-make run-bot
-make run-sync
-make run-sync-dry        # парсинг боевых данных в JSON без записи в БД
-
-# Миграции (единый alembic в packages/db)
-make migration m="..."   # новая ревизия
-make migrate             # применить локально
-make migrate-docker      # в сети compose
-
-# Качество кода и тесты
-make lint
-make format
-make test                # юнит-тесты members_sync
+make init       # с нуля: проверка зависимостей, .env, venv, хуки, инфраструктура, миграции
+make run-bot    # бот локально, postgres и redis в docker
+make test       # тесты бота и members_sync
+make lint       # проверка кода
+make help       # все команды
 ```
 
-`make help` — полный список целей.
-
-Подробные инструкции и архитектура — в README конкретного сервиса.
+Правила кода - в [CLEAN_CODE.md](CLEAN_CODE.md), обзор архитектуры - в [CLAUDE.md](CLAUDE.md).

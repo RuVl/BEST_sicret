@@ -1,136 +1,25 @@
 import asyncio
 from types import SimpleNamespace
 
-import pytest
+import httpx
+from py3xui import BulkResult, BulkSkip, ClientDetails
 
-from includes.vpn import ClientDetails, XuiClient, XuiClientNotFoundError, XuiError
 from includes.vpn import service as vpn_service
 from jobs import revoke_vpn
-from tests.fakes import FakeBot, FakeL10n, FakeSessionMaker
+from tests.fakes import FakeBot, FakeL10n, FakeSessionMaker, fake_panel_api
 from utils import split_message
 
 
-class _HangingSession:
-    """aiohttp-сессия, у которой истёк общий таймаут: aiohttp бросает голый TimeoutError."""
+def _revoke_panel(broken: set[str] = frozenset(), missing: set[str] = frozenset()) -> SimpleNamespace:
+    """Панель для джоба отзыва: ``broken`` - панель пропускает клиента, ``missing`` - клиента уже нет."""
 
-    closed = False
+    def bulk_disable(emails: list[str]) -> BulkResult:
+        return BulkResult(skipped=[BulkSkip(email=email, reason="skipped") for email in emails if email in broken])
 
-    def request(self, *args, **kwargs):
-        raise TimeoutError
-
-
-class TestPanelTimeout:
-    def test_total_timeout_is_a_panel_error(self):
-        # Иначе исключение пролетает мимо except XuiError в джобах и диалогах.
-        client = XuiClient("https://panel", "token", "https://sub")
-        client._session = _HangingSession()
-
-        with pytest.raises(XuiError, match="не ответила"):
-            asyncio.run(client.get_client_details("ivan@best-eu.org"))
-
-
-class _CannedPanel(XuiClient):
-    """Клиент панели, у которого вместо сети - заранее заготовленные ``obj`` по префиксу пути."""
-
-    def __init__(self, responses: dict[str, object]):
-        super().__init__("https://panel", "token", "https://sub")
-        self._responses = responses
-        self.requests: list[tuple[str, object]] = []
-
-    async def _request(self, method, path, json=None):
-        self.requests.append((path, json))
-        for prefix, obj in self._responses.items():
-            if path.startswith(prefix):
-                return obj
-        raise AssertionError(f"неожиданный запрос {path}")
-
-
-_CLIENT = {"email": "ivan@best-eu.org", "uuid": "u1", "subId": "s1", "privateKey": "secret-key"}
-
-
-class TestPanelResponseValidation:
-    @pytest.mark.parametrize(
-        "obj",
-        [
-            {"client": _CLIENT, "inboundIds": [3], "tunnelAllowedIPs": {"3": None}},
-            {"client": _CLIENT, "inboundIds": "3"},
-            {"client": "не объект"},
-            ["не", "объект"],
-        ],
+    return fake_panel_api(
+        get_details=lambda email: None if email in missing else _details(email=email),
+        bulk_disable=bulk_disable,
     )
-    def test_malformed_client_is_a_panel_error(self, obj):
-        # Иначе pydantic.ValidationError пролетает мимо except XuiError/AwgError в диалогах и джобах.
-        panel = _CannedPanel({"/clients/get/": obj})
-
-        with pytest.raises(XuiError, match="не по схеме"):
-            asyncio.run(panel.get_client_details("ivan@best-eu.org"))
-
-    def test_error_does_not_leak_client_secrets(self):
-        panel = _CannedPanel({"/clients/get/": {"client": _CLIENT, "inboundIds": [3], "tunnelAllowedIPs": {"3": None}}})
-
-        with pytest.raises(XuiError) as caught:
-            asyncio.run(panel.get_client_details("ivan@best-eu.org"))
-
-        assert "secret-key" not in str(caught.value)
-
-    def test_null_tunnel_addresses_are_tolerated(self):
-        panel = _CannedPanel({"/clients/get/": {"client": _CLIENT, "inboundIds": [3], "tunnelAllowedIPs": None}})
-
-        details = asyncio.run(panel.get_client_details("ivan@best-eu.org"))
-
-        assert details is not None
-        assert details.tunnel_allowed_ips == {}
-
-    def test_malformed_traffic_is_a_panel_error(self):
-        panel = _CannedPanel({"/clients/traffic/": {"up": "много"}})
-
-        with pytest.raises(XuiError, match="не по схеме"):
-            asyncio.run(panel.get_traffic("ivan@best-eu.org"))
-
-
-class TestBulkSetEnabled:
-    def test_skipped_emails_are_an_error(self):
-        # 3x-ui на per-email провал отвечает success=true и перечисляет пропущенных в skipped.
-        skipped = [{"email": "b@best-eu.org", "reason": "traffic writer queue full"}]
-        panel = _CannedPanel({"/clients/bulkDisable": {"changed": 1, "skipped": skipped}})
-
-        with pytest.raises(XuiError, match=r"b@best-eu\.org \(traffic writer queue full\)"):
-            asyncio.run(panel.set_enabled_many(["a@best-eu.org", "b@best-eu.org"], False))
-
-    @pytest.mark.parametrize(
-        "obj", [{"changed": 2}, {"changed": 2, "skipped": None}, {"changed": 2, "skipped": []}, None]
-    )
-    def test_nothing_skipped_is_success(self, obj):
-        panel = _CannedPanel({"/clients/bulkEnable": obj})
-
-        asyncio.run(panel.set_enabled_many(["a@best-eu.org", "b@best-eu.org"], True))
-
-        assert panel.requests == [("/clients/bulkEnable", {"emails": ["a@best-eu.org", "b@best-eu.org"]})]
-
-    def test_skipped_single_client_is_an_error(self):
-        panel = _CannedPanel(
-            {
-                "/clients/get/": {"client": _CLIENT, "inboundIds": [1]},
-                "/clients/bulkDisable": {"changed": 0, "skipped": [{"email": "ivan@best-eu.org", "reason": "x"}]},
-            }
-        )
-
-        with pytest.raises(XuiError):
-            asyncio.run(panel.set_enabled("ivan@best-eu.org", False))
-
-
-class _RevokePanel:
-    """Панель для джоба отзыва: ``broken`` - отключение падает, ``missing`` - клиента уже нет."""
-
-    def __init__(self, broken: set[str] = frozenset(), missing: set[str] = frozenset()):
-        self._broken = broken
-        self._missing = missing
-
-    async def set_enabled(self, email: str, enabled: bool) -> None:
-        if email in self._missing:
-            raise XuiClientNotFoundError(email)
-        if email in self._broken:
-            raise XuiError("skipped")
 
 
 def _subscription(n: int) -> SimpleNamespace:
@@ -151,7 +40,7 @@ def _run_revoke(monkeypatch, subscriptions, panel, sessions: FakeSessionMaker) -
     monkeypatch.setattr(revoke_vpn, "async_session", sessions)
     monkeypatch.setattr(revoke_vpn, "list_subscriptions_to_revoke", list_subscriptions_to_revoke)
     monkeypatch.setattr(revoke_vpn, "get_hr_id", get_hr_id)
-    monkeypatch.setattr(revoke_vpn, "get_xui_client", lambda: panel)
+    monkeypatch.setattr(revoke_vpn, "get_xui_api", lambda: panel)
 
     bot = FakeBot()
     asyncio.run(revoke_vpn.revoke_inactive_subscriptions(bot, FakeL10n()))
@@ -163,7 +52,7 @@ class TestRevokeJob:
         # Панель отказала на p2, БД - на p3: остальные закоммичены каждый сам и уведомлены ровно по разу.
         subs = [_subscription(n) for n in range(1, 6)]
         sessions = FakeSessionMaker(fail_commit=lambda row: row.id == 3)
-        panel = _RevokePanel(broken={"p2@best-eu.org"}, missing={"p5@best-eu.org"})
+        panel = _revoke_panel(broken={"p2@best-eu.org"}, missing={"p5@best-eu.org"})
         bot = _run_revoke(monkeypatch, subs, panel, sessions)
 
         assert [row.id for row in sessions.committed] == [1, 4, 5]
@@ -176,21 +65,27 @@ class TestRevokeJob:
     def test_notice_is_sent_only_after_commit(self, monkeypatch):
         # Уведомили, а статус не сохранился - следующей ночью человеку пришло бы второе уведомление.
         sessions = FakeSessionMaker(fail_commit=lambda row: True)
-        bot = _run_revoke(monkeypatch, [_subscription(1)], _RevokePanel(), sessions)
+        bot = _run_revoke(monkeypatch, [_subscription(1)], _revoke_panel(), sessions)
 
         assert all(chat_id == 1 for chat_id, _ in bot.sent)
 
+    def test_panel_404_is_a_failure_not_a_missing_client(self, monkeypatch):
+        # Неверный XUI_BASE_URL даёт 404 на всё. Считать это «клиента нет» значило бы пометить подписку
+        # отозванной, оставив ключ рабочим, и ничего не сказать в сводке.
+        request = httpx.Request("GET", "https://panel/wrong/panel/api/clients/get/x")
+        not_found = httpx.HTTPStatusError("404", request=request, response=httpx.Response(404, request=request))
+        sessions = FakeSessionMaker()
+        bot = _run_revoke(monkeypatch, [_subscription(1)], fake_panel_api(get_details=not_found), sessions)
+
+        assert sessions.committed == []
+        report = "\n".join(text for chat_id, text in bot.sent if chat_id == 1)
+        assert "'revoked': 0" in report
+        assert "'failed': 1" in report
+
 
 def _details(**client) -> ClientDetails:
-    return ClientDetails.model_validate({"client": {"email": "ivan@best-eu.org", "uuid": "u1", "subId": "s1"} | client})
-
-
-class _Panel:
-    def __init__(self, clients: dict[str, ClientDetails]):
-        self._clients = clients
-
-    async def get_client_details(self, email: str) -> ClientDetails | None:
-        return self._clients.get(email)
+    base = {"email": "ivan@best-eu.org", "enable": True, "uuid": "u1", "subId": "s1"}
+    return ClientDetails.model_validate({"client": base | client})
 
 
 def _resolve(monkeypatch, known_person_id: int | None, **client) -> str:
@@ -200,7 +95,8 @@ def _resolve(monkeypatch, known_person_id: int | None, **client) -> str:
     monkeypatch.setattr(vpn_service, "get_subscription_by_email", get_subscription_by_email)
     person = SimpleNamespace(id=7, telegram_id=100, full_name="Иванов Иван")
     member = SimpleNamespace(best_email="ivan@best-eu.org", full_name_ru="Иванов Иван")
-    panel = _Panel({"ivan@best-eu.org": _details(**client)})
+    clients = {"ivan@best-eu.org": _details(**client)}
+    panel = fake_panel_api(get_details=clients.get)
     email, _ = asyncio.run(vpn_service._resolve_target(None, panel, person, member))
     return email
 

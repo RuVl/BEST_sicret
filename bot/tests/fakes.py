@@ -1,5 +1,8 @@
 """Двойники внешних сервисов для тестов: без сети, без Redis и без Telegram."""
 
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
 from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy.exc import OperationalError
 
@@ -108,3 +111,15 @@ class FakeBot:
         if error is not None:
             raise error
         self.sent.append((chat_id, text))
+
+
+def fake_panel_api(**methods) -> SimpleNamespace:
+    """Клиент панели вместо ``py3xui.AsyncApi``. Значение - ответ метода ``api.client``, исключение или функция."""
+    client = AsyncMock()
+    for name, answer in methods.items():
+        mock = getattr(client, name)
+        if isinstance(answer, Exception) or callable(answer):
+            mock.side_effect = answer
+        else:
+            mock.return_value = answer
+    return SimpleNamespace(client=client)

@@ -17,7 +17,6 @@ from includes import PickleRedisStorage, get_fluent_localization, get_redis_stor
 from includes.awg import excluded_apps
 from includes.config_hide import setup_config_hides
 from includes.pending_hides import close_pending_hides
-from includes.vpn import close_xui_client
 from jobs import revoke_inactive_subscriptions, suspend_inactive_awg_access
 from middlewares import register_middlewares
 
@@ -122,8 +121,6 @@ async def main():
     finally:
         if scheduler is not None:
             scheduler.shutdown(wait=False)
-        # Клиент AmneziaWG ходит через ту же сессию 3x-ui - закрывать его отдельно не нужно.
-        await close_xui_client()
         await close_pending_hides()
         await bot.session.close()
         await logger.ainfo("Bot stopped.")

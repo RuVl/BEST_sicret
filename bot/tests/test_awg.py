@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
+from py3xui import ClientDetails, ClientTraffic
 
 from includes.awg import (
     AwgError,
@@ -17,7 +18,6 @@ from includes.awg import (
     render_config_qr,
 )
 from includes.awg import service as awg_service
-from includes.vpn import ClientDetails, ClientTraffic
 from jobs import revoke_vpn, suspend_awg
 from tests.fakes import FakeBot, FakeL10n, FakeSessionMaker
 
@@ -134,11 +134,6 @@ class TestAwgPeer:
     def test_falls_back_to_shared_address(self):
         peer = AwgPeer.from_panel(_details(tunnelAllowedIPs={}), 3, None)
         assert peer.address == "10.0.0.9/32"
-
-    def test_keepalive_number_and_range(self):
-        assert _peer(keepAlive=25).keep_alive == "25"
-        assert _peer(keepAlive="20-30").keep_alive == "20-30"
-        assert _peer(keepAlive=0).keep_alive == ""
 
     def test_traffic_and_last_online(self):
         traffic = ClientTraffic.model_validate({"up": 10, "down": 20, "lastOnline": 1_793_407_202_000})
@@ -274,7 +269,7 @@ class _UniqueEmailPanel:
     async def find_peer(self, name: str) -> AwgPeer | None:
         if name not in self.clients:
             return None
-        return AwgPeer(email=name, privateKey="k", address="10.70.0.2/32")
+        return AwgPeer(email=name, private_key="k", address="10.70.0.2/32")
 
     async def create_peer(self, name: str, comment: str, telegram_id: int) -> None:
         if name in self.clients:
