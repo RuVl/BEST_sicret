@@ -1,9 +1,9 @@
+from best_db.models import AwgAccess, LbgMember, Person
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from database.methods.member.predicates import left_lbg
-from database.models import AwgAccess, LbgMember, Person
 
 
 async def list_accesses_to_suspend(session: AsyncSession) -> list[AwgAccess]:

@@ -10,6 +10,7 @@
 from uuid import uuid4
 
 import structlog
+from best_db.models import LbgMember, Person, VpnSubscription
 from py3xui import AsyncApi, Client, ClientDetails, ClientEntry
 from sqlalchemy.ext.asyncio import AsyncSession
 from structlog.typing import FilteringBoundLogger
@@ -21,7 +22,6 @@ from database.methods.vpn_subscription import (
     mark_active,
     set_client_identity,
 )
-from database.models import LbgMember, Person, VpnSubscription
 from env import settings
 from includes.vpn.identity import belongs_to_person, build_client_email, fallback_client_email
 from includes.vpn.panel import raise_for_skipped, set_clients_enabled

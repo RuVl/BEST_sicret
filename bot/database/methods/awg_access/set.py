@@ -1,8 +1,7 @@
 from datetime import UTC, datetime
 
+from best_db.models import AwgAccess, AwgDevice
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from database.models import AwgAccess, AwgDevice
 
 
 async def mark_granted(session: AsyncSession, access: AwgAccess) -> None:

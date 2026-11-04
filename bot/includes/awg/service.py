@@ -14,6 +14,7 @@ import asyncio
 from dataclasses import dataclass
 
 import structlog
+from best_db.models import AwgAccess, AwgDevice, Person
 from sqlalchemy.ext.asyncio import AsyncSession
 from structlog.typing import FilteringBoundLogger
 
@@ -26,7 +27,6 @@ from database.methods.awg_access import (
     set_device_client_name,
     set_device_label,
 )
-from database.models import AwgAccess, AwgDevice, Person
 from env import settings
 from includes.awg.client import AwgClient
 from includes.awg.exceptions import AwgAccessRevokedError, AwgDeviceLimitError, AwgError

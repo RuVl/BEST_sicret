@@ -9,7 +9,8 @@
 from collections.abc import Iterable
 from typing import Literal
 
-from database.models import AwgDevice
+from best_db.models import AwgDevice
+
 from includes.vpn.identity import build_client_email, fallback_client_email, is_valid_client_id
 
 MAX_CLIENT_NAME_LEN: int = AwgDevice.__table__.c.client_name.type.length

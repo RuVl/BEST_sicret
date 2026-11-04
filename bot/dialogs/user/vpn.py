@@ -18,6 +18,7 @@ from aiogram.types import CallbackQuery
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Button, Cancel, SwitchTo, Url
 from aiogram_dialog.widgets.text import Format
+from best_db.models import VpnSubscription
 from fluent.runtime import FluentLocalization
 from sqlalchemy.exc import IntegrityError
 from structlog.typing import FilteringBoundLogger
@@ -26,7 +27,6 @@ from database.main import async_session
 from database.methods.awg_access import get_access_by_person
 from database.methods.person import get_person_with_member
 from database.methods.vpn_subscription import get_subscription_by_person
-from database.models import VpnSubscription
 from dialogs.user.vpn_awg import awg_allowed, awg_windows
 from includes.vpn import PANEL_ERRORS, ensure_subscription, get_xui_api, panel_error_text, subscription_url
 from middlewares import L10N_FORMAT_KEY, LOGGING_KEY
