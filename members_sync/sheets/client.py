@@ -5,5 +5,7 @@ from env import GoogleKeys
 
 def open_spreadsheet() -> gspread.Spreadsheet:
     """Открыть таблицу по ключу через сервис-аккаунт."""
+    if not GoogleKeys.SPREADSHEET_KEY:
+        raise ValueError("SPREADSHEET_KEY не задан: укажите ключ таблицы в members_sync/.env")
     gc = gspread.service_account(filename=GoogleKeys.API_CREDENTIALS_FILE)
     return gc.open_by_key(GoogleKeys.SPREADSHEET_KEY)

@@ -5,6 +5,7 @@
 
 # actions
 back-btn = Назад
+validation-error-alert = Проверьте поле «{ $field }»: значение не подходит.
 cancel-btn = Отмена
 delete-btn = Удалить
 add-item-btn = Добавить элемент

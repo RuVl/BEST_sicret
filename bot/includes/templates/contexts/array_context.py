@@ -15,7 +15,8 @@ class ArrayContext(BaseContext):
         self._children: list[BaseContext] = []
 
     def get_value(self) -> list:
-        return [child.get_value() for child in self._children]
+        # Элемент добавили, но не заполнили: в документ он не идёт.
+        return [value for child in self._children if (value := child.get_value()) is not None]
 
     def clear(self):
         self._children.clear()
@@ -28,7 +29,7 @@ class ArrayContext(BaseContext):
         return self._children[i] if 0 <= i < len(self._children) else None
 
     def filled_required(self) -> bool:
-        if self.required and len(self._children) == 0:
+        if self.required and not self.get_value():
             return False
         return all(child.filled_required() for child in self._children)
 

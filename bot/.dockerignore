@@ -1,6 +1,8 @@
 # секреты и шаблоны env (приходят из env_file в рантайме)
 .env
 .env.dist
+dev.env
+dev.env.dist
 
 # venv и кэши
 .venv/
