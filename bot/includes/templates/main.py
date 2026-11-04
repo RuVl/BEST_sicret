@@ -29,10 +29,11 @@ def get_formatter(type_name: str) -> "Formatter":
 
 @lru_cache
 def get_validator(format_name: str) -> "Validator":
-    from .validators import DateValidator, DummyValidator
+    from .validators import DateValidator, DummyValidator, TimeValidator
 
     mapping = {
         "date": DateValidator(),
+        "time": TimeValidator(),
     }
     return mapping.get(format_name, DummyValidator(format_name))
 
