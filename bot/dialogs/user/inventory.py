@@ -1,10 +1,11 @@
 from operator import attrgetter
 from typing import Any
 
+from aiogram import F
 from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import ManagedTextInput, TextInput
-from aiogram_dialog.widgets.kbd import Back, Button, ScrollingGroup, Select
+from aiogram_dialog.widgets.kbd import Back, Button, Cancel, ScrollingGroup, Select
 from aiogram_dialog.widgets.text import Format
 from fluent.runtime import FluentLocalization
 from structlog.typing import FilteringBoundLogger
@@ -21,6 +22,7 @@ BTN_TRUNCATE_LEN = 25
 # ========== Геттер: список категорий ==========
 async def get_categories_data(
     dialog_manager: DialogManager,
+    l10n: FluentLocalization,
     **kwargs,
 ) -> dict[str, Any]:
     categories_map = dialog_manager.dialog_data.get("categories_map", {})
@@ -35,6 +37,7 @@ async def get_categories_data(
     is_selection_mode = dialog_manager.start_data.get("selection_mode", False) if dialog_manager.start_data else False
 
     return {
+        "text": l10n.format_value("choose-category" if categories_map else "inventory-empty"),
         "categories": categories_map.items(),
         "is_selection_mode": is_selection_mode,
     }
@@ -200,7 +203,7 @@ async def on_item_chosen(
 inventory_dialog = Dialog(
     # --- Окно 1: выбор Category ---
     Window(
-        L10nFormat("choose-category"),
+        Format("{text}"),
         ScrollingGroup(
             Select(
                 Format("{item[1]}"),
@@ -221,6 +224,8 @@ inventory_dialog = Dialog(
             on_click=lambda c, b, m: m.done(),
             when="is_selection_mode",
         ),
+        # Без неё из пустого списка не выйти: кроме категорий в окне нет ни одной кнопки.
+        Cancel(L10nFormat("back-btn"), when=~F["is_selection_mode"]),
         getter=get_categories_data,
         state=ViewInventory.SELECT_CATEGORY,
     ),

@@ -90,9 +90,9 @@ async def send_apply(
     raw_data = ctx.generate_context()
     schema = load_schema(DIALOG_SCHEMA)
 
-    success, error_msg = validate_data(schema, raw_data)
+    success, invalid_field = validate_data(schema, raw_data)
     if not success:
-        await clb.answer(error_msg, show_alert=True)
+        await clb.answer(l10n.format_value("validation-error-alert", args={"field": invalid_field}), show_alert=True)
         return
 
     raw_data["bill_filename"] = dialog_manager.dialog_data.get("bill_filename")

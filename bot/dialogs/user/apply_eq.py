@@ -233,9 +233,9 @@ async def on_submit(clb: CallbackQuery, widget: Button, dialog_manager: DialogMa
     schema = load_schema(DIALOG_SCHEMA)
     data = context.generate_context()
 
-    success, error_msg = validate_data(schema, data)
+    success, invalid_field = validate_data(schema, data)
     if not success:
-        await clb.answer(error_msg, show_alert=True)
+        await clb.answer(l10n.format_value("validation-error-alert", args={"field": invalid_field}), show_alert=True)
         return
 
     async with async_session() as session:

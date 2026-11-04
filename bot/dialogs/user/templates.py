@@ -94,7 +94,10 @@ async def on_action_selected(_clb: CallbackQuery, _select: Select, dialog_manage
     context = context.do(action)
 
     dialog_manager.dialog_data.update(context=context)
-    await dialog_manager.switch_to(CreateByTemplate.VIEW)
+    # Новый элемент массива может быть примитивом: ответ на него принимает только окно ввода.
+    await dialog_manager.switch_to(
+        CreateByTemplate.ADD if isinstance(context, PrimitiveContext) else CreateByTemplate.VIEW,
+    )
 
 
 async def response_document(clb: CallbackQuery, _select: Select, dialog_manager: DialogManager):
@@ -104,9 +107,9 @@ async def response_document(clb: CallbackQuery, _select: Select, dialog_manager:
 
     data = context.generate_context()
     schema = load_template_schema(template_name)
-    success, error_msg = validate_data(schema, data)
+    success, invalid_field = validate_data(schema, data)
     if not success:
-        await clb.answer(error_msg, show_alert=True)
+        await clb.answer(l10n.format_value("validation-error-alert", args={"field": invalid_field}), show_alert=True)
         return
 
     doc = generate_document(template_name, data)

@@ -1,4 +1,5 @@
 choose-category = Выберите категорию имущества
+inventory-empty = Имущества пока нет\.
 
 items-list = *Категория: { $category_name }*
 search-hint = _Для поиска введите название предмета_
