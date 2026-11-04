@@ -7,9 +7,8 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
+from py3xui import ClientDetails, ClientTraffic
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-
-from includes.vpn.schemas import ClientDetails, ClientTraffic
 
 # 3x-ui отмечает клиента онлайн по трафику, а keepalive у нас 25 с - три минуты тишины значат «не в сети».
 ONLINE_WINDOW = timedelta(minutes=3)
@@ -65,43 +64,21 @@ class AwgPeer(BaseModel):
         именно этого инбаунда берём из ``tunnelAllowedIPs``, а общий - только запасным.
         """
         client = details.client
-        tunnel = details.tunnel_allowed_ips.get(str(inbound_id))
-        address = tunnel if tunnel is not None else client.get("allowedIPs")
-        if isinstance(address, list):
-            address = ", ".join(address)
+        tunnel = details.tunnel_allowed_ips.get(inbound_id)
+        address = tunnel if tunnel is not None else ", ".join(client.allowed_ips)
 
         last_online = None
         if traffic is not None and traffic.last_online > 0:
             last_online = datetime.fromtimestamp(traffic.last_online / 1000, UTC)
-        return cls.model_validate(
-            {
-                **client,
-                "address": address or "",
-                "up": traffic.up if traffic else 0,
-                "down": traffic.down if traffic else 0,
-                "last_online_at": last_online,
-            }
+        return cls(
+            email=client.email,
+            enable=client.enable,
+            private_key=client.private_key,
+            public_key=client.public_key,
+            preshared_key=client.pre_shared_key,
+            keep_alive=client.keep_alive,
+            address=address,
+            up=traffic.up if traffic else 0,
+            down=traffic.down if traffic else 0,
+            last_online_at=last_online,
         )
-
-
-class AwgClientPayload(BaseModel):
-    """Тело нового устройства для ``POST /panel/api/clients/add``.
-
-    Ключей и адреса нет намеренно: панель генерирует пару ключей и выдаёт свободный адрес
-    из подсети инбаунда сама. Повторный вызов с тем же email ключи не перевыпускает.
-    """
-
-    model_config = ConfigDict(populate_by_name=True)
-
-    email: str
-    sub_id: str = Field(alias="subId")
-    enable: bool = True
-    tg_id: int = Field(0, alias="tgId")
-    comment: str = ""
-    group: str = ""
-    keep_alive: int = Field(DEFAULT_KEEPALIVE, alias="keepAlive")
-    # Лимиты VLESS устройству не нужны: один ключ и так работает только на одном устройстве.
-    limit_ip: int = Field(0, alias="limitIp")
-    total_bytes: int = Field(0, alias="totalGB")
-    expiry_time: int = Field(0, alias="expiryTime")
-    reset: int = 0

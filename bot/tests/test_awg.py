@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
+from py3xui import ClientDetails, ClientTraffic
 
 from includes.awg import (
     AwgError,
@@ -17,7 +18,6 @@ from includes.awg import (
     render_config_qr,
 )
 from includes.awg import service as awg_service
-from includes.vpn import ClientDetails, ClientTraffic
 from jobs import revoke_vpn, suspend_awg
 from tests.fakes import FakeBot, FakeL10n, FakeSessionMaker
 

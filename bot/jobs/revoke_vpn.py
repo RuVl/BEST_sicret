@@ -13,13 +13,14 @@ from collections.abc import Awaitable, Callable
 import structlog
 from aiogram import Bot
 from fluent.runtime import FluentLocalization
+from py3xui import AsyncApi
 from sqlalchemy.ext.asyncio import AsyncSession
 from structlog.typing import FilteringBoundLogger
 
 from database.main import async_session
 from database.methods.vpn_subscription import list_subscriptions_to_revoke, mark_revoked
 from includes.notify import notify
-from includes.vpn import XuiClient, XuiClientNotFoundError, XuiError, get_xui_client
+from includes.vpn import PANEL_ERRORS, get_xui_api, panel_error_text, set_clients_enabled
 from utils import escape_mdv2, split_message
 from utils.board import get_hr_id
 
@@ -39,17 +40,16 @@ async def save_mark[Row](mark: Callable[[AsyncSession, Row], Awaitable[None]], r
         await session.commit()
 
 
-async def _disable_client(client: XuiClient, email: str) -> bool:
+async def _disable_client(api: AsyncApi, email: str) -> bool:
     """Выключить клиента в панели. ``False`` - его там уже нет (снесли в админке), выключать нечего."""
-    try:
-        await client.set_enabled(email, False)
-    except XuiClientNotFoundError:
+    if await api.client.get_details(email) is None:
         return False
+    await set_clients_enabled(api, [email], False)
     return True
 
 
 async def revoke_inactive_subscriptions(bot: Bot, l10n: FluentLocalization) -> None:
-    client = get_xui_client()
+    api = get_xui_api()
     revoked: list[str] = []
     failed: list[str] = []
 
@@ -60,11 +60,12 @@ async def revoke_inactive_subscriptions(bot: Bot, l10n: FluentLocalization) -> N
     for subscription in subscriptions:
         email = subscription.xui_email
         try:
-            found = await _disable_client(client, email)
+            found = await _disable_client(api, email)
             await save_mark(mark_revoked, subscription)
-        except XuiError as exc:
-            failed.append(f"{email}: {exc}")
-            await logger.aerror("vpn-revoke-failed", email=email, error=str(exc))
+        except PANEL_ERRORS as exc:
+            error = panel_error_text(exc)
+            failed.append(f"{email}: {error}")
+            await logger.aerror("vpn-revoke-failed", email=email, error=error)
             continue
         except Exception as exc:
             # Сбой БД или ошибка в коде на одном человеке не должны оставить остальных с работающим ключом.

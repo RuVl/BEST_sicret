@@ -16,7 +16,13 @@ ENV PATH="/app/.venv/bin:$PATH"
 # Dependencies
 COPY --from=database . ../packages/db
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+# py3xui ставится из git-тега, а в slim-образе git нет. Нужен только на время установки.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates \
+    && uv sync --frozen --no-dev --no-install-project \
+    && apt-get purge -y git \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
 # Whole project
 COPY . ./

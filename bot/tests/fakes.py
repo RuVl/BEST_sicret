@@ -1,5 +1,9 @@
 """Двойники внешних сервисов для тестов: без сети, без Redis и без Telegram."""
 
+import json
+
+import httpx
+from py3xui import AsyncApi
 from redis.exceptions import ConnectionError as RedisConnectionError
 from sqlalchemy.exc import OperationalError
 
@@ -108,3 +112,43 @@ class FakeBot:
         if error is not None:
             raise error
         self.sent.append((chat_id, text))
+
+
+class FakePanel:
+    """Панель 3x-ui за настоящим py3xui: подменён только транспорт httpx, разбор ответов - библиотечный.
+
+    ``routes`` - ответы по префиксу пути после ``/panel/api``. Значение: ``obj`` успешного ответа,
+    готовый ``httpx.Response`` или исключение транспорта. Запросы копятся в ``requests``.
+    """
+
+    def __init__(self, monkeypatch, routes: dict[str, object]) -> None:
+        self._routes = routes
+        self.requests: list[tuple[str, object]] = []
+        real_client = httpx.AsyncClient
+
+        def client_factory(**kwargs) -> httpx.AsyncClient:
+            return real_client(transport=httpx.MockTransport(self._handle), **kwargs)
+
+        monkeypatch.setattr(httpx, "AsyncClient", client_factory)
+        self.api = AsyncApi("https://panel/base", token="token", timeout=15)
+        self.api.max_retries = 1
+
+    def _handle(self, request: httpx.Request) -> httpx.Response:
+        path = request.url.raw_path.decode().split("/panel/api", 1)[1]
+        self.requests.append((path, json.loads(request.content) if request.content else None))
+        for prefix, answer in self._routes.items():
+            if path.startswith(prefix):
+                if isinstance(answer, Exception):
+                    raise answer
+                if isinstance(answer, httpx.Response):
+                    return answer
+                return httpx.Response(200, json={"success": True, "msg": "", "obj": answer})
+        raise AssertionError(f"неожиданный запрос {path}")
+
+    def body(self, prefix: str):
+        return next(body for path, body in self.requests if path.startswith(prefix))
+
+
+def panel_failure(msg: str) -> httpx.Response:
+    """Ответ панели с ``success=false``: так она сообщает об отсутствующем клиенте и о дублях."""
+    return httpx.Response(200, json={"success": False, "msg": msg, "obj": None})

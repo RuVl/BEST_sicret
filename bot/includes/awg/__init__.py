@@ -11,7 +11,7 @@ from .identity import (
 )
 from .platform import PLATFORMS, DevicePlatform, excluded_apps, is_platform, personalize_config
 from .qr import render_config_qr
-from .schemas import AwgClientPayload, AwgPeer
+from .schemas import AwgPeer
 from .service import (
     IssuedConfig,
     add_device,
@@ -37,7 +37,6 @@ __all__ = [
     "AwgAccessRevokedError",
     "AwgAuthError",
     "AwgClient",
-    "AwgClientPayload",
     "AwgDeviceLimitError",
     "AwgError",
     "AwgPeer",
