@@ -34,6 +34,7 @@ from aiogram_dialog.widgets.input import ManagedTextInput, MessageInput, TextInp
 from aiogram_dialog.widgets.kbd import Button, Group, Row, Select, SwitchTo, Url
 from aiogram_dialog.widgets.media import DynamicMedia
 from aiogram_dialog.widgets.text import Format
+from best_db.models import AwgAccess, AwgDevice, Person
 from fluent.runtime import FluentLocalization
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,7 +43,6 @@ from structlog.typing import FilteringBoundLogger
 from database.main import async_session
 from database.methods.awg_access import create_access, get_access_by_person, set_device_platform
 from database.methods.person import get_person_with_member
-from database.models import AwgAccess, AwgDevice, Person
 from env import settings
 from includes.awg import (
     MAX_DEVICE_LABEL_LEN,

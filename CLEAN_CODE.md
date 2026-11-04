@@ -72,7 +72,7 @@ async def on_click(clb, widget, dialog_manager):
 - Методы репозитория - маленькие `async def`, принимают `AsyncSession` и содержат только запрос.
 - Коммитит вызывающий, внутри метода `commit()` не бывает.
 - После закрытия сессии ленивых подгрузок нет: связи грузим явно (`joinedload`, `selectinload`, `awaitable_attrs`).
-- Новая модель - правка трёх мест: файл в `packages/db`, `best_db/models/__init__.py`, `bot/database/models/__init__.py`.
+- Новая модель - правка двух мест: файл в `packages/db` и `best_db/models/__init__.py`. Импорт - из `best_db.models`.
 - Миграции создаём только через `make migration m="…"` и читаем файл перед `make migrate`.
 
 ## 4. Внешние интеграции
@@ -123,7 +123,7 @@ async def on_click(clb, widget, dialog_manager):
 ## 9. Чек-лист перед PR
 
 - [ ] `make lint` и `make test` зелёные.
-- [ ] Новая модель - во всех трёх местах, миграция прочитана.
+- [ ] Новая модель - в обоих местах, миграция прочитана.
 - [ ] Геттеры не зависят от middleware, доступ проверяется в геттере и обработчике.
 - [ ] Строки в `.ftl`, динамика экранирована.
 - [ ] Новые переменные - в `.env.dist`/`dev.env.dist`.

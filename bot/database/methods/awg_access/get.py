@@ -1,8 +1,7 @@
+from best_db.models import AwgAccess, AwgDevice, Person
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
-
-from database.models import AwgAccess, AwgDevice, Person
 
 
 async def get_access_by_person(session: AsyncSession, person_id: int) -> AwgAccess | None:

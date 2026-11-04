@@ -19,6 +19,8 @@ import argparse
 import asyncio
 import sys
 
+from best_db.models import AwgAccess
+
 from cli.common import CliError, confirm, describe_person, find_person, run, send_bot
 from database.main import async_session
 from database.methods.awg_access import (
@@ -28,7 +30,6 @@ from database.methods.awg_access import (
     mark_revoked,
     set_device_limit,
 )
-from database.models import AwgAccess
 from env import settings
 from includes import get_fluent_localization
 from includes.awg import (

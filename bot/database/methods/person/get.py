@@ -1,8 +1,7 @@
+from best_db.models import Person
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
-
-from database.models import Person
 
 from .set import claim_username
 

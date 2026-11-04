@@ -109,6 +109,7 @@ cython_debug/
 
 # IDE
 .vscode/
+.idea/
 
 # CMake
 cmake-build-*/

@@ -1,6 +1,5 @@
+from best_db.models import AwgAccess, AwgDevice
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from database.models import AwgAccess, AwgDevice
 
 
 async def create_access(session: AsyncSession, *, person_id: int, device_limit: int | None = None) -> AwgAccess:

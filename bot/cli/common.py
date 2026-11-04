@@ -11,11 +11,11 @@ from contextlib import asynccontextmanager
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from best_db.models import Person
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.main import engine
 from database.methods.person import find_person_by_handle
-from database.models import Person
 from env import settings
 from utils import parse_person_handle
 

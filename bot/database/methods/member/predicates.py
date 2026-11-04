@@ -4,9 +4,8 @@
 (джоб отзовёт доступ тому, кому меню его ещё показывает, или наоборот).
 """
 
+from best_db.models import LbgMember, Person
 from sqlalchemy import ColumnElement, or_
-
-from database.models import LbgMember, Person
 
 
 def left_lbg() -> ColumnElement[bool]:

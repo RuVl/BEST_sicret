@@ -17,6 +17,7 @@ from pathlib import Path
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramRetryAfter
+from best_db.models import Person
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from cli.common import CliError, confirm, describe_person, run, send_bot
@@ -29,7 +30,6 @@ from database.methods.person import (
     list_board_persons,
     list_vless_persons,
 )
-from database.models import Person
 from utils import parse_person_handle
 
 # Группы получателей вычисляются из данных, без ручной разметки. Новая группа - запрос

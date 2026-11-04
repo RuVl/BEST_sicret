@@ -5,7 +5,8 @@
 
 from datetime import UTC, datetime
 
-from database.models import LbgMember, Person
+from best_db.models import LbgMember, Person
+
 from utils import current_member
 
 

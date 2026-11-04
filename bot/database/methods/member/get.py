@@ -1,10 +1,9 @@
 import re
 
 from best_db.matching import normalize_telegram_handle
+from best_db.models import LbgMember, Person
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from database.models import LbgMember, Person
 
 # Ключевые слова ролей в свободном тексте LbgMember.status_field (рус./англ.).
 _ROLE_PATTERNS: dict[str, re.Pattern[str]] = {
