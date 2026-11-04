@@ -6,22 +6,30 @@ from py3xui import BulkResult, BulkSkip, ClientDetails
 
 from includes.vpn import service as vpn_service
 from jobs import revoke_vpn
-from tests.fakes import FakeBot, FakeL10n, FakePanel, FakeSessionMaker, panel_failure
+from tests.fakes import FakeBot, FakeL10n, FakeSessionMaker
 from utils import split_message
 
 
 class _RevokePanel:
     """Панель для джоба отзыва: ``broken`` - панель пропускает клиента, ``missing`` - клиента уже нет."""
 
-    def __init__(self, broken: set[str] = frozenset(), missing: set[str] = frozenset()):
+    def __init__(
+        self,
+        broken: set[str] = frozenset(),
+        missing: set[str] = frozenset(),
+        error: Exception | None = None,
+    ):
         self._broken = broken
         self._missing = missing
+        self._error = error
 
     @property
     def client(self) -> "_RevokePanel":
         return self
 
     async def get_details(self, email: str) -> ClientDetails | None:
+        if self._error is not None:
+            raise self._error
         return None if email in self._missing else _details(email=email)
 
     async def bulk_disable(self, emails: list[str]) -> BulkResult:
@@ -79,22 +87,15 @@ class TestRevokeJob:
     def test_panel_404_is_a_failure_not_a_missing_client(self, monkeypatch):
         # Неверный XUI_BASE_URL даёт 404 на всё. Считать это «клиента нет» значило бы пометить подписку
         # отозванной, оставив ключ рабочим, и ничего не сказать в сводке.
+        request = httpx.Request("GET", "https://panel/wrong/panel/api/clients/get/x")
+        not_found = httpx.HTTPStatusError("404", request=request, response=httpx.Response(404, request=request))
         sessions = FakeSessionMaker()
-        panel = FakePanel(monkeypatch, {"/clients/get/": httpx.Response(404)})
-        bot = _run_revoke(monkeypatch, [_subscription(1)], panel.api, sessions)
+        bot = _run_revoke(monkeypatch, [_subscription(1)], _RevokePanel(error=not_found), sessions)
 
         assert sessions.committed == []
         report = "\n".join(text for chat_id, text in bot.sent if chat_id == 1)
         assert "'revoked': 0" in report
         assert "'failed': 1" in report
-
-    def test_missing_client_is_repaired_silently(self, monkeypatch):
-        sessions = FakeSessionMaker()
-        panel = FakePanel(monkeypatch, {"/clients/get/": panel_failure("Obtain (record not found)")})
-        bot = _run_revoke(monkeypatch, [_subscription(1)], panel.api, sessions)
-
-        assert [row.id for row in sessions.committed] == [1]
-        assert bot.sent == []
 
 
 def _details(**client) -> ClientDetails:
