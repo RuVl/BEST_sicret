@@ -1,13 +1,21 @@
 """Оркестратор одного прогона синхронизации."""
 
 import time
+from collections import Counter
 from datetime import UTC, datetime
 
 import structlog
 from gspread.utils import absolute_range_name
 
 from database.main import async_session
-from database.methods.member import deactivate_missing, link_unlinked_persons, upsert_member
+from database.methods.member import (
+    deactivate_missing,
+    link_unlinked_persons,
+    list_identity_keys,
+    list_vanished,
+    rename_identity,
+    upsert_member,
+)
 from env import SyncKeys
 from parsing import fields as F
 from parsing.issues import IssueCollector
@@ -17,19 +25,20 @@ from sheets.column_mapper import resolve_columns
 from sheets.notes import NoteManager
 from sheets.record_reader import iterate_records
 from sheets.spec import SheetSpec, spec_for_title
+from sync.reconcile import ALERT_CELL, match_identity_changes, removal_alert, removal_block_reason
 from sync.report import RunReport, SheetStat, dump_members, write_report
 
 log = structlog.get_logger("members_sync.service")
 
 
-def _fetch_sheet_values(spreadsheet) -> list[tuple[str, SheetSpec, list[list[str]]]]:
+def _fetch_sheet_values(spreadsheet, worksheets) -> list[tuple[str, SheetSpec, list[list[str]]]]:
     """Одним батч-запросом забрать значения всех листов, под которые есть раскладка.
 
     Раньше на каждый лист шёл отдельный ``get_all_values()`` — N сетевых round-trip'ов,
     что упиралось в латентность и rate-limit Google API. Теперь — один ``values_batch_get``.
     """
     targets: list[tuple[str, SheetSpec]] = []
-    for worksheet in spreadsheet.worksheets():
+    for worksheet in worksheets:
         spec = spec_for_title(worksheet.title)
         if spec is None:
             log.debug("Лист пропущен (нет раскладки)", sheet=worksheet.title)
@@ -105,6 +114,66 @@ def _parse_sheets(
     return parsed
 
 
+async def _apply_to_db(
+    parsed: dict[str, ParsedMember],
+    issues: IssueCollector,
+    report: RunReport,
+    now: datetime,
+    first_sheet: str,
+) -> None:
+    """Записать прогон в БД одной транзакцией или не писать ничего, если таблица прочитана неверно.
+
+    При срабатывании предохранителя отменяется и upsert: иначе строки сломанного прогона на следующий день сами
+    стали бы массовой пропажей. Переносы считаются пропажей тоже: сдвинутая колонка email выглядит как смена у всех.
+
+    Пока прогон не применяется, доступы удалённых и исключённых остаются, поэтому причина идёт в заметку на A1
+    первого листа: таблицу открывают люди, а лог и отчёт читает не каждый.
+    """
+    async with async_session() as session:
+        vanished = await list_vanished(session, parsed.keys())
+
+        records_by_layout = Counter()
+        for sheet in report.sheets:
+            records_by_layout[sheet.layout] += sheet.records
+
+        reason = removal_block_reason(records_by_layout, len(vanished), SyncKeys.MAX_REMOVED_PER_RUN)
+        if reason is not None:
+            report.error = f"прогон не применён: {reason}"
+            issues.add(first_sheet, "sync", removal_alert(reason), ALERT_CELL, level="error")
+            return
+
+        known_keys = await list_identity_keys(session)
+        new_members = [member for key, member in parsed.items() if key not in known_keys]
+        changes = match_identity_changes(new_members, vanished)
+
+        for old_key, new_key in changes.renames.items():
+            await rename_identity(session, old_key, new_key)
+            report.renamed += 1
+            issues.add(parsed[new_key].source_sheet or "—", "identity", f"сменился ключ: {old_key} -> {new_key}")
+        for name in changes.unresolved:
+            message = f"{name}: похоже на смену email, но строка не перенесена (тёзки или нет даты рождения)"
+            issues.add("—", "identity", message)
+
+        for member in parsed.values():
+            result = await upsert_member(session, member, now)
+            if result == "inserted":
+                report.inserted += 1
+            else:
+                report.updated += 1
+        report.deactivated = await deactivate_missing(session, parsed.keys(), now)
+        report.linked_persons = await link_unlinked_persons(session)
+        await session.commit()
+
+    log.info(
+        "БД синхронизирована",
+        inserted=report.inserted,
+        updated=report.updated,
+        renamed=report.renamed,
+        deactivated=report.deactivated,
+        linked_persons=report.linked_persons,
+    )
+
+
 async def run_sync(dry_run: bool = False) -> RunReport:
     """Один прогон синхронизации.
 
@@ -123,8 +192,14 @@ async def run_sync(dry_run: bool = False) -> RunReport:
         notes = NoteManager(spreadsheet, SyncKeys.SHEET_NOTE_MARKER, SyncKeys.WRITE_SHEET_NOTES and not dry_run)
 
         t = time.perf_counter()
-        sheet_values = _fetch_sheet_values(spreadsheet)
+        worksheets = spreadsheet.worksheets()
+        sheet_values = _fetch_sheet_values(spreadsheet, worksheets)
         log.info("Значения листов загружены", sheets=len(sheet_values), elapsed_s=round(time.perf_counter() - t, 2))
+
+        # Регистрируем в каждом прогоне: только так заметка-тревога снимется, когда таблицу починят,
+        # даже если раскладки для первого листа нет.
+        first_sheet = worksheets[0].title
+        notes.register_sheet(first_sheet)
 
         parsed = _parse_sheets(sheet_values, issues, notes, report)
         members = list(parsed.values())
@@ -138,24 +213,7 @@ async def run_sync(dry_run: bool = False) -> RunReport:
         if dry_run:
             log.info("dry-run: запись в БД и заметки в таблицу пропущены")
         else:
-            async with async_session() as session:
-                for member in members:
-                    result = await upsert_member(session, member, now)
-                    if result == "inserted":
-                        report.inserted += 1
-                    else:
-                        report.updated += 1
-                report.deactivated = await deactivate_missing(session, parsed.keys(), now)
-                report.linked_persons = await link_unlinked_persons(session)
-                await session.commit()
-
-            log.info(
-                "БД синхронизирована",
-                inserted=report.inserted,
-                updated=report.updated,
-                deactivated=report.deactivated,
-                linked_persons=report.linked_persons,
-            )
+            await _apply_to_db(parsed, issues, report, now, first_sheet)
 
         # Заметки об ошибках в таблице.
         for issue in issues:
