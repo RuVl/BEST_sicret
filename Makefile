@@ -200,22 +200,21 @@ logs-redis: ## Логи redis
 
 # --- База данных: дамп / импорт --------------------------------------------
 # Подключение внутри контейнера по unix-сокету (trust-auth, пароль не нужен).
+# Цели только подключаются к уже запущенному postgres (локально: make infra). Вызывать здесь infra нельзя:
+# на проде dev-compose заменит контейнер базы на контейнер с другим томом, сетью и открытыми портами.
 
 .PHONY: db-dump
 db-dump: ## Дамп БД в файл (по умолчанию backups/dump.sql; DUMP=… для другого)
-	$(MAKE) infra
 	$(COMPOSE) exec -T postgres pg_dump -U $(PG_USER) -d $(PG_DB) > $(DUMP)
 	@echo "dumped -> $(DUMP)"
 
 .PHONY: db-restore
 db-restore: ## Восстановить БД из файла: make db-restore DUMP=backups/x.sql
-	$(MAKE) infra
 	$(COMPOSE) exec -T postgres psql -U $(PG_USER) -d $(PG_DB) < $(DUMP)
 	@echo "restored <- $(DUMP)"
 
 .PHONY: psql
 psql: ## Интерактивный psql в контейнере
-	$(MAKE) infra
 	$(COMPOSE) exec postgres psql -U $(PG_USER) -d $(PG_DB)
 
 # --- Redis ------------------------------------------------------------------
