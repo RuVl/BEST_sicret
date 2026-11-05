@@ -12,8 +12,17 @@ services:
       - postgres/.env
     networks:
       - backend
+    # Панель 3x-ui может крутиться на том же хосте: тогда XUI_BASE_URL=http://host.docker.internal:<порт>,
+    # host-gateway - адрес бриджа docker0. Внутреннее имя годится только боту, не в Endpoint конфигов.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
-      - media_volume:/app/resources
+      # Том - только под то, что бот пишет сам (чеки рефандов). Остальное в resources/ (схемы,
+      # список приложений) приходит из образа: том на всю папку закрыл бы её, и обновления кода
+      # туда бы не доходили - Docker копирует образ в том только при его создании.
+      - media_volume:/app/resources/refund_bills
+      # Шаблоны приказов не в git (.gitignore) - кладутся на хост рядом с репозиторием.
+      - ./bot/resources/templates:/app/resources/templates:ro
     depends_on:
       - postgres
 

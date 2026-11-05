@@ -23,6 +23,15 @@ class DateValidator(Validator):
             return False
 
 
+class TimeValidator(Validator):
+    def validate(self, value: str) -> bool:
+        try:
+            datetime.strptime(value, "%H:%M")
+            return True
+        except ValueError:
+            return False
+
+
 class DummyValidator(Validator):
     def __init__(self, format_name: str):
         if format_name:

@@ -19,9 +19,15 @@ async def link_unlinked_persons(session: AsyncSession) -> int:
     if not persons:
         return 0
 
-    # Нормализованный username → id ещё не связанного участника.
+    # Нормализованный username → id ещё не связанного участника. Пропавшие из таблицы не подходят: с такой
+    # привязкой бот сочтёт человека вышедшим, даже если у него есть живая строка с тем же ником.
     members = (
-        await session.scalars(select(LbgMember).where(LbgMember.telegram.is_not(None)).where(~LbgMember.person.has()))
+        await session.scalars(
+            select(LbgMember)
+            .where(LbgMember.telegram.is_not(None))
+            .where(LbgMember.removed_from_sheet_at.is_(None))
+            .where(~LbgMember.person.has())
+        )
     ).all()
     by_handle: dict[str, int] = {}
     for member in members:

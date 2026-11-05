@@ -15,7 +15,8 @@ class ArrayContext(BaseContext):
         self._children: list[BaseContext] = []
 
     def get_value(self) -> list:
-        return [child.get_value() for child in self._children]
+        # Элемент добавили, но не заполнили: в документ он не идёт.
+        return [value for child in self._children if (value := child.get_value()) is not None]
 
     def clear(self):
         self._children.clear()
@@ -28,7 +29,7 @@ class ArrayContext(BaseContext):
         return self._children[i] if 0 <= i < len(self._children) else None
 
     def filled_required(self) -> bool:
-        if self.required and len(self._children) == 0:
+        if self.required and not self.get_value():
             return False
         return all(child.filled_required() for child in self._children)
 
@@ -52,11 +53,11 @@ class ArrayContext(BaseContext):
         return text, i
 
     def render_action_kb(self, l10n: FluentLocalization) -> list[tuple[str, str | int]]:
-        keyboard = [(l10n.format_value("add-item"), self.ADD_ITEM)]
+        keyboard = [(l10n.format_value("add-item-btn"), self.ADD_ITEM)]
 
         if self._parent is not None:  # Если мы в подменю
-            keyboard.append((l10n.format_value("back"), self.BACK_ACTION))
-            keyboard.append((l10n.format_value("delete"), self.DELETE_ACTION))
+            keyboard.append((l10n.format_value("back-btn"), self.BACK_ACTION))
+            keyboard.append((l10n.format_value("delete-btn"), self.DELETE_ACTION))
 
         return keyboard
 

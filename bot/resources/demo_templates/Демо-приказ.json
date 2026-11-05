@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Демо-приказ",
+  "description": "Демонстрационный шаблон с выдуманными данными",
+  "type": "object",
+  "properties": {
+    "order_number": {
+      "type": "integer",
+      "description": "Номер приказа",
+      "short_description": "Номер",
+      "question": "Введите номер приказа:"
+    },
+    "order_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Дата приказа",
+      "short_description": "Дата",
+      "question": "Введите дату приказа (ДД.ММ.ГГГГ):"
+    },
+    "event_name": {
+      "type": "string",
+      "description": "Мероприятие",
+      "short_description": "Мероприятие",
+      "question": "Введите название мероприятия:"
+    },
+    "responsible": {
+      "type": "string",
+      "description": "Ответственный",
+      "short_description": "Ответственный",
+      "question": "Введите ФИО ответственного:"
+    },
+    "tasks": {
+      "type": "array",
+      "title": "Задачи",
+      "description": "Что должен сделать ответственный",
+      "short_description": "Задачи",
+      "items": {
+        "type": "object",
+        "title": "Задача",
+        "short_description": "Задача",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Что сделать",
+            "short_description": "Что сделать",
+            "question": "Введите задачу:"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "order_number",
+    "order_date",
+    "event_name",
+    "responsible",
+    "tasks"
+  ]
+}

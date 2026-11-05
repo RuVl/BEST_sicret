@@ -12,4 +12,9 @@ __pycache__/
 .git/
 .gitignore
 
+# локальные конфиги: в контейнере настройки приходят из env_file
+.env
+dev.env
+dev.env.dist
+
 .dockerignore
