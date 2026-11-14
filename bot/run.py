@@ -1,11 +1,15 @@
 import asyncio
+import sys
 
 import structlog
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.exceptions import TelegramUnauthorizedError
+from aiogram.fsm.storage.base import BaseStorage
+from aiogram.fsm.storage.memory import MemoryStorage, SimpleEventIsolation
 from aiogram.types import BotCommand, BotCommandScopeDefault
+from aiogram.utils.token import TokenValidationError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from structlog.typing import FilteringBoundLogger
@@ -13,30 +17,61 @@ from structlog.typing import FilteringBoundLogger
 from env import settings
 from handlers import register_handlers
 from includes import PickleRedisStorage, get_fluent_localization, get_redis_storage, setup_logging
-from includes.vpn import close_xui_client
-from jobs import revoke_inactive_subscriptions
+from includes.awg import excluded_apps
+from includes.config_hide import setup_config_hides
+from includes.pending_hides import close_pending_hides
+from jobs import revoke_inactive_subscriptions, suspend_inactive_awg_access
 from middlewares import register_middlewares
+
+BAD_TOKEN_HELP = (
+    "Telegram не принял токен из TG_API_TOKEN в bot/.env: там заглушка или неверное значение.\n"
+    "Создайте своего бота у @BotFather в Telegram (команда /newbot), впишите выданный токен в bot/.env "
+    "и запустите снова: make run-bot"
+)
 
 
 def _create_scheduler(bot: Bot) -> AsyncIOScheduler | None:
-    """Планировщик фоновых задач. ``None``, если секция XUI не настроена."""
-    if not settings.xui.ENABLED:
+    """Планировщик фоновых задач. ``None``, если не настроены ни XUI, ни AmneziaWG."""
+    if not settings.xui.ENABLED and not settings.AWG_ENABLED:
         return None
 
     l10n = get_fluent_localization()
-    scheduler = AsyncIOScheduler(timezone=settings.xui.REVOKE_CRON_TIMEZONE)
-    scheduler.add_job(
-        revoke_inactive_subscriptions,
-        CronTrigger(
-            hour=settings.xui.REVOKE_CRON_HOUR,
-            minute=settings.xui.REVOKE_CRON_MINUTE,
-            timezone=settings.xui.REVOKE_CRON_TIMEZONE,
-        ),
-        args=(bot, l10n),
-        id="revoke_inactive_vpn",
-        replace_existing=True,
+    # Оба отзыва - в одно время: сразу после синка членства.
+    trigger = CronTrigger(
+        hour=settings.xui.REVOKE_CRON_HOUR,
+        minute=settings.xui.REVOKE_CRON_MINUTE,
+        timezone=settings.xui.REVOKE_CRON_TIMEZONE,
     )
+    scheduler = AsyncIOScheduler(timezone=settings.xui.REVOKE_CRON_TIMEZONE)
+    if settings.xui.ENABLED:
+        scheduler.add_job(
+            revoke_inactive_subscriptions,
+            trigger,
+            args=(bot, l10n),
+            id="revoke_inactive_vpn",
+            replace_existing=True,
+        )
+    if settings.AWG_ENABLED:
+        scheduler.add_job(
+            suspend_inactive_awg_access,
+            trigger,
+            args=(bot, l10n),
+            id="suspend_inactive_awg",
+            replace_existing=True,
+        )
     return scheduler
+
+
+def create_dispatcher(storage: BaseStorage) -> Dispatcher:
+    """Dispatcher бота. Апдейты одного человека обрабатываются строго по очереди.
+
+    Без изоляции aiogram-dialog читает контекст диалога до блокировки стека: второй клик, пришедший,
+    пока первый ещё ходит в панель, отрабатывает на устаревшем ``dialog_data`` и затирает результат
+    первого (двойное устройство, потерянный конфиг). Изоляция из ``setup_dialogs`` от этого не спасает -
+    ошибка библиотеки, https://github.com/Tishka17/aiogram_dialog/issues/537. Процесс бота один -
+    хватает локальных блокировок.
+    """
+    return Dispatcher(storage=storage, events_isolation=SimpleEventIsolation())
 
 
 async def main():
@@ -50,10 +85,15 @@ async def main():
         default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN_V2),
     )
     # Единственная команда: остальное - кнопки меню, доступные только мемберам.
-    await bot.set_my_commands(
-        [BotCommand(command="start", description="Профиль и меню")],
-        scope=BotCommandScopeDefault(),
-    )
+    try:
+        await bot.set_my_commands(
+            [BotCommand(command="start", description="Профиль и меню")],
+            scope=BotCommandScopeDefault(),
+        )
+    except TelegramUnauthorizedError:
+        # Первое обращение к Telegram. Незакрытая сессия дала бы предупреждение asyncio поверх подсказки.
+        await bot.session.close()
+        raise
 
     # Get storage with proper configuration for dialogs
     if settings.redis.USE_REDIS:
@@ -63,20 +103,25 @@ async def main():
         if not settings.project.DEBUG:
             await logger.aerror("You should use RedisStorage in production!")
 
-    # Init dispatcher
-    dp = Dispatcher(storage=storage)
+    dp = create_dispatcher(storage)
 
     # Register handlers and middlewares
     register_middlewares(dp)
     register_handlers(dp)
 
+    # Конфиги AmneziaWG (приватные ключи): учёт отправленных копий и добор не скрытых до перезапуска.
+    setup_config_hides(dp)
+    if settings.AWG_ENABLED:
+        # Список читается и проверяется сразу: проблема с файлом видна в логе старта, а не у первого человека.
+        await logger.ainfo("AWG excluded apps loaded.", count=len(excluded_apps()))
+
     # Автоотзыв VPN-подписок у выбывших мемберов (без него ключи живут вечно)
     scheduler = _create_scheduler(bot)
     if scheduler is not None:
         scheduler.start()
-        await logger.ainfo("VPN revoke job scheduled.")
+        await logger.ainfo("VPN revoke jobs scheduled.", xui=settings.xui.ENABLED, awg=settings.AWG_ENABLED)
     else:
-        await logger.awarning("XUI settings are incomplete, VPN revoke job is disabled.")
+        await logger.awarning("XUI and AWG settings are incomplete, VPN revoke jobs are disabled.")
 
     # Start bot
     await logger.ainfo(f"Starting the bot (id={bot.id})...")
@@ -90,11 +135,19 @@ async def main():
     finally:
         if scheduler is not None:
             scheduler.shutdown(wait=False)
-        await close_xui_client()
+        await close_pending_hides()
         await bot.session.close()
         await logger.ainfo("Bot stopped.")
 
 
+def start() -> None:
+    """Запуск из консоли: ошибка с токеном - первое, на что натыкается новичок, поэтому подсказка вместо трейсбэка."""
+    try:
+        asyncio.run(main())
+    except (TokenValidationError, TelegramUnauthorizedError):
+        sys.exit(BAD_TOKEN_HELP)
+
+
 # Start bot
 if __name__ == "__main__":
-    asyncio.run(main())
+    start()

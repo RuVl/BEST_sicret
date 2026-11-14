@@ -1,7 +1,6 @@
+from best_db.models import VpnSubscription
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from database.models import VpnSubscription
 
 
 async def get_subscription_by_person(session: AsyncSession, person_id: int) -> VpnSubscription | None:

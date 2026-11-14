@@ -1,8 +1,7 @@
 from datetime import UTC, datetime
 
+from best_db.models import VpnSubscription
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from database.models import VpnSubscription
 
 
 async def mark_revoked(session: AsyncSession, subscription: VpnSubscription) -> None:

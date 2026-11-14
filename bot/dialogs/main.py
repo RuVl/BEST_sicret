@@ -2,17 +2,19 @@ from aiogram import Dispatcher, Router
 from aiogram.enums import ParseMode
 from aiogram.filters import ExceptionTypeFilter
 from aiogram.types import ErrorEvent
-from aiogram_dialog import DialogManager, setup_dialogs
+from aiogram_dialog import BgManagerFactory, DialogManager, setup_dialogs
 from aiogram_dialog.api.exceptions import UnknownIntent, UnknownState
 from structlog import getLogger
 from structlog.typing import FilteringBoundLogger
 
 from dialogs.user import user_dialog_router
+from includes.memory_media import MemoryMediaMessageManager
+from middlewares.main import register_dialog_update_middlewares
 
 logger: FilteringBoundLogger = getLogger("dialogs")
 
 
-def register_dialogs(dp: Dispatcher, router: Router):
+def register_dialogs(dp: Dispatcher, router: Router) -> BgManagerFactory:
     router.errors.register(
         on_unknown_state_or_intent,
         ExceptionTypeFilter(UnknownState, UnknownIntent),
@@ -22,7 +24,10 @@ def register_dialogs(dp: Dispatcher, router: Router):
         user_dialog_router,
     )
 
-    setup_dialogs(dp)  # Register on dispatcher for using anywhere
+    # Свой MessageManager: окна могут показывать файлы из памяти (конфиги AmneziaWG) без диска
+    bg_factory = setup_dialogs(dp, message_manager=MemoryMediaMessageManager())
+    register_dialog_update_middlewares(dp)
+    return bg_factory
 
 
 async def on_unknown_state_or_intent(event: ErrorEvent, dialog_manager: DialogManager):

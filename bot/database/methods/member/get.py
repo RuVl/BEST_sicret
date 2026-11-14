@@ -1,10 +1,9 @@
 import re
 
 from best_db.matching import normalize_telegram_handle
+from best_db.models import LbgMember, Person
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from database.models import LbgMember, Person
 
 # Ключевые слова ролей в свободном тексте LbgMember.status_field (рус./англ.).
 _ROLE_PATTERNS: dict[str, re.Pattern[str]] = {
@@ -19,16 +18,31 @@ async def find_member_by_username(session: AsyncSession, username: str | None) -
 
     ``telegram`` в таблице хранится «как есть» (грязный хэндл), поэтому сравниваем по
     нормализованному виду в Python: грузим только несвязанных с непустым ``telegram``.
+
+    Пропавшие из таблицы не подходят: с такой привязкой человек остался бы без доступа,
+    даже если у него есть живая строка с тем же ником.
     """
     target = normalize_telegram_handle(username)
     if target is None:
         return None
 
-    query = select(LbgMember).where(LbgMember.telegram.is_not(None)).where(~LbgMember.person.has())
+    query = (
+        select(LbgMember)
+        .where(LbgMember.telegram.is_not(None))
+        .where(LbgMember.removed_from_sheet_at.is_(None))
+        .where(~LbgMember.person.has())
+    )
     for member in await session.scalars(query):
         if normalize_telegram_handle(member.telegram) == target:
             return member
     return None
+
+
+async def list_members_by_username(session: AsyncSession, username: str) -> list[LbgMember]:
+    """Все участники с этим ником, в том числе уже связанные (их ``find_member_by_username`` не видит)."""
+    target = normalize_telegram_handle(username)
+    query = select(LbgMember).where(LbgMember.telegram.is_not(None))
+    return [member for member in await session.scalars(query) if normalize_telegram_handle(member.telegram) == target]
 
 
 async def resolve_board_role(session: AsyncSession, role: str) -> Person | None:

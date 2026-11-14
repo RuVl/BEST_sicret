@@ -80,8 +80,8 @@ class BaseContext(ABC):
         """Рендер клавиатуры для действий (вперед, назад). Формат: [(text, action)]"""
         if self._parent is not None:  # Если мы в подменю
             return [
-                (l10n.format_value("back"), self.BACK_ACTION),
-                (l10n.format_value("delete"), self.DELETE_ACTION),
+                (l10n.format_value("back-btn"), self.BACK_ACTION),
+                (l10n.format_value("delete-btn"), self.DELETE_ACTION),
             ]
         return []
 

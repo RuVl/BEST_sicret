@@ -116,9 +116,37 @@ class XuiConfig(_Section):
         return value
 
     @property
+    def HAS_PANEL(self) -> bool:
+        """До панели есть чем достучаться - это нужно и VLESS, и AmneziaWG."""
+        return bool(self.BASE_URL and self.API_TOKEN)
+
+    @property
     def ENABLED(self) -> bool:
         """VPN-функциональность работает только при полностью заполненной секции."""
-        return bool(self.BASE_URL and self.API_TOKEN and self.SUB_BASE_URL and self.INBOUND_IDS)
+        return self.HAS_PANEL and bool(self.SUB_BASE_URL and self.INBOUND_IDS)
+
+
+class AwgConfig(_Section):
+    """AmneziaWG-инбаунд панели 3x-ui: ключ на каждое устройство активного мембера.
+
+    Панель и токен - те же, что у VLESS (``XUI_BASE_URL`` / ``XUI_API_TOKEN``).
+    """
+
+    # ID AmneziaWG-инбаунда в 3x-ui; 0 - AmneziaWG в боте выключен.
+    INBOUND_ID: int = Field(0, alias="AWG_INBOUND_ID")
+    # Отдельная группа: по XUI_GROUP бот сверяет VLESS-подписки, ключам устройств там не место.
+    GROUP: str = Field("SPb LBG AmneziaWG", alias="AWG_GROUP")
+    # Имя файла конфига: приложения AmneziaWG берут его как имя туннеля (до 15 символов),
+    # а к нему дописывается номер устройства - оставляем запас.
+    TUNNEL_NAME: str = Field("BEST-AWG", alias="AWG_TUNNEL_NAME")
+    # Имя туннеля первой строкой конфига (``# Name = ...``): его показывает WG Tunnel; пусто - не пишем.
+    CONFIG_NAME: str = Field("BEST VPN", alias="AWG_CONFIG_NAME")
+    # Один ключ - одно устройство; админ может поменять лимит человеку (make awg-grant who=@x devices=N).
+    DEVICE_LIMIT: int = Field(3, alias="AWG_DEVICE_LIMIT")
+    # Сколько секунд сообщение с конфигом (приватным ключом) висит в чате, прежде чем бот его уберёт.
+    CONFIG_TTL_SECONDS: int = Field(300, alias="AWG_CONFIG_TTL_SECONDS")
+
+    # Включён ли AmneziaWG, решает ``GlobalSettings.AWG_ENABLED``: без панели (секция xui) он не работает.
 
 
 class LoggerConfig(_Section):
@@ -141,7 +169,14 @@ class GlobalSettings(_Section):
     redis: RedisConfig = Field(default_factory=RedisConfig)
     project: ProjectConfig = Field(default_factory=ProjectConfig)
     xui: XuiConfig = Field(default_factory=XuiConfig)
+    awg: AwgConfig = Field(default_factory=AwgConfig)
     logger: LoggerConfig = Field(default_factory=LoggerConfig)
+
+    @property
+    def AWG_ENABLED(self) -> bool:
+        """Инбаунд AmneziaWG задан и до панели есть чем достучаться (``XUI_BASE_URL``/``XUI_API_TOKEN``):
+        иначе кнопка и ночной джоб работали бы впустую."""
+        return self.awg.INBOUND_ID > 0 and self.xui.HAS_PANEL
 
 
 # Инициализируем глобальный синглтон настроек

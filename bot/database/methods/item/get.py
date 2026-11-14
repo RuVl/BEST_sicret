@@ -1,8 +1,7 @@
+from best_db.models import Item
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-
-from database.models import Item
 
 
 async def get_items_by_category_id(

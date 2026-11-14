@@ -1,9 +1,9 @@
 # template messages
 choose-template = Выберите приказ, который требуется создать
-schema-not-found = Схема не найдена, попробуйте выбрать шаблон еще раз
+schema-not-found-alert = Схема не найдена, попробуйте выбрать шаблон еще раз
 
-templates-link-text = Шаблоны на заполнение с/з
-templates-link = https://drive.google.com/drive/u/1/folders/1XPR8fKQAHT0X_4CB7i8uWCQCTT4gnWuo
+templates-link-btn = Шаблоны на заполнение с/з
+templates-link-url = https://drive.google.com/drive/u/1/folders/1XPR8fKQAHT0X_4CB7i8uWCQCTT4gnWuo
 
 required-hint = _\* \- Обязательное поле_
 
@@ -13,10 +13,10 @@ invalid-number-input = Не является числом с плавающей 
 invalid-boolean-input = Неверный формат логических значений \(введите Да или Нет\):
 
 # validate errors
-invalid-type = Неверный формат данных\!
+invalid-value = Значение не подходит под формат поля\!
 
-generate-document = Сгенерировать документ
-telegram-network-error = Произошла ошибка при отправке документа
+generate-document-btn = Сгенерировать документ
+telegram-network-error-alert = Произошла ошибка при отправке документа
 
 template-chosen = Шаблон { $template_name } выбран @{ $by_username }
 document-generated = Документ для { $template_name } сгенерирован @{ $by_username }

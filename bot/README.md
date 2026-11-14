@@ -1,46 +1,21 @@
 # BEST_sicret bot
 
-Telegram-бот для СПб BEST: генерация внутренних документов (приказы), учёт
-имущества/инвентаря и заявки на возмещение. Построен на **aiogram 3** +
-**aiogram-dialog 2**, тексты — на русском, рантайм — **Python 3.12**.
-
-Это один из сервисов монорепозитория (см. корневой `README.md`). Схема БД живёт в
-общем пакете `best_db` (`packages/db`); бот держит свой engine/session и импортирует
-модели оттуда.
+Telegram-бот СПб BEST: приказы, учёт имущества, заявки на возмещение, VPN (VLESS и AmneziaWG через панель 3x-ui).
+aiogram 3 + aiogram-dialog 2, Python 3.12. Схема БД живёт в общем пакете `best_db` (`packages/db`).
 
 ## Запуск
 
-Команды запускаются через корневой `Makefile` (`make help` — полный список); ручные
-`cd bot && python run.py` / `docker compose …` не нужны.
-
 ```bash
-# зависимости (uv) + общий пакет best_db editable
-make install-bot                 # из корня репозитория
-
-# создать конфиги из шаблонов: .env (docker) и dev.env (локальный запуск)
-make env                         # затем заполнить bot/.env и bot/dev.env
-
-# локальный запуск (поднимет postgres/redis в docker, стартует бота на dev.env)
-make run-bot
-
-# только postgres + redis для локальной разработки
-make infra
+make install-bot   # зависимости
+make env           # создать .env (docker) и dev.env (локально), затем вписать TG_API_TOKEN в bot/.env
+make dev-member who=@ник  # стать участником в локальной БД, иначе меню будет пустым
+make run-bot       # бот локально, postgres и redis в docker
+make test-bot      # тесты
 ```
 
 ## Конфигурация
 
-Все настройки читаются через `pydantic-settings` в `bot/env.py` (группы
-`TelegramConfig`/`PostgresConfig`/`RedisConfig`/`ProjectConfig`/`LoggerConfig`,
-агрегированы в `GlobalSettings`). Шаблон — `bot/.env.dist`. Привилегированные ID —
-запасные получатели уведомлений, если роль не нашлась в таблице участников:
-`PRESIDENT_ID` и `TREASURER_ID`.
+Настройки читает `bot/env.py` через `pydantic-settings`, шаблон - `bot/.env.dist`. `PRESIDENT_ID` и `TREASURER_ID` -
+запасные получатели уведомлений, если роль не нашлась в таблице участников.
 
-## Линт и форматирование
-
-```bash
-make lint        # ruff check + проверка форматирования (без правок)
-make format      # ruff check --fix + ruff format
-```
-
-Архитектура слоёв (handlers → dialogs → includes/templates → database/docx) и
-конвенции подробно описаны в корневом `CLAUDE.md`.
+Архитектура - в корневом [CLAUDE.md](../CLAUDE.md), правила кода - в [CLEAN_CODE.md](../CLEAN_CODE.md).

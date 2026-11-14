@@ -1,6 +1,8 @@
 # секреты и шаблоны env (приходят из env_file в рантайме)
 .env
 .env.dist
+dev.env
+dev.env.dist
 
 # venv и кэши
 .venv/
@@ -26,3 +28,11 @@ logs/
 aiogram_dialog.png
 .dockerignore
 Dockerfile
+
+# данные, которые приходят в контейнер томами, а не из образа (чеки, шаблоны приказов)
+resources/refund_bills/
+resources/templates/
+resources/resources/
+
+# демо-шаблон только для локального запуска: в образе ему делать нечего
+resources/demo_templates/

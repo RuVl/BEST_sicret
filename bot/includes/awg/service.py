@@ -1,0 +1,219 @@
+"""Доменные операции над ключами AmneziaWG: устройства, выдача конфига, выключение.
+
+Один ключ AmneziaWG - одно устройство: пир с одним ключом на двух устройствах сразу
+перебивает endpoint, и связь рвётся на обоих. Поэтому человек заводит ключ (клиента
+AmneziaWG-инбаунда в 3x-ui) на каждое устройство, в пределах лимита из разрешения.
+
+Как и у VLESS, источник правды о ключе - панель: клиента могли удалить или выключить в её
+админке, поэтому перед выдачей бот сверяется с ней и чинит расхождение сам. Так же переезжают
+старые устройства (со старого сервера AmneziaWG и с именами ``awg-lbg<id>-<n>``): клиента под их
+именем в 3x-ui нет, и бот при первой выдаче конфига заводит его уже под именем с почтой.
+"""
+
+import asyncio
+from dataclasses import dataclass
+
+import structlog
+from best_db.models import AwgAccess, AwgDevice, Person
+from sqlalchemy.ext.asyncio import AsyncSession
+from structlog.typing import FilteringBoundLogger
+
+from database.methods.awg_access import (
+    create_device,
+    delete_device,
+    get_device_by_client_name,
+    mark_granted,
+    mark_issued,
+    set_device_client_name,
+    set_device_label,
+)
+from env import settings
+from includes.awg.client import AwgClient
+from includes.awg.exceptions import AwgAccessRevokedError, AwgDeviceLimitError, AwgError
+from includes.awg.identity import device_client_name, fallback_device_client_name, free_device_number
+from includes.awg.platform import DevicePlatform, excluded_apps, personalize_config
+from includes.awg.qr import FittedQr, fit_config_qr
+from includes.awg.schemas import AwgPeer
+from includes.vpn.service import person_comment
+
+logger: FilteringBoundLogger = structlog.get_logger("awg")
+
+
+async def _device_client_name(
+    session: AsyncSession, person: Person, number: int, current: AwgDevice | None = None
+) -> str:
+    """Имя клиента для устройства: по почте человека, а если его уже заняло чужое устройство - без почты.
+
+    Почта приходит из таблицы мемберов и не уникальна: у двух людей она может совпасть.
+    """
+    # lbg_member подгружен вызывающей стороной (get_person_with_member) - ленивой загрузки в async нет.
+    member = person.lbg_member
+    name = device_client_name(person.id, member.best_email if member else None, number)
+    owner = await get_device_by_client_name(session, name)
+    if owner is None or owner is current:
+        return name
+    await logger.awarning("awg-client-name-taken", person_id=person.id, client_name=name)
+    return fallback_device_client_name(person.id, number)
+
+
+def device_limit(access: AwgAccess | None) -> int:
+    """Лимит устройств: личный из разрешения или общий из настроек (в том числе, пока разрешения нет)."""
+    if access is None or access.device_limit is None:
+        return settings.awg.DEVICE_LIMIT
+    return access.device_limit
+
+
+async def peers_by_name(client: AwgClient, access: AwgAccess) -> dict[str, AwgPeer]:
+    """Ключи всех устройств разрешения в панели по имени клиента; отсутствующих в словаре нет."""
+    return await client.find_peers([device.client_name for device in access.devices])
+
+
+async def ensure_peer(session: AsyncSession, client: AwgClient, device: AwgDevice, person: Person) -> AwgPeer:
+    """Привести ключ устройства в рабочее состояние: создать, если его нет, и включить, если выключен.
+
+    Клиента под именем устройства в панели нет - значит, имя ещё ничего не держит, и устройство
+    получает актуальное (старые ``awg-lbg<id>-<n>``, сменившаяся почта) прямо перед созданием.
+
+    Клиент под новым именем может уже быть: переименование в БД откатывается вместе с сессией,
+    если выдача упала после ``create_peer``, а клиент в панели остаётся. Его подхватываем -
+    повторное создание панель отвергла бы («email already in use») на каждой следующей попытке.
+    """
+    peer = await client.find_peer(device.client_name)
+
+    if peer is None:
+        name = await _device_client_name(session, person, device.number, current=device)
+        if name != device.client_name:
+            peer = await client.find_peer(name)
+            await logger.ainfo(
+                "awg-device-renamed", person_id=person.id, old=device.client_name, new=name, adopted=peer is not None
+            )
+            await set_device_client_name(session, device, name)
+
+    if peer is None:
+        await client.create_peer(device.client_name, person_comment(person, person.lbg_member), person.telegram_id)
+        peer = await client.find_peer(device.client_name)
+        if peer is None:
+            raise AwgError(f"Панель создала клиента {device.client_name}, но не отдаёт его")
+        await logger.ainfo("awg-peer-created", person_id=person.id, client_name=device.client_name)
+
+    if peer.disabled:
+        await client.set_disabled([device.client_name], False)
+        peer = peer.model_copy(update={"enable": True})
+        await logger.ainfo("awg-peer-enabled", person_id=person.id, client_name=device.client_name)
+
+    return peer
+
+
+async def restore_access(session: AsyncSession, client: AwgClient, access: AwgAccess) -> None:
+    """Доступ снова в силе (мембер вернулся в LBG или админ выдал повторно): включаем все ключи разом."""
+    peers = await peers_by_name(client, access)
+    await client.set_disabled([name for name, peer in peers.items() if peer.disabled], False)
+
+    await mark_granted(session, access)
+    await logger.ainfo("awg-access-restored", person_id=access.person_id)
+
+
+async def _ensure_usable(session: AsyncSession, client: AwgClient, access: AwgAccess) -> None:
+    """Общая проверка перед выдачей. Членство проверяет вызывающая сторона."""
+    if access.status == "revoked":
+        raise AwgAccessRevokedError("Доступ к AmneziaWG отозван админом")
+    if access.status == "suspended":
+        await restore_access(session, client, access)
+
+
+@dataclass(frozen=True)
+class IssuedConfig:
+    """Выданный конфиг: файл - всегда полный; QR - сколько влезло (``None`` - не влез совсем)."""
+
+    text: str
+    qr: FittedQr | None
+
+
+async def issue_device_config(
+    session: AsyncSession,
+    client: AwgClient,
+    access: AwgAccess,
+    device: AwgDevice,
+    person: Person,
+) -> IssuedConfig:
+    """Конфиг устройства для отправки человеку. Коммит - на вызывающей стороне.
+
+    Исключения Android целиком в QR не влезают: в QR идёт начало списка (порядок файла - приоритет),
+    полный список - в файле.
+    """
+    await _ensure_usable(session, client, access)
+
+    peer = await ensure_peer(session, client, device, person)
+    raw = await client.get_config(peer)
+    apps = excluded_apps() if device.platform == "android" else ()
+
+    def build(count: int) -> str:
+        return personalize_config(raw, device.platform, name=settings.awg.CONFIG_NAME, excluded=apps[:count])
+
+    # Подбор QR - несколько кодирований по ~десятку мс: не держим ими event loop.
+    qr = await asyncio.to_thread(fit_config_qr, build, len(apps))
+
+    await mark_issued(session, device)
+    return IssuedConfig(text=build(len(apps)), qr=qr)
+
+
+async def add_device(
+    session: AsyncSession,
+    client: AwgClient,
+    access: AwgAccess,
+    person: Person,
+    label: str | None = None,
+    platform: DevicePlatform | None = None,
+) -> tuple[AwgDevice, IssuedConfig]:
+    """Завести новое устройство и вернуть его конфиг. Коммит - на вызывающей стороне.
+
+    Сначала строка в БД, потом пир: если коммит не доедет, следующий заход получит тот же
+    свободный номер и то же имя клиента, а ``ensure_peer`` подхватит уже созданного пира. Имя
+    другое будет, только если между заходами в таблице сменилась почта, - тогда клиент первой
+    попытки остаётся в панели без устройства, и убирать его придётся руками (он в группе ``AWG_GROUP``).
+    """
+    await _ensure_usable(session, client, access)
+    if len(access.devices) >= device_limit(access):
+        raise AwgDeviceLimitError(f"Заведено {len(access.devices)} из {device_limit(access)} устройств")
+
+    number = free_device_number(device.number for device in access.devices)
+    client_name = await _device_client_name(session, person, number)
+    device = await create_device(
+        session, access, number=number, client_name=client_name, label=label, platform=platform
+    )
+    config = await issue_device_config(session, client, access, device, person)
+    await logger.ainfo("awg-device-added", person_id=person.id, number=number)
+    return device, config
+
+
+async def rename_device(session: AsyncSession, device: AwgDevice, label: str) -> None:
+    """Переименовать устройство - только в боте.
+
+    Подпись клиента в панели не трогаем: 3x-ui на update не патчит клиента, а заменяет его телом
+    запроса, и неполное тело перевыпустило бы ключи - конфиг на устройстве перестал бы работать.
+    """
+    await set_device_label(session, device, label)
+
+
+async def remove_device(session: AsyncSession, client: AwgClient, access: AwgAccess, device: AwgDevice) -> None:
+    """Удалить устройство: сначала пира в панели, потом строку - иначе ключ остался бы жить без учёта."""
+    if await client.has_client(device.client_name):
+        await client.remove_peer(device.client_name)
+
+    await delete_device(session, access, device)
+    await logger.ainfo("awg-device-removed", person_id=access.person_id, number=device.number)
+
+
+async def disable_peers(client: AwgClient, access: AwgAccess) -> int:
+    """Выключить в панели ключи всех устройств. Возвращает, сколько ключей там нашлось."""
+    peers = await peers_by_name(client, access)
+    await client.set_disabled([name for name, peer in peers.items() if not peer.disabled], True)
+    return len(peers)
+
+
+async def remove_peers(session: AsyncSession, client: AwgClient, access: AwgAccess) -> int:
+    """Удалить ключи всех устройств из панели и из БД. Возвращает, сколько устройств удалено."""
+    devices = list(access.devices)
+    for device in devices:
+        await remove_device(session, client, access, device)
+    return len(devices)

@@ -28,7 +28,7 @@ class IntegerFormatter(Formatter):
 
 class NumberFormatter(Formatter):
     def format(self, value: str) -> float:
-        value = value.replace(",", ".")
+        value = "".join(value.split()).replace(",", ".")  # «12 500,50»: разделитель разрядов и запятая
         try:
             return float(value)
         except ValueError as err:

@@ -4,11 +4,13 @@
 ``is_excluded`` - исключён (лист Ex-members). Alumni и former не активны, но из группы
 не выбывали, поэтому к ресурсам бота доступ у них остаётся.
 
+SQL-двойник для запросов - ``database.methods.member.predicates.left_lbg``: правило меняется в обоих.
+
 Чистая функция без сессии и сети: ``lbg_member`` должен быть подгружен заранее
 (``get_person_with_member``), иначе SQLAlchemy сходит в закрытую сессию.
 """
 
-from database.models import LbgMember, Person
+from best_db.models import LbgMember, Person
 
 
 def current_member(person: Person | None) -> LbgMember | None:

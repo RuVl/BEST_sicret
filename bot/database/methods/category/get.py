@@ -1,7 +1,6 @@
+from best_db.models import Category
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from database.models import Category
 
 
 async def get_categories(session: AsyncSession) -> list[Category]:

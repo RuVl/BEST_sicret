@@ -1,7 +1,7 @@
 # Text (md2)
 refund-bill-view = \- \* Чек: `{ $bill_filename }`
 refund-add-bill = Отправьте чек \(в формате документа, до 5 МБ\)
-refund-apply-was-sent = Заявка на рефанд была отправлена казначею
+refund-apply-was-sent-alert = Заявка на рефанд была отправлена казначею
 treasure-refund-apply = Поступила заявка на рефанд:
     от: @{ $username }
     причина: `{ $reason }`

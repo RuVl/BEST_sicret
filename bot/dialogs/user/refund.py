@@ -90,9 +90,9 @@ async def send_apply(
     raw_data = ctx.generate_context()
     schema = load_schema(DIALOG_SCHEMA)
 
-    success, error_msg = validate_data(schema, raw_data)
+    success, invalid_field = validate_data(schema, raw_data)
     if not success:
-        await clb.answer(error_msg, show_alert=True)
+        await clb.answer(l10n.format_value("validation-error-alert", args={"field": invalid_field}), show_alert=True)
         return
 
     raw_data["bill_filename"] = dialog_manager.dialog_data.get("bill_filename")
@@ -118,7 +118,7 @@ async def send_apply(
         caption=l10n.format_value("treasure-refund-apply", args=data),
     )
 
-    await clb.answer(l10n.format_value("refund-apply-was-sent"))
+    await clb.answer(l10n.format_value("refund-apply-was-sent-alert"))
     await dialog_manager.done()
 
 
@@ -263,7 +263,7 @@ refund_dialog = Dialog(
     Window(  # Окно добавления чека
         L10nFormat("refund-add-bill"),
         MessageInput(download_bill, content_types=ContentType.DOCUMENT),
-        SwitchTo(L10nFormat("back"), id="back", state=CreateRefundApply.VIEW),
+        SwitchTo(L10nFormat("back-btn"), id="back", state=CreateRefundApply.VIEW),
         state=CreateRefundApply.ADD_BILL,
     ),
 )

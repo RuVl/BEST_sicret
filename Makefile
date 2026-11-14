@@ -31,6 +31,7 @@ PG_USER ?= $(shell $(PY) -c "import pathlib; p=pathlib.Path('postgres/.env'); va
 PG_DB   ?= $(shell $(PY) -c "import pathlib; p=pathlib.Path('postgres/.env'); vals=[l.split('=',1)[1].strip() for l in (p.read_text(encoding='utf-8').splitlines() if p.exists() else []) if l.startswith('POSTGRES_DB=')]; print(vals[0] if vals else 'database')")
 DUMP    ?= backups/dump.sql
 rev     ?= -1
+DB_WAIT ?= 60
 
 .DEFAULT_GOAL := help
 
@@ -48,7 +49,7 @@ init: ## Подготовить окружение с нуля (deps → .env �
 	$(MAKE) pre-commit-install
 	$(MAKE) infra
 	$(MAKE) migrate
-	@echo "OK: окружение готово. Запуск бота: make run-bot"
+	@echo "OK: окружение готово. Дальше: впишите TG_API_TOKEN в bot/.env, затем make dev-member who=@ник и make run-bot"
 
 .PHONY: check-deps
 check-deps: ## Проверить наличие uv и docker compose
@@ -58,7 +59,8 @@ check-deps: ## Проверить наличие uv и docker compose
 .PHONY: env
 env: ## Создать .env (docker) и dev.env (локальный запуск) из *.dist, где их нет
 	@$(PY) -c "import os, shutil; [(shutil.copyfile(t+'.dist', t), print('created', t)) for t in ('bot/.env','members_sync/.env','postgres/.env','redis/.env','bot/dev.env','members_sync/dev.env','packages/db/dev.env') if os.path.isfile(t+'.dist') and not os.path.isfile(t)]"
-	@echo "Заполните .env (docker/podman) и dev.env (локальный запуск)!"
+	@echo "Для старта нужно одно значение: TG_API_TOKEN в bot/.env - токен своего бота от @BotFather в Telegram."
+	@echo "Остальные значения уже подходят для локального запуска, менять их не нужно."
 
 # --- Установка зависимостей (все venv) -------------------------------------
 
@@ -80,8 +82,15 @@ install-sync: ## venv members_sync (+ best_db editable, + dev: pytest)
 # --- Запуск -----------------------------------------------------------------
 
 .PHONY: infra
-infra: ## Поднять только postgres + redis в docker (порты на host)
+infra: ## Поднять только postgres + redis в docker (порты на host) и дождаться готовности БД
 	$(COMPOSE_DEV) up -d
+	$(MAKE) wait-db
+
+# Проверка по TCP: пока initdb держит временный сервер, он слушает только unix-сокет.
+# Цикл на Python: `up --wait` есть не у всех compose (podman-compose), а make кроссплатформенный.
+.PHONY: wait-db
+wait-db: ## Дождаться, пока postgres начнёт принимать подключения (не дольше DB_WAIT секунд)
+	@$(PY) -c "import subprocess, sys, time; cmd='$(COMPOSE_DEV) exec -T postgres pg_isready -q -h 127.0.0.1'.split(); ready=any(subprocess.run(cmd, capture_output=True).returncode == 0 or time.sleep(1) for _ in range($(DB_WAIT))); sys.exit(0 if ready else 'postgres не готов за $(DB_WAIT) с. Логи контейнера: $(COMPOSE_DEV) logs postgres')"
 
 .PHONY: infra-down
 infra-down: ## Остановить локальную инфраструктуру
@@ -89,13 +98,20 @@ infra-down: ## Остановить локальную инфраструкту�
 
 .PHONY: run-bot
 run-bot: ## Бот локально (dev.env) + postgres/redis в docker
-	$(COMPOSE_DEV) up -d
+	$(MAKE) infra
 	cd bot && $(UV) run --env-file dev.env python run.py
 
 .PHONY: run-sync
 run-sync: ## members_sync локально (dev.env) + postgres в docker (RUN_MODE из .env)
 	$(COMPOSE_DEV) up -d postgres
+	$(MAKE) wait-db
 	cd members_sync && $(UV) run --env-file dev.env python run.py
+
+# Инфраструктуру сознательно не поднимаем: при DEBUG=False команда обязана только отказаться.
+.PHONY: dev-member
+dev-member: ## Сделать себя участником LBG в локальной БД: make dev-member who=@ник
+	$(if $(who),,$(error Укажите ник: make dev-member who=@ник))
+	cd bot && $(UV) run --env-file dev.env python -m cli.dev_member "$(who)"
 
 .PHONY: run-sync-dry
 run-sync-dry: ## members_sync: парсинг боевых данных в JSON без записи в БД (dry-run, postgres не нужен)
@@ -139,6 +155,31 @@ migrate-docker: ## Применить миграции бд в докере
 	# --build обязателен: без него compose run берёт старый образ и новые ревизии не попадут внутрь.
 	$(COMPOSE) run --rm --build db_migrate
 
+# --- AmneziaWG: открыт всем мемберам, админ отзывает и меняет лимит --------
+# Работают в запущенном контейнере бота (make up). who - @username или Telegram ID.
+
+.PHONY: awg-list
+awg-list: ## У кого заведён AmneziaWG и сколько устройств
+	$(COMPOSE) exec telegram_bot python3 -m cli.awg list
+
+.PHONY: awg-grant
+awg-grant: ## Вернуть отозванный AmneziaWG или сменить лимит: make awg-grant who=@username [devices=3] [notify=0]
+	$(COMPOSE) exec telegram_bot python3 -m cli.awg grant "$(who)" $(if $(devices),--devices "$(devices)") $(if $(filter 0,$(notify)),--no-notify)
+
+.PHONY: awg-revoke
+awg-revoke: ## Забрать AmneziaWG: make awg-revoke who=@username [delete=1]
+	$(COMPOSE) exec telegram_bot python3 -m cli.awg revoke "$(who)" $(if $(filter 1,$(delete)),--delete)
+
+# --- Рассылка ---------------------------------------------------------------
+# Текст - файл на хосте в MarkdownV2. Копируем его в контейнер, а не подаём через stdin:
+# терминал нужен команде для подтверждения [y/n] (поэтому и exec без -T).
+
+.PHONY: broadcast
+broadcast: ## Рассылка из файла: make broadcast file=msg.txt [group=all,members,board,awg,vless] [to=@ivan,123]
+	$(if $(file),,$(error Укажите файл с текстом: make broadcast file=msg.txt group=all))
+	$(COMPOSE) cp "$(file)" telegram_bot:/tmp/broadcast.txt
+	$(COMPOSE) exec telegram_bot python3 -m cli.broadcast /tmp/broadcast.txt $(if $(group),--group "$(group)") $(if $(to),--to "$(to)")
+
 # --- Логи -------------------------------------------------------------------
 
 .PHONY: logs
@@ -159,22 +200,21 @@ logs-redis: ## Логи redis
 
 # --- База данных: дамп / импорт --------------------------------------------
 # Подключение внутри контейнера по unix-сокету (trust-auth, пароль не нужен).
+# Цели только подключаются к уже запущенному postgres (локально: make infra). Вызывать здесь infra нельзя:
+# на проде dev-compose заменит контейнер базы на контейнер с другим томом, сетью и открытыми портами.
 
 .PHONY: db-dump
 db-dump: ## Дамп БД в файл (по умолчанию backups/dump.sql; DUMP=… для другого)
-	$(MAKE) infra
 	$(COMPOSE) exec -T postgres pg_dump -U $(PG_USER) -d $(PG_DB) > $(DUMP)
 	@echo "dumped -> $(DUMP)"
 
 .PHONY: db-restore
 db-restore: ## Восстановить БД из файла: make db-restore DUMP=backups/x.sql
-	$(MAKE) infra
 	$(COMPOSE) exec -T postgres psql -U $(PG_USER) -d $(PG_DB) < $(DUMP)
 	@echo "restored <- $(DUMP)"
 
 .PHONY: psql
 psql: ## Интерактивный psql в контейнере
-	$(MAKE) infra
 	$(COMPOSE) exec postgres psql -U $(PG_USER) -d $(PG_DB)
 
 # --- Redis ------------------------------------------------------------------

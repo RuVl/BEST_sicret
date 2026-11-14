@@ -41,6 +41,8 @@ class SyncConfig(_Section):
     AUTO_CREATE_SCHEMA: bool = Field(True, alias="AUTO_CREATE_SCHEMA")
     SYNC_REPORT_PATH: Path = Field(Path("last_sync_report.md"), alias="SYNC_REPORT_PATH")
     DUMP_JSON_PATH: Path = Field(Path("output/members.json"), alias="DUMP_JSON_PATH")
+    # Если за прогон пропало больше строк, он не применяется. Для настоящей чистки таблицы значение поднимают.
+    MAX_REMOVED_PER_RUN: int = Field(10, alias="MAX_REMOVED_PER_RUN")
 
 
 class RunConfig(_Section):

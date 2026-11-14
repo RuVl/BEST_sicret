@@ -84,9 +84,10 @@ def setup_logging():
     # --- Шаг 6: Приглушаем "шумные" сторонние логгеры ---
     # aiogram/aiogram_dialog на каждый апдейт пишут кучу DEBUG-логов
     # ("Dialog start", "Show window", "send_text to chat ..." и т.п.).
+    # py3xui и httpx пишут INFO на каждый запрос к панели, а окно VPN ходит в неё при каждой отрисовке.
     # Показываем их только когда явно включён режим отладки логов.
     noisy_loggers_level = logging.DEBUG if settings.logger.SHOW_DEBUG_LOGS else logging.WARNING
-    for logger_name in ("aiogram", "aiogram_dialog"):
+    for logger_name in ("aiogram", "aiogram_dialog", "py3xui", "httpx"):
         logging.getLogger(logger_name).setLevel(noisy_loggers_level)
 
 
