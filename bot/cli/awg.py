@@ -48,8 +48,19 @@ def _devices(access: AwgAccess) -> str:
     return f"устройств {len(access.devices)}/{device_limit(access)}"
 
 
-async def _send_granted_notice(telegram_id: int, limit: int) -> bool:
-    text = get_fluent_localization().format_value("vpn-awg-granted-notice", args={"limit": limit})
+def grant_notice(opens: bool, old_limit: int, new_limit: int) -> str | None:
+    """Ключ сообщения человеку после ``grant``; ``None`` - писать не о чем."""
+    if opens:
+        return "vpn-awg-granted-notice"
+    if new_limit > old_limit:
+        return "vpn-awg-limit-raised-notice"
+    if new_limit < old_limit:
+        return "vpn-awg-limit-lowered-notice"
+    return None
+
+
+async def _send_notice(telegram_id: int, key: str, limit: int) -> bool:
+    text = get_fluent_localization().format_value(key, args={"limit": limit})
     async with send_bot() as bot:
         return await notify(bot, telegram_id, text)
 
@@ -81,8 +92,10 @@ async def cmd_grant(args: argparse.Namespace) -> None:
 
         access = await get_access_by_person(session, person.id)
         opens = access is None or access.status == "revoked"
-        if not opens and args.devices is None:
-            print(f"У {who} уже есть доступ ({access.status}, {_devices(access)})")
+        old_limit = device_limit(access)
+        new_limit = old_limit if args.devices is None else args.devices
+        if not opens and new_limit == old_limit:
+            print(f"У {who} уже есть доступ ({access.status}, {_devices(access)}) - менять нечего")
             return
 
         plan = [f"Кому: {who}"]
@@ -90,12 +103,11 @@ async def cmd_grant(args: argparse.Namespace) -> None:
             plan.append("Открыть AmneziaWG")
         elif opens:
             plan.append(f"Вернуть доступ и включить ключей в панели: {len(access.devices)}")
-        if args.devices is not None:
-            plan.append(f"Лимит устройств: {device_limit(access)} -> {args.devices}")
-        # Пишем человеку только о появившемся доступе: смена лимита в боте для него ничего не меняет.
-        notify_person = args.notify and opens
-        if notify_person:
-            plan.append("Написать человеку в Telegram, что доступ открыт")
+        if new_limit != old_limit:
+            plan.append(f"Лимит устройств: {old_limit} -> {new_limit}")
+        notice = grant_notice(opens, old_limit, new_limit) if args.notify else None
+        if notice:
+            plan.append("Написать человеку в Telegram, что доступ открыт" if opens else "Написать человеку новый лимит")
 
         if not confirm("\n".join(plan)):
             print("Отменено")
@@ -122,8 +134,8 @@ async def cmd_grant(args: argparse.Namespace) -> None:
         telegram_id = person.telegram_id
         limit = device_limit(access)
 
-    if notify_person:
-        if await _send_granted_notice(telegram_id, limit):
+    if notice:
+        if await _send_notice(telegram_id, notice, limit):
             print("Уведомление отправлено.")
         else:
             print("Уведомление не дошло (человек мог заблокировать бота) - подробности в логе бота.")

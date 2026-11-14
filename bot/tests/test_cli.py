@@ -1,4 +1,4 @@
-"""Админские CLI: подтверждение ``[y/n]``, описание человека, разбор и отправка рассылки - без БД и Telegram."""
+"""Админские CLI: подтверждение ``[y/n]``, описание человека, рассылка, уведомление о grant - без БД и Telegram."""
 
 import argparse
 import asyncio
@@ -10,6 +10,7 @@ from aiogram.methods import SendMessage
 from best_db.models import LbgMember, Person
 
 from cli import broadcast as broadcast_cli
+from cli.awg import grant_notice
 from cli.broadcast import AUDIENCES, broadcast, parse_groups, parse_handles, send_all, unique_recipients
 from cli.common import CONFIRM_PROMPT, CliError, confirm, describe_person
 from tests.fakes import FakeBot
@@ -168,3 +169,20 @@ def test_markup_error_stops_broadcast() -> None:
     assert result.sent == 0
     assert result.failed == [1, 2, 3]
     assert result.stopped is not None and "can't parse entities" in result.stopped
+
+
+# === awg grant ===
+
+
+@pytest.mark.parametrize(
+    ("opens", "old_limit", "new_limit", "key"),
+    [
+        (True, 3, 3, "vpn-awg-granted-notice"),
+        (True, 3, 5, "vpn-awg-granted-notice"),
+        (False, 3, 5, "vpn-awg-limit-raised-notice"),
+        (False, 5, 3, "vpn-awg-limit-lowered-notice"),
+        (False, 5, 5, None),
+    ],
+)
+def test_grant_notice(opens: bool, old_limit: int, new_limit: int, key: str | None) -> None:
+    assert grant_notice(opens, old_limit, new_limit) == key
