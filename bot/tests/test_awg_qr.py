@@ -1,7 +1,9 @@
 """QR с урезанным списком исключений: файл - полный, в QR - сколько влезет."""
 
+import segno
+
 from includes.awg import excluded_apps, personalize_config
-from includes.awg.qr import _encode, fit_config_qr
+from includes.awg.qr import MAX_QR_VERSION, _encode, fit_config_qr
 
 CONF = """[Interface]
 PrivateKey = 3333333333333333333333333333333333333333333=
@@ -45,6 +47,16 @@ def test_android_qr_is_truncated_to_maximum_that_fits():
     assert 0 < fitted.included < total  # весь список не влезает, но банки и госуслуги - да
     assert fitted.truncated
     assert _encode(build(fitted.included + 1)) is None  # взяли максимум
+
+
+def test_qr_stays_within_readable_version():
+    build, total = _builder("android")
+    fitted = fit_config_qr(build, total)
+
+    assert fitted is not None
+    assert segno.make(build(fitted.included), error="l", micro=False).version <= MAX_QR_VERSION
+    # Без потолка влезло бы больше: потолок и режет список, а не предел формата QR.
+    assert segno.make(build(fitted.included + 1), error="l", micro=False).version > MAX_QR_VERSION
 
 
 def test_other_platforms_not_truncated():
